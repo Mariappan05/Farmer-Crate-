@@ -54,6 +54,7 @@ const EditProduct = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   // Edit modal
   const [editModal, setEditModal] = useState(false);
@@ -90,20 +91,28 @@ const EditProduct = ({ navigation }) => {
   useEffect(() => { fetchProducts(); }, []);
 
   useEffect(() => {
-    if (!search.trim()) {
-      setFiltered(products);
-    } else {
-      const term = search.toLowerCase();
-      setFiltered(
-        products.filter(
-          (p) =>
-            p.name?.toLowerCase().includes(term) ||
-            p.category?.toLowerCase().includes(term) ||
-            p.description?.toLowerCase().includes(term)
-        )
+    const term = search.trim().toLowerCase();
+    let result = products;
+    if (term) {
+      result = result.filter(
+        (p) =>
+          p.name?.toLowerCase().includes(term) ||
+          p.category?.toLowerCase().includes(term) ||
+          p.description?.toLowerCase().includes(term)
       );
     }
-  }, [search, products]);
+    if (statusFilter !== 'all') {
+      result = result.filter((p) => {
+        const qty = p.quantity ?? p.stock ?? 0;
+        if (statusFilter === 'out_of_stock') return qty === 0;
+        const isActive = p.status === 'active' || p.status === 'ACTIVE' || p.is_active;
+        if (statusFilter === 'active') return qty > 0 && isActive;
+        if (statusFilter === 'inactive') return qty > 0 && !isActive;
+        return true;
+      });
+    }
+    setFiltered(result);
+  }, [search, products, statusFilter]);
 
   const onRefresh = () => { setRefreshing(true); fetchProducts(); };
 
@@ -271,7 +280,7 @@ const EditProduct = ({ navigation }) => {
   /* ─── Render Product Card ─── */
   const renderProduct = ({ item }) => {
     const imgUrls = parseImages(item);
-    const currentIdx = carouselIndices[item.id] || 0;
+    const currentIdx = carouselIndices[item.product_id || item.id] || 0;
     const statusColor = getStatusColor(item);
 
     return (
@@ -283,7 +292,7 @@ const EditProduct = ({ navigation }) => {
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={(e) => handleCarouselScroll(item.id, e)}
+              onMomentumScrollEnd={(e) => handleCarouselScroll(item.product_id || item.id, e)}
               style={styles.carousel}
             >
               {imgUrls.map((url, idx) => (
@@ -322,7 +331,7 @@ const EditProduct = ({ navigation }) => {
           <Text style={styles.productDesc} numberOfLines={2}>{item.description}</Text>
 
           <View style={styles.priceRow}>
-            <Text style={styles.price}>₹{parseFloat(item.price || 0).toFixed(2)}</Text>
+            <Text style={styles.price}>₹{parseFloat(item.price || item.current_price || 0).toFixed(2)}</Text>
             <Text style={styles.unit}>/{item.unit || 'kg'}</Text>
             <Text style={styles.quantity}>Qty: {item.quantity ?? item.stock ?? 0}</Text>
           </View>
@@ -608,6 +617,30 @@ const EditProduct = ({ navigation }) => {
         )}
       </View>
 
+      {/* Status Filter Chips */}
+      <View style={styles.filterArea}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {[
+            { key: 'all', label: 'All', color: '#424242' },
+            { key: 'active', label: 'Active', color: '#1B5E20' },
+            { key: 'inactive', label: 'Inactive', color: '#E65100' },
+            { key: 'out_of_stock', label: 'Out of Stock', color: '#C62828' },
+          ].map((f) => {
+            const active = statusFilter === f.key;
+            return (
+              <TouchableOpacity
+                key={f.key}
+                style={[styles.filterChip, active ? { backgroundColor: f.color } : { borderColor: f.color + '80', borderWidth: 1 }]}
+                onPress={() => setStatusFilter(f.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterChipText, { color: active ? '#fff' : f.color }]}>{f.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#4CAF50" />
@@ -630,7 +663,7 @@ const EditProduct = ({ navigation }) => {
       ) : (
         <FlatList
           data={filtered}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={(item, index) => String(item.product_id || item.id || index)}
           renderItem={renderProduct}
           contentContainerStyle={{ padding: 16, paddingBottom: 30 }}
           refreshControl={
@@ -733,6 +766,17 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: '#333' },
 
+  /* Filter Chips */
+  filterArea: { paddingVertical: 6 },
+  filterRow: { paddingHorizontal: 16, gap: 8 },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
+  },
+  filterChipText: { fontSize: 13, fontWeight: '600' },
+
   /* Product Card */
   productCard: {
     backgroundColor: '#fff',
@@ -792,11 +836,11 @@ const styles = StyleSheet.create({
   unit: { fontSize: 14, color: '#666', marginLeft: 2 },
   quantity: { fontSize: 13, color: '#888', marginLeft: 'auto' },
 
-  actionRow: { flexDirection: 'row', marginTop: 12, gap: 8 },
+  actionRow: { flexDirection: 'row', marginTop: 12, gap: 6, flexWrap: 'wrap' },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: 10,
     gap: 4,

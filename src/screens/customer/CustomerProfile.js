@@ -428,16 +428,15 @@ const CustomerProfile = ({ navigation }) => {
     }
 
     setIsSaving(true);
+    // Map frontend field names → backend column names (customer_users table)
     const payload = {
-      full_name: form.full_name,
-      phone: form.phone,
-      address_line: form.address_line,
-      city: form.city,
+      name: form.full_name,
+      mobile_number: form.phone,
+      address: form.address_line,
       state: form.state,
       district: form.district,
-      pincode: form.pincode,
       zone: form.zone,
-      profile_image: profileImage,
+      image_url: profileImage,
     };
 
     try {

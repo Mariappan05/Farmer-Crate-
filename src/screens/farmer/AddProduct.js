@@ -401,7 +401,7 @@ const AddProduct = ({ navigation }) => {
       </KeyboardAvoidingView>
       <ToastMessage ref={toastRef} />
 
-      {/* ── Photo Picker Enhanced Modal ── */}}
+      {/* ── Photo Picker Enhanced Modal ── */}
       <Modal visible={showPhotoPicker} transparent animationType="slide" onRequestClose={() => setShowPhotoPicker(false)}>
         <TouchableOpacity style={pStyles.overlay} activeOpacity={1} onPress={() => setShowPhotoPicker(false)}>
           <View style={pStyles.sheet}>

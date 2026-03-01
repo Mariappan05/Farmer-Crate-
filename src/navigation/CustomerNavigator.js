@@ -5,6 +5,7 @@ import {
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../context/CartContext';
 
 import CustomerHome from '../screens/customer/CustomerHome';
@@ -115,9 +116,11 @@ const TabButton = ({ item, onPress, isFocused, cartCount }) => {
 // ─── Custom Tab Bar ───────────────────────────────────────────────────────────
 const CustomTabBar = ({ state, descriptors, navigation }) => {
   const { cartCount } = useCart();
+  const insets = useSafeAreaInsets();
+  const extraBottom = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 20 : 6);
 
   return (
-    <View style={styles.tabBar}>
+    <View style={[styles.tabBar, { paddingBottom: extraBottom }]}>
       {state.routes.map((route, index) => {
         const isFocused = state.index === index;
         const item = TAB_ITEMS[index] || { icon: 'ellipse', iconOff: 'ellipse-outline', name: route.name };
@@ -149,9 +152,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 6,
     paddingTop: 6,
-    height: Platform.OS === 'ios' ? 82 : 66,
     ...Platform.select({
       android: { elevation: 12 },
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 8 },

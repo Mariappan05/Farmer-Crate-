@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 're
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import DeliveryDashboard from '../screens/delivery/DeliveryDashboard';
 import QRScanner from '../screens/delivery/QRScanner';
@@ -49,25 +50,28 @@ const AnimatedTabBtn = ({ item, onPress, isFocused }) => {
   );
 };
 
-const DeliveryTabBar = ({ state, navigation }) => (
-  <View style={ts.bar}>
-    {state.routes.map((route, index) => (
-      <AnimatedTabBtn
-        key={route.key}
-        item={DEL_TABS[index] || { icon: 'ellipse', iconOff: 'ellipse-outline', label: route.name }}
-        isFocused={state.index === index}
-        onPress={() => { if (state.index !== index) navigation.navigate(route.name); }}
-      />
-    ))}
-  </View>
-);
+const DeliveryTabBar = ({ state, navigation }) => {
+  const insets = useSafeAreaInsets();
+  const extraBottom = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 20 : 6);
+  return (
+    <View style={[ts.bar, { paddingBottom: extraBottom }]}>
+      {state.routes.map((route, index) => (
+        <AnimatedTabBtn
+          key={route.key}
+          item={DEL_TABS[index] || { icon: 'ellipse', iconOff: 'ellipse-outline', label: route.name }}
+          isFocused={state.index === index}
+          onPress={() => { if (state.index !== index) navigation.navigate(route.name); }}
+        />
+      ))}
+    </View>
+  );
+};
 
 const ts = StyleSheet.create({
   bar: {
     flexDirection: 'row', backgroundColor: '#fff',
     borderTopWidth: 1, borderTopColor: '#F0F0F0',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 6, paddingTop: 6,
-    height: Platform.OS === 'ios' ? 82 : 66,
+    paddingTop: 6,
     ...Platform.select({ android: { elevation: 12 }, ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 8 } }),
   },
   tabBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
