@@ -47,10 +47,15 @@ const FarmerOrders = ({ navigation }) => {
   const fetchOrders = useCallback(async () => {
     try {
       const data = await getFarmerOrders();
-      const list = Array.isArray(data) ? data : data?.orders || [];
+      const raw = Array.isArray(data) ? data : data?.orders || data?.data || [];
+      // Normalize: backend sends current_status, frontend uses status
+      const list = raw.map(o => ({ ...o, status: o.current_status || o.status || 'PENDING' }));
       setOrders(list.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date)));
+      console.log('[FarmerOrders] Fetched', list.length, 'orders');
     } catch (e) {
-      toastRef.current?.show(e?.response?.data?.message || e.message || 'Failed to load orders', 'error');
+      const msg = e?.response?.data?.message || e.message || 'Failed to load orders';
+      console.error('[FarmerOrders] fetchOrders error:', msg, '\nStatus:', e?.response?.status, '\nDetails:', JSON.stringify(e?.response?.data));
+      toastRef.current?.show(msg, 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -64,7 +69,7 @@ const FarmerOrders = ({ navigation }) => {
   const filteredOrders =
     activeFilter === 'All'
       ? orders
-      : orders.filter((o) => o.status === activeFilter);
+      : orders.filter((o) => (o.status || o.current_status || '').toUpperCase() === activeFilter.toUpperCase());
 
   const handleAction = async (orderId, status) => {
     setActionLoading(orderId);

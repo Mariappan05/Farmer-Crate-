@@ -57,7 +57,7 @@ const AdminTabBar = ({ state, navigation }) => {
   const insets = useSafeAreaInsets();
   const extraBottom = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 20 : 4);
   return (
-    <View style={[ts.bar, { paddingBottom: extraBottom, height: (Platform.OS === 'ios' ? 62 : 54) + extraBottom }]}>
+    <View style={[ts.bar, { paddingBottom: extraBottom }]}>
       {state.routes.map((route, index) => (
         <AnimatedTabBtn
           key={route.key}

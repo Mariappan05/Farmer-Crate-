@@ -126,9 +126,12 @@ const AdminReport = ({ navigation }) => {
     try {
       const { data } = await api.get('/orders/all');
       const list = Array.isArray(data) ? data : data?.data || data?.orders || [];
+      console.log('[AdminReport] Fetched', list.length, 'orders');
       setOrders(list);
     } catch (e) {
-      if (!silent) Alert.alert('Error', e.message || 'Failed to load report data');
+      const msg = e?.response?.data?.message || e.message || 'Failed to load report data';
+      console.error('[AdminReport] fetchOrders error:', msg, '\nStatus:', e?.response?.status, '\nDetails:', JSON.stringify(e?.response?.data));
+      if (!silent) Alert.alert('Error', msg);
     } finally {
       setLoading(false);
       setRefreshing(false);

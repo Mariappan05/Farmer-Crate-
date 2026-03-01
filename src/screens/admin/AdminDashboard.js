@@ -392,7 +392,8 @@ const AdminDashboard = ({ navigation }) => {
       try {
         const { data: pf } = await api.get('/admin/farmers/pending');
         setPendingFarmers(Array.isArray(pf) ? pf : pf?.data || []);
-      } catch {
+      } catch (pfErr) {
+        console.error('[AdminDashboard] fetchPendingFarmers error:', pfErr?.response?.data || pfErr?.message, '\nStatus:', pfErr?.response?.status);
         setPendingFarmers([]);
       }
 
@@ -400,10 +401,12 @@ const AdminDashboard = ({ navigation }) => {
       try {
         const { data: pt } = await api.get('/admin/transporters/pending');
         setPendingTransporters(Array.isArray(pt) ? pt : pt?.data || []);
-      } catch {
+      } catch (ptErr) {
+        console.error('[AdminDashboard] fetchPendingTransporters error:', ptErr?.response?.data || ptErr?.message, '\nStatus:', ptErr?.response?.status);
         setPendingTransporters([]);
       }
     } catch (e) {
+      console.error('[AdminDashboard] fetchDashboard error:', e?.response?.data || e?.message, '\nStatus:', e?.response?.status);
       if (!silent) Alert.alert('Error', e.message || 'Failed to load dashboard');
     } finally {
       setLoading(false);
@@ -438,6 +441,7 @@ const AdminDashboard = ({ navigation }) => {
             Alert.alert('Success', 'Farmer approved');
             fetchDashboard(true);
           } catch (e) {
+            console.error('[AdminDashboard] approveFarmer error:', e?.response?.data || e?.message, '\nStatus:', e?.response?.status);
             Alert.alert('Error', e.message);
           } finally {
             setBusyId(null);
@@ -465,6 +469,7 @@ const AdminDashboard = ({ navigation }) => {
             Alert.alert('Rejected', 'Farmer rejected');
             fetchDashboard(true);
           } catch (e) {
+            console.error('[AdminDashboard] rejectFarmer error:', e?.response?.data || e?.message, '\nStatus:', e?.response?.status);
             Alert.alert('Error', e.message);
           } finally {
             setBusyId(null);
@@ -494,6 +499,7 @@ const AdminDashboard = ({ navigation }) => {
               Alert.alert('Success', 'Transporter approved');
               fetchDashboard(true);
             } catch (e) {
+              console.error('[AdminDashboard] approveTransporter error:', e?.response?.data || e?.message, '\nStatus:', e?.response?.status);
               Alert.alert('Error', e.message);
             } finally {
               setBusyId(null);
@@ -525,6 +531,7 @@ const AdminDashboard = ({ navigation }) => {
               Alert.alert('Rejected', 'Transporter rejected');
               fetchDashboard(true);
             } catch (e) {
+              console.error('[AdminDashboard] rejectTransporter error:', e?.response?.data || e?.message, '\nStatus:', e?.response?.status);
               Alert.alert('Error', e.message);
             } finally {
               setBusyId(null);

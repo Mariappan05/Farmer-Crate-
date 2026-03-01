@@ -430,10 +430,13 @@ const AdminOrders = ({ navigation }) => {
     if (!silent) setLoading(true);
     try {
       const { data } = await api.get('/orders/all');
-      const list = Array.isArray(data) ? data : data?.data || data?.orders || [];
+      const raw = Array.isArray(data) ? data : data?.data || data?.orders || [];
+      const list = raw.map(o => ({ ...o, status: o.current_status || o.status || 'PENDING' }));
+      console.log('[AdminOrders] Fetched', list.length, 'orders');
       setOrders(list);
     } catch (e) {
       const msg = e?.response?.data?.message || e.message || 'Failed to load orders';
+      console.error('[AdminOrders] fetchOrders error:', msg, '\nStatus:', e?.response?.status, '\nDetails:', JSON.stringify(e?.response?.data));
       if (!silent) toastRef.current?.show(msg, 'error');
       else toastRef.current?.show('Could not refresh orders', 'warning');
     } finally {

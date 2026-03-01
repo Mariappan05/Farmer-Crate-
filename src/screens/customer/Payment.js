@@ -500,10 +500,9 @@ const Payment = ({ navigation, route }) => {
       if (e?.code === 'PAYMENT_CANCELLED' || e?.description === 'Payment cancelled by user.') {
         toastRef.current?.show('Payment cancelled.', 'info');
       } else {
-        toastRef.current?.show(
-          e?.description || e?.message || 'Payment failed. Please try again.',
-          'error', 4000,
-        );
+        const msg = e?.description || e?.message || 'Payment failed. Please try again.';
+        console.error('[Payment] Online payment error:', msg, '\nCode:', e?.code, '\nStatus:', e?.response?.status, '\nDetails:', JSON.stringify(e?.response?.data || e));
+        toastRef.current?.show(msg, 'error', 4000);
       }
     } finally {
       setIsProcessing(false);
@@ -595,11 +594,9 @@ const Payment = ({ navigation, route }) => {
         },
       });
     } catch (e) {
-      toastRef.current?.show(
-        e.response?.data?.message || e.message || 'Failed to place order. Please try again.',
-        'error',
-        4000,
-      );
+      const msg = e.response?.data?.message || e.message || 'Failed to place order. Please try again.';
+      console.error('[Payment] COD order error:', msg, '\nStatus:', e?.response?.status, '\nDetails:', JSON.stringify(e?.response?.data));
+      toastRef.current?.show(msg, 'error', 4000);
     } finally {
       setIsProcessing(false);
       setShowQR(false);

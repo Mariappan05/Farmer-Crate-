@@ -48,18 +48,29 @@ const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Shipped', 'Delivered', '
 
 const STATUS_CONFIG = {
   pending:          { color: '#FF9800', bg: '#FFF3E0', icon: 'time-outline',                   label: 'Pending' },
+  placed:           { color: '#FF9800', bg: '#FFF3E0', icon: 'time-outline',                   label: 'Placed' },
   confirmed:        { color: '#2196F3', bg: '#E3F2FD', icon: 'checkmark-circle-outline',       label: 'Confirmed' },
+  assigned:         { color: '#9C27B0', bg: '#F3E5F5', icon: 'person-outline',                 label: 'Assigned' },
   processing:       { color: '#9C27B0', bg: '#F3E5F5', icon: 'cog-outline',                    label: 'Processing' },
   shipped:          { color: '#3F51B5', bg: '#E8EAF6', icon: 'airplane-outline',               label: 'Shipped' },
+  in_transit:       { color: '#3F51B5', bg: '#E8EAF6', icon: 'car-outline',                    label: 'In Transit' },
+  received:         { color: '#00897B', bg: '#E0F2F1', icon: 'cube-outline',                   label: 'Received' },
   out_for_delivery: { color: '#00BCD4', bg: '#E0F7FA', icon: 'bicycle-outline',                label: 'Out for Delivery' },
   delivered:        { color: '#4CAF50', bg: '#E8F5E9', icon: 'checkmark-done-circle-outline',  label: 'Delivered' },
+  completed:        { color: '#4CAF50', bg: '#E8F5E9', icon: 'checkmark-done-circle-outline',  label: 'Delivered' },
   cancelled:        { color: '#F44336', bg: '#FFEBEE', icon: 'close-circle-outline',           label: 'Cancelled' },
 };
 
 const getStatusConfig = (status) => {
-  const key = (status || 'pending').toLowerCase().replace(/\s+/g, '_');
+  const key = (status || 'pending').toLowerCase().replace(/[\s-]+/g, '_');
   return STATUS_CONFIG[key] || STATUS_CONFIG.pending;
 };
+
+// Normalize an order object so .status always exists
+const normalizeOrder = (o) => ({
+  ...o,
+  status: (o.current_status || o.status || 'PENDING').toUpperCase(),
+});
 
 /* --------------------------------------------------------------------------
  * HELPERS
@@ -417,12 +428,15 @@ const OrderHistory = ({ navigation }) => {
     if (!silent) setLoading(true);
     try {
       const data = await getCustomerOrders();
-      const list = Array.isArray(data) ? data : data?.data || data?.orders || [];
+      const raw = Array.isArray(data) ? data : data?.data || data?.orders || [];
+      const list = raw.map(normalizeOrder);
       list.sort((a, b) => new Date(b.created_at || b.order_date || 0) - new Date(a.created_at || a.order_date || 0));
+      console.log('[OrderHistory] Fetched', list.length, 'orders');
       setOrders(list);
       applyFilter(activeFilter, list);
     } catch (e) {
       const msg = e?.response?.data?.message || e.message || 'Failed to load orders';
+      console.error('[OrderHistory] fetchOrders error:', msg, '\nStatus:', e?.response?.status, '\nDetails:', JSON.stringify(e?.response?.data));
       if (!silent) toastRef.current?.show(msg, 'error');
     } finally {
       setLoading(false);
@@ -443,8 +457,16 @@ const OrderHistory = ({ navigation }) => {
     if (filter === 'All') {
       setFilteredOrders(list);
     } else {
-      const key = filter.toLowerCase();
-      setFilteredOrders(list.filter((o) => (o.status || '').toLowerCase() === key));
+      // Match both backend uppercase (PENDING, PLACED) and display case
+      const key = filter.toUpperCase();
+      setFilteredOrders(list.filter((o) => {
+        const s = (o.status || o.current_status || '').toUpperCase();
+        if (key === 'PENDING') return s === 'PENDING' || s === 'PLACED';
+        if (key === 'CONFIRMED') return s === 'CONFIRMED' || s === 'ASSIGNED';
+        if (key === 'SHIPPED') return s === 'SHIPPED' || s === 'IN_TRANSIT' || s === 'RECEIVED' || s === 'OUT_FOR_DELIVERY';
+        if (key === 'DELIVERED') return s === 'DELIVERED' || s === 'COMPLETED';
+        return s === key;
+      }));
     }
   };
 
