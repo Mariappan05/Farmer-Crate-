@@ -357,8 +357,8 @@ const CustomerProfile = ({ navigation }) => {
       zone: d.zone || userNested.zone || '',
     });
     setProfileImage(
-      d.profile_image || d.profileImage || d.avatar || d.image ||
-      userNested.profile_image || userNested.image_url || null,
+      d.image_url || d.profile_image || d.profileImage || d.avatar || d.image ||
+      userNested.image_url || userNested.profile_image || null,
     );
   };
 

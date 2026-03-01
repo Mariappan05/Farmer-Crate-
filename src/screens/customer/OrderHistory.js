@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
   refreshBtn: { padding: 8 },
 
   /* Filter chips */
-  chipRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, backgroundColor: '#fff', alignItems: 'center' },
+  chipRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 8, backgroundColor: '#fff', alignItems: 'center' },
   chip: {
     paddingHorizontal: 16,
     paddingVertical: 8,

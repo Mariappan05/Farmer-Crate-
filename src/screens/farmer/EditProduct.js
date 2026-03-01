@@ -72,6 +72,8 @@ const EditProduct = ({ navigation }) => {
 
   // Image carousel index per product
   const [carouselIndices, setCarouselIndices] = useState({});
+  // Delete confirmation modal
+  const [deleteModal, setDeleteModal] = useState({ visible: false, product: null, deleting: false });
   const toastRef = useRef(null);
 
   const fetchProducts = useCallback(async () => {
@@ -118,23 +120,22 @@ const EditProduct = ({ navigation }) => {
 
   /* ─── Delete ─── */
   const handleDelete = (product) => {
+    setDeleteModal({ visible: true, product, deleting: false });
+  };
+
+  const confirmDelete = async () => {
+    const { product } = deleteModal;
     const pid = product.product_id || product.id;
-    Alert.alert('Delete Product', `Are you sure you want to delete "${product.name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.delete(`/products/${pid}`);
-            setProducts((prev) => prev.filter((p) => (p.product_id || p.id) !== pid));
-            toastRef.current?.show('Product has been removed.', 'success');
-          } catch (e) {
-            toastRef.current?.show(e.message || 'Failed to delete product', 'error');
-          }
-        },
-      },
-    ]);
+    setDeleteModal((prev) => ({ ...prev, deleting: true }));
+    try {
+      await api.delete(`/products/${pid}`);
+      setProducts((prev) => prev.filter((p) => (p.product_id || p.id) !== pid));
+      setDeleteModal({ visible: false, product: null, deleting: false });
+      toastRef.current?.show('Product has been removed.', 'success');
+    } catch (e) {
+      setDeleteModal((prev) => ({ ...prev, deleting: false }));
+      toastRef.current?.show(e.message || 'Failed to delete product', 'error');
+    }
   };
 
   /* ─── Status Toggle ─── */
@@ -170,10 +171,10 @@ const EditProduct = ({ navigation }) => {
     if (!price || isNaN(parseFloat(price))) { toastRef.current?.show('Enter valid price', 'warning'); return; }
     if (!quantity || isNaN(parseInt(quantity))) { toastRef.current?.show('Enter valid quantity', 'warning'); return; }
     try {
-      await api.put(`/products/${id}`, { price: parseFloat(price), quantity: parseInt(quantity) });
+      await api.put(`/products/${id}`, { current_price: parseFloat(price), quantity: parseInt(quantity) });
       setProducts((prev) =>
         prev.map((p) =>
-          (p.product_id || p.id) === id ? { ...p, price: parseFloat(price), quantity: parseInt(quantity) } : p
+          (p.product_id || p.id) === id ? { ...p, current_price: parseFloat(price), price: parseFloat(price), quantity: parseInt(quantity) } : p
         )
       );
       setQuickEditModal(false);
@@ -238,7 +239,7 @@ const EditProduct = ({ navigation }) => {
         description: editForm.description.trim(),
         category: editForm.category,
         variety: editForm.variety.trim() || undefined,
-        price: parseFloat(editForm.price),
+        current_price: parseFloat(editForm.price),
         unit: editForm.unit,
         quantity: parseInt(editForm.quantity),
         images: uploadedUrls.map((url, i) => ({ url, is_primary: i === 0 })),
@@ -675,6 +676,54 @@ const EditProduct = ({ navigation }) => {
 
       {renderEditModal()}
       {renderQuickEditModal()}
+
+      {/* ── Delete confirmation modal ── */}
+      <Modal
+        visible={deleteModal.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !deleteModal.deleting && setDeleteModal({ visible: false, product: null, deleting: false })}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '100%', alignItems: 'center' }}>
+            {/* Icon */}
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#FFEBEE', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+              <Ionicons name="trash-outline" size={32} color="#D32F2F" />
+            </View>
+            {/* Title */}
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#1a1a1a', marginBottom: 8, textAlign: 'center' }}>
+              Delete Product
+            </Text>
+            {/* Message */}
+            <Text style={{ fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+              Are you sure you want to delete{'\n'}
+              <Text style={{ fontWeight: '600', color: '#333' }}>"{deleteModal.product?.name}"</Text>?{'\n'}
+              This action cannot be undone.
+            </Text>
+            {/* Actions */}
+            <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: '#E0E0E0', alignItems: 'center' }}
+                onPress={() => setDeleteModal({ visible: false, product: null, deleting: false })}
+                disabled={deleteModal.deleting}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '600', color: '#555' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: '#D32F2F', alignItems: 'center', justifyContent: 'center' }}
+                onPress={confirmDelete}
+                disabled={deleteModal.deleting}
+              >
+                {deleteModal.deleting
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={{ fontSize: 15, fontWeight: '700', color: '#fff' }}>Delete</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <ToastMessage ref={toastRef} />
 
       {/* Edit Image Photo Picker Modal */}

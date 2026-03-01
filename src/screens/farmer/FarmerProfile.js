@@ -188,8 +188,8 @@ const FarmerProfile = ({ navigation }) => {
       if (url) {
         updateForm('profile_image', url);
         // Save immediately
-        await api.put('/farmers/me', { profile_image: url });
-        setProfile((prev) => ({ ...prev, profile_image: url }));
+        await api.put('/farmers/me', { image_url: url });
+        setProfile((prev) => ({ ...prev, image_url: url, profile_image: url }));
       } else {
         toastRef.current?.show('Failed to upload image', 'error');
       }
@@ -208,19 +208,14 @@ const FarmerProfile = ({ navigation }) => {
     setSaving(true);
     try {
       const payload = {
-        full_name: form.full_name.trim(),
-        phone: form.phone.trim(),
-        farm_name: form.farm_name.trim(),
-        address_line: form.address_line.trim(),
-        city: form.city.trim(),
+        name: form.full_name.trim(),
+        mobile_number: form.phone.trim(),
+        address: form.address_line.trim(),
         state: form.state,
         district: form.district,
-        pincode: form.pincode.trim(),
         zone: form.zone,
         account_number: form.account_number.trim(),
         ifsc_code: form.ifsc_code.trim(),
-        bank_name: form.bank_name.trim(),
-        global_farmer_id: form.global_farmer_id.trim(),
       };
       await api.put('/farmers/me', payload);
       setProfile((prev) => ({ ...prev, ...payload }));
