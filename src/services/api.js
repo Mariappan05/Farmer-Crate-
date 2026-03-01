@@ -38,7 +38,10 @@ api.interceptors.response.use(
       error?.response?.data?.error ||
       error?.message ||
       'Something went wrong';
-    return Promise.reject(new Error(msg));
+    const enriched = new Error(msg);
+    enriched.response = error?.response;   // preserve so callers can read status/data
+    enriched.status   = error?.response?.status;
+    return Promise.reject(enriched);
   }
 );
 
