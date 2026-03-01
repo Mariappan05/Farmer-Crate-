@@ -1,0 +1,107 @@
+﻿import React, { useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
+
+import AdminDashboard from '../screens/admin/AdminDashboard';
+import AdminOrders from '../screens/admin/AdminOrders';
+import VerificationPage from '../screens/admin/VerificationPage';
+import AdminReport from '../screens/admin/AdminReport';
+import UserManagement from '../screens/admin/UserManagement';
+import CustomerManagement from '../screens/admin/CustomerManagement';
+import TransporterManagement from '../screens/admin/TransporterManagement';
+import FarmerDetails from '../screens/admin/FarmerDetails';
+import CustomerDetails from '../screens/admin/CustomerDetails';
+import DeliveryPersonDetails from '../screens/admin/DeliveryPersonDetails';
+import TransporterDetails from '../screens/admin/TransporterDetails';
+import AdminOrderTracking from '../screens/admin/AdminOrderTracking';
+import AdminProfile from '../screens/admin/AdminProfile';
+
+const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
+const SLIDE = { animation: 'slide_from_right', gestureEnabled: true, contentStyle: { backgroundColor: '#fff' } };
+
+const ADMIN_TABS = [
+  { name: 'Dashboard',    icon: 'home',                iconOff: 'home-outline',                 label: 'Dashboard' },
+  { name: 'Orders',       icon: 'list',                iconOff: 'list-outline',                  label: 'Orders' },
+  { name: 'Verification', icon: 'shield-checkmark',   iconOff: 'shield-checkmark-outline',      label: 'Verify' },
+  { name: 'Reports',      icon: 'bar-chart',           iconOff: 'bar-chart-outline',             label: 'Reports' },
+  { name: 'Users',        icon: 'people',              iconOff: 'people-outline',                label: 'Users' },
+];
+
+const AnimatedTabBtn = ({ item, onPress, isFocused }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const dotAnim = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.spring(dotAnim, { toValue: isFocused ? 1 : 0, useNativeDriver: true, tension: 80, friction: 8 }).start();
+    if (isFocused) Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.85, duration: 80, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, tension: 200, friction: 7, useNativeDriver: true }),
+    ]).start();
+  }, [isFocused]);
+  return (
+    <TouchableOpacity onPress={onPress} style={ts.tabBtn} activeOpacity={1}>
+      {/* top indicator stripe */}
+      <Animated.View style={[ts.topDot, { transform: [{ scaleX: dotAnim }], opacity: dotAnim }]} />
+      <Animated.View style={[ts.iconWrap, { transform: [{ scale: scaleAnim }] }]}>
+        <Ionicons name={isFocused ? item.icon : item.iconOff} size={22} color={isFocused ? '#1B5E20' : '#9E9E9E'} />
+      </Animated.View>
+      <Text style={[ts.label, isFocused && ts.labelActive]} numberOfLines={1} adjustsFontSizeToFit>{item.label}</Text>
+    </TouchableOpacity>
+  );
+};
+
+const AdminTabBar = ({ state, navigation }) => (
+  <View style={ts.bar}>
+    {state.routes.map((route, index) => (
+      <AnimatedTabBtn
+        key={route.key}
+        item={ADMIN_TABS[index] || { icon: 'ellipse', iconOff: 'ellipse-outline', label: route.name }}
+        isFocused={state.index === index}
+        onPress={() => { if (state.index !== index) navigation.navigate(route.name); }}
+      />
+    ))}
+  </View>
+);
+
+const ts = StyleSheet.create({
+  bar: {
+    flexDirection: 'row', backgroundColor: '#fff',
+    borderTopWidth: 1, borderTopColor: '#F0F0F0',
+    paddingBottom: Platform.OS === 'ios' ? 20 : 4, paddingTop: 0,
+    height: Platform.OS === 'ios' ? 82 : 62,
+    ...Platform.select({ android: { elevation: 12 }, ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 8 } }),
+  },
+  tabBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 0 },
+  iconWrap: { width: 30, height: 26, alignItems: 'center', justifyContent: 'center' },
+  label: { fontSize: 9, color: '#9E9E9E', fontWeight: '500', marginTop: 1 },
+  labelActive: { color: '#1B5E20', fontWeight: '700' },
+  topDot: { width: '70%', height: 3, borderRadius: 0, backgroundColor: '#1B5E20', borderBottomLeftRadius: 3, borderBottomRightRadius: 3, marginBottom: 4 },
+});
+
+const AdminTabs = () => (
+  <Tab.Navigator tabBar={(props) => <AdminTabBar {...props} />} screenOptions={{ headerShown: false }}>
+    <Tab.Screen name="Dashboard" component={AdminDashboard} />
+    <Tab.Screen name="Orders" component={AdminOrders} />
+    <Tab.Screen name="Verification" component={VerificationPage} />
+    <Tab.Screen name="Reports" component={AdminReport} />
+    <Tab.Screen name="Users" component={UserManagement} />
+  </Tab.Navigator>
+);
+
+const AdminNavigator = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false, ...SLIDE }}>
+    <Stack.Screen name="AdminTabs" component={AdminTabs} options={{ animation: 'none' }} />
+    <Stack.Screen name="CustomerManagement" component={CustomerManagement} />
+    <Stack.Screen name="TransporterManagement" component={TransporterManagement} />
+    <Stack.Screen name="FarmerDetails" component={FarmerDetails} />
+    <Stack.Screen name="CustomerDetails" component={CustomerDetails} />
+    <Stack.Screen name="DeliveryPersonDetails" component={DeliveryPersonDetails} />
+    <Stack.Screen name="TransporterDetails" component={TransporterDetails} />
+    <Stack.Screen name="AdminOrderTracking" component={AdminOrderTracking} />
+    <Stack.Screen name="AdminProfile" component={AdminProfile} />
+  </Stack.Navigator>
+);
+
+export default AdminNavigator;

@@ -1,0 +1,34 @@
+{
+  "project_info": {
+    "project_number": "850075546970",
+    "project_id": "farmercrate",
+    "storage_bucket": "farmercrate.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:850075546970:android:a1b2c3d4e5f6a1b2",
+        "android_client_info": {
+          "package_name": "com.farmercrate.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "850075546970-5v0jdspjmtm4ciu5sqrukvlhmohhqon9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": ""
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
