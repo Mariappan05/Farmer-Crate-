@@ -1,316 +1,362 @@
-﻿/**
+/**
  * LocationPickerModal.js
  *
- * In-app map picker â€” react-native-maps (already compiled) + OpenStreetMap UrlTile.
- * Search and reverse-geocoding via Nominatim (free, no key needed).
- * The placeholder Google API key in AndroidManifest prevents the native crash;
- * actual tiles are replaced 100% by OSM UrlTile â€” Google tiles never shown.
+ * Pure React-Native location search picker — NO react-native-maps, NO WebView.
+ * Uses Nominatim (OpenStreetMap) for search + reverse geocoding.
+ * Uses expo-location for optional GPS detection.
+ *
+ * Why no MapView: react-native-maps initialises Google Maps SDK at render-time
+ * which hard-crashes the app without a valid Google API key in the APK.
+ * This implementation is completely Google-free and needs no API key.
  *
  * Props:
  *   visible    {boolean}
  *   onClose    {() => void}
- *   onConfirm  {(fields) => void}  fields: { address, city, pincode, zone, state, district }
+ *   onConfirm  {(fields) => void}
+ *     fields = { address, city, pincode, zone, state, district }
  */
 
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
+  FlatList,
   StyleSheet,
   Modal,
-  FlatList,
   ActivityIndicator,
   StatusBar,
-  Alert,
-  Keyboard,
+  KeyboardAvoidingView,
   Platform,
-  Dimensions,
+  Keyboard,
+  ScrollView,
+  Alert,
 } from 'react-native';
-import MapView, { Marker, UrlTile, PROVIDER_DEFAULT } from 'react-native-maps';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
 import axios from 'axios';
 
-const OSM_TILE  = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const NOM_URL   = 'https://nominatim.openstreetmap.org';
-const NOM_HDR   = { 'User-Agent': 'FarmerCrate/1.0 (farmercrate@app)' };
-const DEFAULT_REGION = { latitude: 20.5937, longitude: 78.9629, latitudeDelta: 10, longitudeDelta: 10 };
+const NOM  = 'https://nominatim.openstreetmap.org';
+const HDR  = { 'User-Agent': 'FarmerCrate/1.0 (farmercrate@app)', Accept: 'application/json' };
 
-// â”€â”€â”€ placeholder to satisfy Metro bundler (not used at runtime here) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const _LEAFLET_HTML_REMOVED = true; // WebView replaced by react-native-maps
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-// Build address fields from Nominatim response
-function buildFields(a, display) {
+// ── Parse a Nominatim address object into our form fields ─────────────────────
+function parseNominatim(addr, displayName) {
   return {
-    address:  display || '',
-    city:     a.city || a.town || a.village || a.municipality || a.county || '',
-    pincode:  a.postcode  || '',
-    zone:     a.suburb || a.neighbourhood || a.village || a.hamlet || '',
-    state:    a.state || '',
-    district: a.state_district || a.district || a.county || '',
+    address:  displayName || '',
+    city:     addr.city || addr.town || addr.village || addr.municipality || addr.county || '',
+    pincode:  addr.postcode || '',
+    zone:     addr.suburb || addr.neighbourhood || addr.village || addr.hamlet || '',
+    state:    addr.state || '',
+    district: addr.state_district || addr.district || addr.county || '',
   };
 }
 
-// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 export default function LocationPickerModal({ visible, onClose, onConfirm }) {
   const insets = useSafeAreaInsets();
-  const mapRef = useRef(null);
 
-  const [region,      setRegion]      = useState(DEFAULT_REGION);
-  const [markerCoord, setMarkerCoord] = useState(null);
-  const [preview,     setPreview]     = useState(null);   // { city, district, state, pincode, address, ... }
-
-  const [query,          setQuery]          = useState('');
-  const [results,        setResults]        = useState([]);
-  const [searchLoading,  setSearchLoading]  = useState(false);
-  const [showDrop,       setShowDrop]       = useState(false);
-  const [revLoading,     setRevLoading]     = useState(false);
-  const [confirming,     setConfirming]     = useState(false);
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [query,        setQuery]        = useState('');
+  const [results,      setResults]      = useState([]);
+  const [searching,    setSearching]    = useState(false);
+  const [gpsLoading,   setGpsLoading]   = useState(false);
+  const [selected,     setSelected]     = useState(null);   // parsed fields object
+  const [showResults,  setShowResults]  = useState(false);
   const debounceRef = useRef(null);
+  const inputRef    = useRef(null);
 
-  // Reset on open
+  // Reset when modal opens
   useEffect(() => {
     if (visible) {
-      setRegion(DEFAULT_REGION);
-      setMarkerCoord(null);
-      setPreview(null);
       setQuery('');
       setResults([]);
-      setShowDrop(false);
+      setSearching(false);
+      setGpsLoading(false);
+      setSelected(null);
+      setShowResults(false);
     }
   }, [visible]);
 
-  // â”€â”€ Reverse geocode a coordinate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const reverseGeocode = useCallback(async (lat, lon) => {
-    setRevLoading(true);
-    try {
-      const res = await axios.get(`${NOM_URL}/reverse`, {
-        params: { format: 'json', lat, lon, addressdetails: 1 },
-        headers: NOM_HDR,
-      });
-      if (res.data?.address) {
-        setPreview(buildFields(res.data.address, res.data.display_name));
-      }
-    } catch (e) {
-      console.error('[LocationPicker] reverse geocode error:', e.message);
-    } finally {
-      setRevLoading(false);
-    }
-  }, []);
-
-  // â”€â”€ Tap on map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const handleMapPress = useCallback((e) => {
-    const coord = e.nativeEvent.coordinate;
-    setMarkerCoord(coord);
-    setShowDrop(false);
-    Keyboard.dismiss();
-    reverseGeocode(coord.latitude, coord.longitude);
-  }, [reverseGeocode]);
-
-  // â”€â”€ Drag marker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const handleDragEnd = useCallback((e) => {
-    const coord = e.nativeEvent.coordinate;
-    setMarkerCoord(coord);
-    reverseGeocode(coord.latitude, coord.longitude);
-  }, [reverseGeocode]);
-
-  // â”€â”€ Search (debounced) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const handleSearchChange = useCallback((text) => {
-    setQuery(text);
-    setShowDrop(false);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (text.trim().length < 3) { setResults([]); return; }
-    debounceRef.current = setTimeout(async () => {
-      setSearchLoading(true);
-      try {
-        const res = await axios.get(`${NOM_URL}/search`, {
-          params: { format: 'json', q: text.trim(), addressdetails: 1, limit: 7, countrycodes: 'in' },
-          headers: NOM_HDR,
-        });
-        setResults(res.data || []);
-        setShowDrop(true);
-      } catch (e) {
-        console.error('[LocationPicker] search error:', e.message);
-      } finally {
-        setSearchLoading(false);
-      }
-    }, 600);
-  }, []);
-
-  // â”€â”€ Pick search result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const handleSelectResult = useCallback((item) => {
-    Keyboard.dismiss();
-    setQuery(item.display_name);
-    setShowDrop(false);
-    setResults([]);
-    const coord = { latitude: parseFloat(item.lat), longitude: parseFloat(item.lon) };
-    const newRegion = { ...coord, latitudeDelta: 0.06, longitudeDelta: 0.06 };
-    setMarkerCoord(coord);
-    setRegion(newRegion);
-    mapRef.current?.animateToRegion(newRegion, 500);
-    if (item.address) setPreview(buildFields(item.address, item.display_name));
-    else reverseGeocode(coord.latitude, coord.longitude);
-  }, [reverseGeocode]);
-
-  // â”€â”€ Confirm â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const handleConfirm = useCallback(async () => {
-    if (!markerCoord && !preview) {
-      Alert.alert('No location selected', 'Tap on the map or search to select a location first.');
+  // ── Nominatim search ──────────────────────────────────────────────────────
+  const doSearch = useCallback(async (q) => {
+    if (!q || q.trim().length < 3) {
+      setResults([]);
+      setShowResults(false);
       return;
     }
-    if (preview) { onConfirm(preview); return; }
-    // Fallback: reverse geocode current marker
-    setConfirming(true);
+    setSearching(true);
+    console.log('[LocationPicker] Searching Nominatim for:', q);
     try {
-      const res = await axios.get(`${NOM_URL}/reverse`, {
-        params: { format: 'json', lat: markerCoord.latitude, lon: markerCoord.longitude, addressdetails: 1 },
-        headers: NOM_HDR,
+      const res = await axios.get(`${NOM}/search`, {
+        params: { format: 'json', q: q.trim(), addressdetails: 1, limit: 8, countrycodes: 'in' },
+        headers: HDR,
+        timeout: 10000,
       });
-      if (res.data?.address) {
-        onConfirm(buildFields(res.data.address, res.data.display_name));
-      } else {
-        Alert.alert('Error', 'Could not fetch address. Try again.');
-      }
-    } catch (e) {
-      console.error('[LocationPicker] confirm geocode error:', e.message);
-      Alert.alert('Error', 'Could not fetch address. Check your internet connection.');
+      console.log('[LocationPicker] Search results count:', res.data?.length);
+      setResults(res.data || []);
+      setShowResults(true);
+    } catch (err) {
+      console.error('[LocationPicker] Search error:', err?.message, err?.response?.status);
+      setResults([]);
+      setShowResults(false);
     } finally {
-      setConfirming(false);
+      setSearching(false);
     }
-  }, [markerCoord, preview, onConfirm]);
+  }, []);
 
-  const hasSelection = !!(markerCoord || preview);
+  const handleQueryChange = useCallback((text) => {
+    setQuery(text);
+    setShowResults(false);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (text.trim().length >= 3) {
+      debounceRef.current = setTimeout(() => doSearch(text), 600);
+    } else {
+      setResults([]);
+    }
+  }, [doSearch]);
 
+  // ── Select a result ───────────────────────────────────────────────────────
+  const handleSelect = useCallback((item) => {
+    Keyboard.dismiss();
+    setShowResults(false);
+    const fields = parseNominatim(item.address || {}, item.display_name);
+    console.log('[LocationPicker] Selected:', fields);
+    setQuery(item.display_name);
+    setSelected(fields);
+  }, []);
+
+  // ── GPS detect ────────────────────────────────────────────────────────────
+  const handleGPS = useCallback(async () => {
+    console.log('[LocationPicker] GPS button pressed');
+    setGpsLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      console.log('[LocationPicker] Location permission status:', status);
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required to detect your location.');
+        console.warn('[LocationPicker] Location permission denied');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const { latitude, longitude } = loc.coords;
+      console.log('[LocationPicker] GPS coords:', latitude, longitude);
+
+      const res = await axios.get(`${NOM}/reverse`, {
+        params: { format: 'json', lat: latitude, lon: longitude, addressdetails: 1 },
+        headers: HDR,
+        timeout: 10000,
+      });
+      console.log('[LocationPicker] Reverse geocode result:', res.data?.display_name);
+      if (res.data?.address) {
+        const fields = parseNominatim(res.data.address, res.data.display_name);
+        setQuery(res.data.display_name || '');
+        setSelected(fields);
+        setShowResults(false);
+      } else {
+        Alert.alert('Error', 'Could not find address for your location.');
+        console.error('[LocationPicker] Reverse geocode returned no address:', res.data);
+      }
+    } catch (err) {
+      console.error('[LocationPicker] GPS error:', err?.message, err?.code);
+      Alert.alert('GPS Error', err?.message || 'Could not detect location. Check location permissions and try again.');
+    } finally {
+      setGpsLoading(false);
+    }
+  }, []);
+
+  // ── Confirm ───────────────────────────────────────────────────────────────
+  const handleConfirm = useCallback(() => {
+    if (!selected) {
+      Alert.alert('Nothing selected', 'Search or detect your location first.');
+      return;
+    }
+    console.log('[LocationPicker] Confirming selection:', selected);
+    onConfirm(selected);
+  }, [selected, onConfirm]);
+
+  // ── Render a single search result row ─────────────────────────────────────
+  const renderResult = ({ item }) => {
+    const parts = item.display_name.split(',');
+    const main  = parts.slice(0, 2).join(',').trim();
+    const sub   = parts.slice(2, 5).join(',').trim();
+    return (
+      <TouchableOpacity style={styles.resultRow} onPress={() => handleSelect(item)} activeOpacity={0.7}>
+        <View style={styles.resultIcon}>
+          <Ionicons name="location-outline" size={18} color="#43A047" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.resultMain} numberOfLines={1}>{main}</Text>
+          {sub ? <Text style={styles.resultSub} numberOfLines={1}>{sub}</Text> : null}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <Modal visible={visible} animationType="slide" statusBarTranslucent onRequestClose={onClose}>
       <View style={[styles.root, { paddingTop: insets.top }]}>
         <StatusBar barStyle="light-content" backgroundColor="#2E7D32" />
 
-        {/* â”€â”€ Header â”€â”€ */}
+        {/* ── Header ── */}
         <LinearGradient colors={['#2E7D32', '#43A047']} style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}
+          <TouchableOpacity onPress={onClose} style={styles.backBtn}
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>ðŸ“ Pick Location</Text>
+          <Text style={styles.headerTitle}>Choose Location</Text>
           <View style={{ width: 40 }} />
         </LinearGradient>
 
-        {/* â”€â”€ Search bar â”€â”€ */}
-        <View style={styles.searchWrapper}>
-          <View style={styles.searchBar}>
-            <Ionicons name="search-outline" size={20} color="#666" style={{ marginRight: 8 }} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search city, area, pincodeâ€¦"
-              placeholderTextColor="#999"
-              value={query}
-              onChangeText={handleSearchChange}
-              returnKeyType="search"
-              autoCorrect={false}
-            />
-            {searchLoading
-              ? <ActivityIndicator size="small" color="#43A047" style={{ marginLeft: 6 }} />
-              : query.length > 0
-                ? <TouchableOpacity onPress={() => { setQuery(''); setResults([]); setShowDrop(false); }}>
-                    <Ionicons name="close-circle" size={20} color="#bbb" />
-                  </TouchableOpacity>
-                : null
-            }
-          </View>
-
-          {/* â”€â”€ Search dropdown â”€â”€ */}
-          {showDrop && results.length > 0 && (
-            <View style={styles.dropdown}>
-              <FlatList
-                data={results}
-                keyExtractor={(_, i) => String(i)}
-                keyboardShouldPersistTaps="handled"
-                style={{ maxHeight: 220 }}
-                renderItem={({ item }) => (
-                  <TouchableOpacity style={styles.dropItem} onPress={() => handleSelectResult(item)} activeOpacity={0.7}>
-                    <Ionicons name="location-outline" size={15} color="#43A047" style={{ marginRight: 8, marginTop: 2 }} />
-                    <Text style={styles.dropText} numberOfLines={2}>{item.display_name}</Text>
-                  </TouchableOpacity>
-                )}
-                ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: '#eee' }} />}
-              />
-            </View>
-          )}
-          {showDrop && results.length === 0 && !searchLoading && query.length >= 3 && (
-            <View style={[styles.dropdown, { padding: 14 }]}>
-              <Text style={{ color: '#999', fontSize: 13 }}>No results found</Text>
-            </View>
-          )}
-        </View>
-
-        {/* â”€â”€ Map â”€â”€ */}
-        <View style={styles.mapContainer}>
-          <MapView
-            ref={mapRef}
-            style={StyleSheet.absoluteFillObject}
-            provider={PROVIDER_DEFAULT}
-            region={region}
-            onRegionChangeComplete={setRegion}
-            onPress={handleMapPress}
-            showsUserLocation={false}
-            toolbarEnabled={false}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
+          <ScrollView
+            contentContainerStyle={styles.body}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <UrlTile urlTemplate={OSM_TILE} maximumZ={19} flipY={false} shouldReplaceMapContent />
-            {markerCoord && (
-              <Marker coordinate={markerCoord} draggable onDragEnd={handleDragEnd} pinColor="#E53935" />
+
+            {/* ── GPS Button ── */}
+            <TouchableOpacity
+              style={styles.gpsBtn}
+              onPress={handleGPS}
+              disabled={gpsLoading}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={['#1565C0', '#1976D2']} style={styles.gpsBtnInner}>
+                {gpsLoading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Ionicons name="locate" size={20} color="#fff" />}
+                <Text style={styles.gpsBtnText}>
+                  {gpsLoading ? 'Detecting location…' : 'Detect My Current Location'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR SEARCH</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* ── Search bar ── */}
+            <View style={styles.searchBarWrapper}>
+              <Ionicons name="search-outline" size={20} color="#666" style={{ marginRight: 8 }} />
+              <TextInput
+                ref={inputRef}
+                style={styles.searchInput}
+                placeholder="Type city, area, pincode…"
+                placeholderTextColor="#999"
+                value={query}
+                onChangeText={handleQueryChange}
+                returnKeyType="search"
+                onSubmitEditing={() => doSearch(query)}
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+              {searching
+                ? <ActivityIndicator size="small" color="#43A047" style={{ marginLeft: 6 }} />
+                : query.length > 0
+                  ? <TouchableOpacity onPress={() => { setQuery(''); setResults([]); setShowResults(false); setSelected(null); }}>
+                      <Ionicons name="close-circle" size={20} color="#bbb" />
+                    </TouchableOpacity>
+                  : null
+              }
+            </View>
+
+            {/* ── Search result list ── */}
+            {showResults && results.length > 0 && (
+              <View style={styles.resultsList}>
+                {results.map((item, idx) => (
+                  <View key={idx}>
+                    {renderResult({ item })}
+                    {idx < results.length - 1 && <View style={styles.resultSep} />}
+                  </View>
+                ))}
+              </View>
             )}
-          </MapView>
+            {showResults && results.length === 0 && !searching && (
+              <View style={styles.noResults}>
+                <Ionicons name="search-outline" size={22} color="#bbb" />
+                <Text style={styles.noResultsText}>No results found. Try a different search.</Text>
+              </View>
+            )}
 
-          {/* Reverse-geocoding spinner overlay */}
-          {revLoading && (
-            <View style={styles.mapSpinner}>
-              <ActivityIndicator size="small" color="#43A047" />
-            </View>
-          )}
-        </View>
+            {/* ── Selected location card ── */}
+            {selected && (
+              <View style={styles.selectedCard}>
+                <View style={styles.selectedHeader}>
+                  <Ionicons name="checkmark-circle" size={20} color="#43A047" />
+                  <Text style={styles.selectedHeaderText}>Location Selected</Text>
+                </View>
 
-        {/* â”€â”€ Address preview â”€â”€ */}
-        {preview ? (
-          <View style={styles.previewCard}>
-            <Ionicons name="location" size={18} color="#E53935" style={{ marginRight: 8 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.previewCity} numberOfLines={1}>
-                {[preview.city, preview.district, preview.state].filter(Boolean).join(', ')}
-              </Text>
-              <Text style={styles.previewAddr} numberOfLines={2}>{preview.address}</Text>
-              {preview.pincode ? <Text style={styles.previewPin}>ðŸ“® {preview.pincode}</Text> : null}
-            </View>
-          </View>
-        ) : (
-          <View style={styles.hintBox}>
-            <Ionicons name="information-circle-outline" size={15} color="#888" />
-            <Text style={styles.hintText}>Tap anywhere on the map or search above to select a location</Text>
-          </View>
-        )}
+                <View style={styles.fieldRow}>
+                  <MaterialCommunityIcons name="city" size={16} color="#666" style={styles.fieldIcon} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>City</Text>
+                    <Text style={styles.fieldValue}>{selected.city || '—'}</Text>
+                  </View>
+                </View>
 
-        {/* â”€â”€ Confirm button â”€â”€ */}
+                <View style={styles.fieldRow}>
+                  <Ionicons name="business-outline" size={16} color="#666" style={styles.fieldIcon} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>District</Text>
+                    <Text style={styles.fieldValue}>{selected.district || '—'}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>State</Text>
+                    <Text style={styles.fieldValue}>{selected.state || '—'}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.fieldRow}>
+                  <Ionicons name="map-outline" size={16} color="#666" style={styles.fieldIcon} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>Zone / Area</Text>
+                    <Text style={styles.fieldValue}>{selected.zone || '—'}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>Pincode</Text>
+                    <Text style={styles.fieldValue}>{selected.pincode || '—'}</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.fieldRow, { borderBottomWidth: 0 }]}>
+                  <Ionicons name="home-outline" size={16} color="#666" style={styles.fieldIcon} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>Full Address</Text>
+                    <Text style={styles.fieldValue} numberOfLines={3}>{selected.address || '—'}</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Spacer for confirm button */}
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+
+        {/* ── Confirm button (floating footer) ── */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + 10 }]}>
           <TouchableOpacity
-            style={[styles.confirmBtn, (!hasSelection || confirming) && styles.confirmBtnDisabled]}
+            style={[styles.confirmBtn, !selected && styles.confirmBtnDisabled]}
             onPress={handleConfirm}
-            disabled={!hasSelection || confirming}
+            disabled={!selected}
             activeOpacity={0.85}
           >
             <LinearGradient
-              colors={(!hasSelection || confirming) ? ['#A5D6A7', '#A5D6A7'] : ['#2E7D32', '#43A047']}
+              colors={selected ? ['#2E7D32', '#43A047'] : ['#A5D6A7', '#A5D6A7']}
               style={styles.confirmBtnInner}
             >
-              {confirming
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Ionicons name="checkmark-circle-outline" size={22} color="#fff" />}
-              <Text style={styles.confirmBtnText}>
-                {confirming ? 'Getting addressâ€¦' : 'Use This Location'}
-              </Text>
+              <Ionicons name="checkmark-circle-outline" size={22} color="#fff" />
+              <Text style={styles.confirmBtnText}>Use This Location</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -319,76 +365,112 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
   );
 }
 
-// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
+  root: { flex: 1, backgroundColor: '#F5F7F5' },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 14,
     elevation: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2, shadowRadius: 3,
   },
-  closeBtn: { padding: 4 },
+  backBtn: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
 
-  searchWrapper: {
-    paddingHorizontal: 12, paddingVertical: 10,
-    backgroundColor: '#fff', zIndex: 100, elevation: 6,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4,
+  body: { padding: 16 },
+
+  // GPS button
+  gpsBtn: { borderRadius: 14, overflow: 'hidden', marginBottom: 20 },
+  gpsBtnInner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 16, borderRadius: 14, gap: 10,
   },
-  searchBar: {
+  gpsBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  // Divider
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 10 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#DDD' },
+  dividerText: { fontSize: 12, fontWeight: '700', color: '#999', letterSpacing: 1 },
+
+  // Search bar
+  searchBarWrapper: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F5F5F5', borderRadius: 12,
-    paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 12 : 6,
-    borderWidth: 1.5, borderColor: '#E8F5E9',
+    backgroundColor: '#fff', borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 14 : 8,
+    borderWidth: 1.5, borderColor: '#C8E6C9',
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07, shadowRadius: 3,
   },
   searchInput: { flex: 1, fontSize: 15, color: '#212121', paddingVertical: 0 },
-  dropdown: {
-    position: 'absolute', top: 62, left: 12, right: 12,
-    backgroundColor: '#fff', borderRadius: 12,
+
+  // Results
+  resultsList: {
+    backgroundColor: '#fff', borderRadius: 14,
     borderWidth: 1, borderColor: '#E0E0E0',
-    overflow: 'hidden', zIndex: 200, elevation: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.14, shadowRadius: 6,
-  },
-  dropItem: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 14, paddingVertical: 12 },
-  dropText: { flex: 1, fontSize: 13.5, color: '#333', lineHeight: 19 },
-
-  mapContainer: { flex: 1, overflow: 'hidden' },
-  mapSpinner: {
-    position: 'absolute', bottom: 16, right: 16,
-    backgroundColor: '#fff', borderRadius: 20, padding: 8,
+    overflow: 'hidden', marginBottom: 16,
     elevation: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 5,
   },
-
-  previewCard: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: '#F1F8E9', borderTopWidth: 1, borderTopColor: '#C8E6C9',
-    paddingHorizontal: 16, paddingVertical: 12,
+  resultRow: { flexDirection: 'row', alignItems: 'flex-start', padding: 14 },
+  resultIcon: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center',
+    marginRight: 12, marginTop: 1, flexShrink: 0,
   },
-  previewCity: { fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 2 },
-  previewAddr: { fontSize: 12, color: '#555', lineHeight: 17 },
-  previewPin:  { fontSize: 12, color: '#777', marginTop: 3 },
+  resultMain: { fontSize: 14, fontWeight: '600', color: '#212121', marginBottom: 2 },
+  resultSub:  { fontSize: 12, color: '#777' },
+  resultSep:  { height: 1, backgroundColor: '#F0F0F0', marginLeft: 58 },
 
-  hintBox: {
+  noResults: {
+    alignItems: 'center', paddingVertical: 24, gap: 8,
+    backgroundColor: '#fff', borderRadius: 14,
+    borderWidth: 1, borderColor: '#E0E0E0', marginBottom: 16,
+  },
+  noResultsText: { fontSize: 13, color: '#999', textAlign: 'center' },
+
+  // Selected card
+  selectedCard: {
+    backgroundColor: '#fff', borderRadius: 16,
+    borderWidth: 1.5, borderColor: '#A5D6A7',
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#43A047', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12, shadowRadius: 5,
+  },
+  selectedHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#FAFAFA', borderTopWidth: 1, borderTopColor: '#E0E0E0',
-    paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: '#E8F5E9', paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#C8E6C9',
   },
-  hintText: { flex: 1, fontSize: 12.5, color: '#888', lineHeight: 18 },
+  selectedHeaderText: { fontSize: 14, fontWeight: '700', color: '#2E7D32' },
+  fieldRow: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+  },
+  fieldIcon: { marginRight: 12, marginTop: 2, flexShrink: 0 },
+  fieldLabel: { fontSize: 11, color: '#888', marginBottom: 3, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5 },
+  fieldValue: { fontSize: 14, color: '#1A1A1A', fontWeight: '500' },
 
+  // Footer
   footer: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#fff', paddingHorizontal: 20, paddingTop: 12,
     borderTopWidth: 1, borderTopColor: '#E8F5E9',
-    elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08, shadowRadius: 4,
+    elevation: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1, shadowRadius: 6,
   },
   confirmBtn: { borderRadius: 14, overflow: 'hidden' },
-  confirmBtnDisabled: { opacity: 0.6 },
+  confirmBtnDisabled: { opacity: 0.55 },
   confirmBtnInner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingVertical: 16, borderRadius: 14, gap: 10,
   },
   confirmBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.4 },
 });
-

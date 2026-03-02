@@ -113,7 +113,8 @@ const GoogleProfileCompletion = ({ navigation, route }) => {
         Alert.alert('Success', 'Location fetched successfully');
       }
     } catch (e) {
-      Alert.alert('Error', 'Could not fetch location.');
+      console.error('[ProfileCompletion] GPS location error:', e?.message, e);
+      Alert.alert('Error', 'Could not fetch location. ' + (e?.message || ''));
     } finally {
       setLocationLoading(false);
     }
@@ -451,7 +452,15 @@ const GoogleProfileCompletion = ({ navigation, route }) => {
               {/* Pick on Map */}
               <TouchableOpacity
                 style={[styles.locationBtn, { flex: 1, marginLeft: 8 }]}
-                onPress={() => setShowMapPicker(true)}
+                onPress={() => {
+                  try {
+                    console.log('[ProfileCompletion] Opening location picker modal');
+                    setShowMapPicker(true);
+                  } catch (e) {
+                    console.error('[ProfileCompletion] Failed to open location picker:', e?.message, e);
+                    Alert.alert('Error', 'Could not open location picker: ' + e?.message);
+                  }
+                }}
                 activeOpacity={0.85}
               >
                 <LinearGradient colors={['#1976D2', '#42A5F5']} style={styles.locationBtnInner}>
