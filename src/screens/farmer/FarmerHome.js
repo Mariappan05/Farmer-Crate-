@@ -221,13 +221,18 @@ const FarmerHome = ({ navigation }) => {
         console.error('[REC] HTTP status   :', e.response.status);
         console.error('[REC] HTTP data     :', JSON.stringify(e.response.data));
         console.error('[REC] HTTP headers  :', JSON.stringify(e.response.headers));
+        // Show the REAL backend error message
+        const backendMsg = e.response.data?.message || e.response.data?.error || 'Server error';
+        console.error('[REC] Backend message:', backendMsg);
+        setRecError(`Server error (${e.response.status}): ${backendMsg}`);
       } else if (e.request) {
         console.error('[REC] No response received — possible network/CORS/timeout');
         console.error('[REC] Request config:', JSON.stringify(e.config?.url), JSON.stringify(e.config?.baseURL));
+        setRecError('Could not reach server — check internet connection');
       } else {
         console.error('[REC] Error setting up request:', e.message);
+        setRecError('Could not load recommendations');
       }
-      setRecError('Could not load recommendations');
     } finally {
       setRecLoading(false);
       console.log('[REC] fetchRecommendations() — END');
