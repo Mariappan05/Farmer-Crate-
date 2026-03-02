@@ -40,6 +40,72 @@ const DEFAULT_REGION = {
   latitudeDelta: 15, longitudeDelta: 15,
 };
 
+// ── Error Boundary: catches native MapView crashes (e.g. missing API key) ─────
+class MapErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '' };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, errorMessage: error?.message || String(error) };
+  }
+
+  componentDidCatch(error, info) {
+    console.error(
+      '[LocationPicker] \u274C MapView crashed (native error):',
+      error?.message || error,
+      '\nComponent stack:', info?.componentStack,
+    );
+    console.error(
+      '[LocationPicker] 💡 FIX: Rebuild the dev-client APK so the new ' +
+      'com.google.android.geo.API_KEY in AndroidManifest.xml takes effect.\n' +
+      'Run: npx expo run:android',
+    );
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={mapErrStyles.container}>
+          <Ionicons name="warning-outline" size={40} color="#E53935" />
+          <Text style={mapErrStyles.title}>Map unavailable</Text>
+          <Text style={mapErrStyles.body}>
+            Google Maps could not initialise.{`\n`}
+            Error: {this.state.errorMessage}
+          </Text>
+          <View style={mapErrStyles.hint}>
+            <Ionicons name="information-circle-outline" size={16} color="#1565C0" />
+            <Text style={mapErrStyles.hintText}>
+              Rebuild the dev-client APK for the API key to take effect:{`\n`}
+              {'  '}npx expo run:android
+            </Text>
+          </View>
+          <Text style={mapErrStyles.sub}>
+            Use the search bar or GPS button above to pick a location without the map.
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const mapErrStyles = StyleSheet.create({
+  container: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#FFF8F8', padding: 24, gap: 10,
+  },
+  title:    { fontSize: 18, fontWeight: '700', color: '#C62828', textAlign: 'center' },
+  body:     { fontSize: 13, color: '#555', textAlign: 'center', lineHeight: 20 },
+  hint: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: '#E3F2FD', borderRadius: 10, padding: 12, marginTop: 4,
+  },
+  hintText: { flex: 1, fontSize: 12, color: '#1565C0', lineHeight: 18 },
+  sub:      { fontSize: 12, color: '#777', textAlign: 'center', marginTop: 6 },
+});
+
 // ── Parse Nominatim address object into form fields ───────────────────────────
 function parseAddr(addr, displayName) {
   // Zone: try progressively broader locality identifiers used by Nominatim for Indian addresses
@@ -317,6 +383,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
         )}
 
         {/* ── Map ── */}
+        <MapErrorBoundary>
         <View style={styles.mapContainer}>
           <MapView
             ref={mapRef}
@@ -355,6 +422,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
             </View>
           )}
         </View>
+        </MapErrorBoundary>
 
         {/* ── Footer: address card + confirm button ── */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + 6 }]}>
