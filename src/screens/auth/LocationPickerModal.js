@@ -35,7 +35,10 @@ import axios from 'axios';
 const { width: SW } = Dimensions.get('window');
 
 const NOM  = 'https://nominatim.openstreetmap.org';
-const NHDR = { 'User-Agent': 'FarmerCrate/1.0 (farmercrate@app)', Accept: 'application/json' };
+const NHDR = { 'User-Agent': 'FarmerCrate/1.0 (contact@farmercrate.app)', Accept: 'application/json' };
+
+// ESRI World Street Map — free, no API key, no User-Agent restriction, reliable CDN
+const ESRI_TILE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile';
 
 const TILE_SIZE  = 256;   // OSM tile pixel size
 const GRID_SIZE  = 5;     // render a GRID_SIZE × GRID_SIZE tile grid
@@ -65,10 +68,9 @@ function fracToLatLon(fx, fy, zoom) {
   return { lat: latRad * 180 / Math.PI, lon };
 }
 
-/** Return a reliable tile URL (round-robins a/b/c subdomains) */
+/** Return an ESRI World Street Map tile URL (note: ESRI uses z/y/x order) */
 function tileUrl(tx, ty, zoom) {
-  const sub = 'abc'[Math.abs(tx + ty) % 3];
-  return `https://${sub}.tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`;
+  return `${ESRI_TILE}/${zoom}/${ty}/${tx}`;
 }
 
 // ── Parse Nominatim response ──────────────────────────────────────────────────
@@ -133,7 +135,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
   const gridTop       = cH / 2 - offsetPxY - HALF_GRID * TILE_SIZE;
 
   // Store in ref so tap handler always has latest values (no closure staleness)
-  mapInfoRef.current = { gridLeft, gridTop, zoom };
+  mapInfoRef.current = { gridLeft, gridTop, zoom, centerTileX, centerTileY };
 
   const tileImages = [];
   for (let row = 0; row < GRID_SIZE; row++) {
@@ -185,9 +187,11 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
   // ── Tap on map ──────────────────────────────────────────────────────────────
   const handleMapPress = useCallback((e) => {
     const { locationX, locationY } = e.nativeEvent;
-    const { gridLeft, gridTop, zoom } = mapInfoRef.current;
-    const tappedFx = (locationX - gridLeft) / TILE_SIZE;
-    const tappedFy = (locationY - gridTop)  / TILE_SIZE;
+    const { gridLeft, gridTop, zoom, centerTileX, centerTileY } = mapInfoRef.current;
+    // Convert screen tap → absolute fractional tile coordinates (world-tile space)
+    // gridLeft is the screen-x of tile column (centerTileX - HALF_GRID)
+    const tappedFx = (centerTileX - HALF_GRID) + (locationX - gridLeft) / TILE_SIZE;
+    const tappedFy = (centerTileY - HALF_GRID) + (locationY - gridTop)  / TILE_SIZE;
     const { lat, lon } = fracToLatLon(tappedFx, tappedFy, zoom);
     console.log('[LocationPicker] Map tapped → lat:', lat.toFixed(5), 'lon:', lon.toFixed(5));
     setCenterLat(lat);
@@ -371,9 +375,9 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
           {/* OSM tile images */}
           {tileImages}
 
-          {/* OSM attribution (required by OSM tile usage policy) */}
+          {/* Tile attribution */}
           <View style={styles.attribution} pointerEvents="none">
-            <Text style={styles.attributionText}>© OpenStreetMap contributors</Text>
+            <Text style={styles.attributionText}>© Esri | © OSM contributors</Text>
           </View>
 
           {/* Centre pin — always in the middle of the container */}
