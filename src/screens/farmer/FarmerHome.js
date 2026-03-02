@@ -270,7 +270,37 @@ const FarmerHome = ({ navigation }) => {
       const weekly  = parse(wRes);
       const monthly = parse(mRes);
       const yearly  = parse(yRes);
-      console.log('[REC] weekly:', weekly.length, 'monthly:', monthly.length, 'yearly:', yearly.length);
+
+      console.log('[REC] ── counts ──────────────────────────────────');
+      console.log('[REC] weekly:', weekly.length, ' monthly:', monthly.length, ' yearly:', yearly.length);
+
+      console.log('[REC] ── WEEKLY recommendations ─────────────────');
+      weekly.forEach((p, i) =>
+        console.log(`[REC]  W${i + 1}. ${p.product_name || p.name || p.product || '?'}`
+          + ` | score: ${p.score ?? p.recommendation_score ?? '-'}`
+          + ` | district: ${p.district || district || '-'}`)
+      );
+
+      console.log('[REC] ── MONTHLY recommendations ────────────────');
+      monthly.forEach((p, i) =>
+        console.log(`[REC]  M${i + 1}. ${p.product_name || p.name || p.product || '?'}`
+          + ` | score: ${p.score ?? p.recommendation_score ?? '-'}`
+          + ` | district: ${p.district || district || '-'}`)
+      );
+
+      console.log('[REC] ── YEARLY recommendations ─────────────────');
+      yearly.forEach((p, i) =>
+        console.log(`[REC]  Y${i + 1}. ${p.product_name || p.name || p.product || '?'}`
+          + ` | score: ${p.score ?? p.recommendation_score ?? '-'}`
+          + ` | district: ${p.district || district || '-'}`)
+      );
+
+      // Full raw objects (visible by expanding in Metro / DevTools)
+      console.log('[REC] raw weekly  →', JSON.stringify(weekly,  null, 2));
+      console.log('[REC] raw monthly →', JSON.stringify(monthly, null, 2));
+      console.log('[REC] raw yearly  →', JSON.stringify(yearly,  null, 2));
+      console.log('[REC] ─────────────────────────────────────────────');
+
       setRecData({ weekly, monthly, yearly });
       setRecDistrict(district);
       if (!weekly.length && !monthly.length && !yearly.length) {
