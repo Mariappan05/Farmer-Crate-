@@ -16,7 +16,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import api, { BASE_URL } from '../../services/api';
+import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getFarmerOrders } from '../../services/orderService';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
@@ -52,6 +52,18 @@ const PRODUCT_IMAGES = {
   'Tilapia':           'https://images.unsplash.com/photo-1534482421-64566f976cfa?w=400&q=80',
   'Shrimp':            'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?w=400&q=80',
   'Prawn':             'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?w=400&q=80',
+  'Spinach':           'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=400&q=80',
+  'Beans':             'https://images.unsplash.com/photo-1567306226416-28f0efdc88ce?w=400&q=80',
+  'Coriander':         'https://images.unsplash.com/photo-1600348759200-c3e8f478db77?w=400&q=80',
+  'Radish':            'https://images.unsplash.com/photo-1587411768638-ec71f8e33b78?w=400&q=80',
+  'Cauliflower':       'https://images.unsplash.com/photo-1568584711271-6c929fb49b60?w=400&q=80',
+  'Cabbage':           'https://images.unsplash.com/photo-1594282418426-c763b1e7fc2c?w=400&q=80',
+  'Watermelon':        'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=400&q=80',
+  'Soybean':           'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=400&q=80',
+  'Ginger':            'https://images.unsplash.com/photo-1599909533731-06e56dce5572?w=400&q=80',
+  'Cashew':            'https://images.unsplash.com/photo-1607099985707-c8168ece7ab2?w=400&q=80',
+  'Pigeon Pea':        'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=400&q=80',
+  'Brinjal':           'https://images.unsplash.com/photo-1600189020440-893d827b2a4f?w=400&q=80',
 };
 const DEFAULT_PRODUCT_IMAGE = 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&q=80';
 
@@ -122,10 +134,11 @@ const FarmerHome = ({ navigation }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const toastRef = useRef(null);
 
-  const [recommendations, setRecommendations] = useState([]);
-  const [recDistrict, setRecDistrict]         = useState('');
-  const [recLoading, setRecLoading]           = useState(true);
-  const [recError, setRecError]               = useState(null);
+  const [recPeriod, setRecPeriod]       = useState('weekly');
+  const [recDistrict, setRecDistrict]   = useState('');
+  const [recLoading, setRecLoading]     = useState(true);
+  const [recError, setRecError]         = useState(null);
+  const [recData, setRecData]           = useState({ weekly: [], monthly: [], yearly: [] });
 
   const farmerName =
     authState?.user?.full_name ||
@@ -205,60 +218,43 @@ const FarmerHome = ({ navigation }) => {
   }, []);
 
   const fetchRecommendations = useCallback(async () => {
-    console.log('========================================');
-    console.log('[REC] fetchRecommendations() — START');
+    console.log('[REC] fetching all periods in parallel...');
     setRecLoading(true);
     setRecError(null);
     try {
-      console.log('[REC] Calling API: GET /recommendations/farmer');
-      console.log('[REC] Full URL    :', `${BASE_URL}/recommendations/farmer`);
-      const res = await api.get('/recommendations/farmer');
-
-      console.log('[REC] Response Status :', res.status);
-      console.log('[REC] Response Headers:', JSON.stringify(res.headers));
-      console.log('[REC] Response Data   :', JSON.stringify(res.data, null, 2));
-
-      if (res.data?.success) {
-        const list = res.data.weekly_recommendations || [];
-        const district = res.data.district || '';
-        console.log('[REC] ✅ Success — district:', district);
-        console.log('[REC] Total recommendations:', list.length);
-        if (list.length > 0) {
-          console.log('[REC] First item:', JSON.stringify(list[0], null, 2));
-        } else {
-          console.warn('[REC] ⚠️  weekly_recommendations array is EMPTY');
+      const [wRes, mRes, yRes] = await Promise.allSettled([
+        api.get('/recommendations/farmer?period=weekly'),
+        api.get('/recommendations/farmer?period=monthly'),
+        api.get('/recommendations/farmer?period=yearly'),
+      ]);
+      const parse = (res) => {
+        if (res.status === 'fulfilled' && res.value.data?.success) {
+          return res.value.data.recommendations || res.value.data.weekly_recommendations || [];
         }
-        setRecommendations(list);
-        setRecDistrict(district);
-      } else {
-        console.warn('[REC] ⚠️  success=false in response');
-        console.warn('[REC] message:', res.data?.message);
-        setRecError(res.data?.message || 'Could not load recommendations');
+        return [];
+      };
+      const district =
+        (wRes.status === 'fulfilled' && wRes.value.data?.district) ||
+        (mRes.status === 'fulfilled' && mRes.value.data?.district) ||
+        (yRes.status === 'fulfilled' && yRes.value.data?.district) || '';
+      const weekly  = parse(wRes);
+      const monthly = parse(mRes);
+      const yearly  = parse(yRes);
+      console.log('[REC] weekly:', weekly.length, 'monthly:', monthly.length, 'yearly:', yearly.length);
+      setRecData({ weekly, monthly, yearly });
+      setRecDistrict(district);
+      if (!weekly.length && !monthly.length && !yearly.length) {
+        const firstErr =
+          (wRes.status === 'rejected' && wRes.reason?.message) ||
+          (wRes.status === 'fulfilled' && !wRes.value.data?.success && wRes.value.data?.message) ||
+          'No recommendations available';
+        setRecError(firstErr);
       }
     } catch (e) {
-      console.error('[REC] ❌ EXCEPTION caught:');
-      console.error('[REC] message   :', e.message);
-      console.error('[REC] name      :', e.name);
-      if (e.response) {
-        console.error('[REC] HTTP status   :', e.response.status);
-        console.error('[REC] HTTP data     :', JSON.stringify(e.response.data));
-        console.error('[REC] HTTP headers  :', JSON.stringify(e.response.headers));
-        // Show the REAL backend error message
-        const backendMsg = e.response.data?.message || e.response.data?.error || 'Server error';
-        console.error('[REC] Backend message:', backendMsg);
-        setRecError(`Server error (${e.response.status}): ${backendMsg}`);
-      } else if (e.request) {
-        console.error('[REC] No response received — possible network/CORS/timeout');
-        console.error('[REC] Request config:', JSON.stringify(e.config?.url), JSON.stringify(e.config?.baseURL));
-        setRecError('Could not reach server — check internet connection');
-      } else {
-        console.error('[REC] Error setting up request:', e.message);
-        setRecError('Could not load recommendations');
-      }
+      console.error('[REC] fetch error:', e.message);
+      setRecError('Could not load recommendations');
     } finally {
       setRecLoading(false);
-      console.log('[REC] fetchRecommendations() — END');
-      console.log('========================================');
     }
   }, []);
 
@@ -391,11 +387,11 @@ const FarmerHome = ({ navigation }) => {
           ))}
         </View>
 
-        {/* ── Weekly Recommendations ───────────────────────────────────────── */}
+        {/* ── AI Recommendations ─────────────────────────────────────── */}
         <View style={styles.recSection}>
           <LinearGradient colors={['#1B5E20', '#2E7D32']} style={styles.recHeader}>
             <View style={styles.recHeaderLeft}>
-              <Text style={styles.recTitle}>🌾 Weekly Recommendations</Text>
+              <Text style={styles.recTitle}>🌾 AI Crop Recommendations</Text>
               {recDistrict ? (
                 <Text style={styles.recSubtitle}>📍 Based on {recDistrict} district</Text>
               ) : null}
@@ -404,6 +400,29 @@ const FarmerHome = ({ navigation }) => {
               <Text style={styles.recBadgeText}>AI Powered</Text>
             </View>
           </LinearGradient>
+
+          {/* Period Tabs */}
+          <View style={styles.periodTabRow}>
+            {[
+              { key: 'weekly',  label: '📅 Weekly',  sub: '15–60 days' },
+              { key: 'monthly', label: '🗓️ Monthly', sub: '60–120 days' },
+              { key: 'yearly',  label: '📆 Yearly',  sub: '6–18 months' },
+            ].map((tab) => (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.periodTab, recPeriod === tab.key && styles.periodTabActive]}
+                onPress={() => setRecPeriod(tab.key)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.periodTabLabel, recPeriod === tab.key && styles.periodTabLabelActive]}>
+                  {tab.label}
+                </Text>
+                <Text style={[styles.periodTabSub, recPeriod === tab.key && styles.periodTabSubActive]}>
+                  {tab.sub}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           {recLoading ? (
             <View style={styles.recLoader}>
@@ -416,16 +435,16 @@ const FarmerHome = ({ navigation }) => {
               <Text style={styles.recErrorText}>{recError}</Text>
               <Text style={styles.recRetry}>Tap to retry</Text>
             </TouchableOpacity>
-          ) : recommendations.length === 0 ? (
+          ) : (recData[recPeriod] || []).length === 0 ? (
             <View style={styles.recEmpty}>
               <Ionicons name="leaf-outline" size={40} color="#ccc" />
               <Text style={styles.recEmptyText}>No recommendations yet</Text>
             </View>
           ) : (
             <FlatList
-              data={recommendations}
+              data={recData[recPeriod]}
               horizontal
-              keyExtractor={(item, i) => `rec-${item.product}-${i}`}
+              keyExtractor={(item, i) => `rec-${recPeriod}-${item.product}-${i}`}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.recList}
               snapToInterval={CARD_WIDTH + 16}
@@ -851,4 +870,32 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   newOpportunityText: { fontSize: 11, color: '#E65100', fontWeight: '700', marginLeft: 4 },
+
+  /* ── Period Tabs ── */
+  periodTabRow: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginBottom: 14,
+    backgroundColor: '#F1F8E9',
+    borderRadius: 14,
+    padding: 4,
+  },
+  periodTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderRadius: 11,
+  },
+  periodTabActive: {
+    backgroundColor: '#2E7D32',
+    elevation: 3,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  periodTabLabel: { fontSize: 12, fontWeight: '700', color: '#555' },
+  periodTabLabelActive: { color: '#fff' },
+  periodTabSub: { fontSize: 9, color: '#999', marginTop: 2 },
+  periodTabSubActive: { color: 'rgba(255,255,255,0.75)' },
 });
