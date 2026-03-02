@@ -73,6 +73,38 @@ function tileUrl(tx, ty, zoom) {
   return `${ESRI_TILE}/${zoom}/${ty}/${tx}`;
 }
 
+// ── Tamil / English translations ─────────────────────────────────────────────
+const STRINGS = {
+  en: {
+    headerTitle:    'Pick Location',
+    searchPH:       'Search city, area, pincode…',
+    tapHint:        'Tap anywhere on the map',
+    noSel:          'Tap on the map, search, or use GPS',
+    confirm:        'Use This Location',
+    selectedSpot:   'Selected spot',
+    noLocTitle:     'No location',
+    noLocMsg:       'Tap on the map, search, or use GPS to pick a location.',
+    permDenied:     'Location permission is required.',
+    gpsErrTitle:    'GPS Error',
+    gpsErrDefault:  'Could not detect location. Check permissions.',
+    attribution:    '© Esri | © OSM contributors',
+  },
+  ta: {
+    headerTitle:    'இடம் தேர்வு செய்க',
+    searchPH:       'நகரம், பகுதி, பின்கோடு தேடுங்கள்…',
+    tapHint:        'வரைபடத்தில் எங்கும் தட்டவும்',
+    noSel:          'வரைபடத்தை தட்டவும் | தேடவும் | GPS பயன்படுத்தவும்',
+    confirm:        'இந்த இடத்தை தேர்வு செய்',
+    selectedSpot:   'தேர்ந்த இடம்',
+    noLocTitle:     'இடம் இல்லை',
+    noLocMsg:       'இடத்தை தேர்வு செய்ய வரைபடத்தை தட்டவும் அல்லது தேடவும்.',
+    permDenied:     'இட அனுமதி தேவை.',
+    gpsErrTitle:    'GPS பிழை',
+    gpsErrDefault:  'இடத்தை கண்டறிய முடியவில்லை. அனுமதியை சரிபாருங்கள்.',
+    attribution:    '© Esri | © OSM பங்களிப்பாளர்கள்',
+  },
+};
+
 // ── Parse Nominatim response ──────────────────────────────────────────────────
 
 function parseAddr(addr, displayName) {
@@ -110,6 +142,10 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
   const [reverseLoading, setReverseLoading] = useState(false);
   const [selected,       setSelected]       = useState(null);
   const [showResults,    setShowResults]    = useState(false);
+  const [lang,           setLang]           = useState('en');
+
+  // Translation helper
+  const t = useCallback((key) => STRINGS[lang][key] ?? STRINGS.en[key], [lang]);
 
   // Reset on open
   useEffect(() => {
@@ -257,7 +293,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
       const { status } = await Location.requestForegroundPermissionsAsync();
       console.log('[LocationPicker] Location permission:', status);
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Location permission is required.');
+        Alert.alert(t('gpsErrTitle'), t('permDenied'));
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -269,7 +305,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
       await reverseGeocode(latitude, longitude, 'gps');
     } catch (err) {
       console.error('[LocationPicker] GPS error:', err?.message, err?.code);
-      Alert.alert('GPS Error', err?.message || 'Could not detect location. Check permissions.');
+      Alert.alert(t('gpsErrTitle'), err?.message || t('gpsErrDefault'));
     } finally {
       setGpsLoading(false);
     }
@@ -278,7 +314,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
   // ── Confirm ─────────────────────────────────────────────────────────────────
   const handleConfirm = useCallback(() => {
     if (!selected) {
-      Alert.alert('No location', 'Tap on the map, search, or use GPS to pick a location.');
+      Alert.alert(t('noLocTitle'), t('noLocMsg'));
       return;
     }
     console.log('[LocationPicker] Confirming:', selected);
@@ -299,8 +335,14 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
           >
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Pick Location</Text>
-          <View style={{ width: 24 }} />
+          <Text style={styles.headerTitle}>{t('headerTitle')}</Text>
+          <TouchableOpacity
+            onPress={() => setLang(l => l === 'en' ? 'ta' : 'en')}
+            style={styles.langBtn}
+            hitSlop={{ top: 10, left: 10, right: 10, bottom: 10 }}
+          >
+            <Text style={styles.langBtnText}>{lang === 'en' ? 'தமிழ்' : 'EN'}</Text>
+          </TouchableOpacity>
         </LinearGradient>
 
         {/* ── Search row ── */}
@@ -309,7 +351,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
             <Ionicons name="search-outline" size={18} color="#666" style={{ marginRight: 8 }} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search city, area, pincode…"
+              placeholder={t('searchPH')}
               placeholderTextColor="#999"
               value={query}
               onChangeText={handleQueryChange}
@@ -377,7 +419,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
 
           {/* Tile attribution */}
           <View style={styles.attribution} pointerEvents="none">
-            <Text style={styles.attributionText}>© Esri | © OSM contributors</Text>
+            <Text style={styles.attributionText}>{t('attribution')}</Text>
           </View>
 
           {/* Centre pin — always in the middle of the container */}
@@ -409,7 +451,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
             <View style={styles.tapHint} pointerEvents="none">
               <View style={styles.tapHintBubble}>
                 <Ionicons name="hand-left-outline" size={15} color="#fff" />
-                <Text style={styles.tapHintText}>Tap anywhere on the map</Text>
+                <Text style={styles.tapHintText}>{t('tapHint')}</Text>
               </View>
             </View>
           )}
@@ -425,7 +467,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
               <Ionicons name="location" size={16} color="#2E7D32" style={{ marginRight: 8, marginTop: 2 }} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.addrCity} numberOfLines={1}>
-                  {[selected.city, selected.district].filter(Boolean).join(', ') || 'Selected spot'}
+                  {[selected.city, selected.district].filter(Boolean).join(', ') || t('selectedSpot')}
                 </Text>
                 <Text style={styles.addrFull} numberOfLines={2}>{selected.address}</Text>
                 {selected.pincode ? (
@@ -439,7 +481,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
           ) : (
             <View style={styles.noSelCard}>
               <Ionicons name="map-outline" size={16} color="#aaa" />
-              <Text style={styles.noSelText}>Tap on the map, search, or use GPS</Text>
+              <Text style={styles.noSelText}>{t('noSel')}</Text>
             </View>
           )}
 
@@ -454,7 +496,7 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
               style={styles.confirmBtnInner}
             >
               <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-              <Text style={styles.confirmBtnText}>Use This Location</Text>
+              <Text style={styles.confirmBtnText}>{t('confirm')}</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -619,4 +661,13 @@ const styles = StyleSheet.create({
     paddingVertical: 15, gap: 8,
   },
   confirmBtnText: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
+
+  // Language toggle
+  langBtn: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)',
+    minWidth: 44, alignItems: 'center', justifyContent: 'center',
+  },
+  langBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 });
