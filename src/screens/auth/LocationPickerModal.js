@@ -68,8 +68,12 @@ function fracToLatLon(fx, fy, zoom) {
   return { lat: latRad * 180 / Math.PI, lon };
 }
 
-/** Return an ESRI World Street Map tile URL (note: ESRI uses z/y/x order) */
-function tileUrl(tx, ty, zoom) {
+// Wikimedia OSM Internationalized — renders local-script names (Tamil in Tamil Nadu)
+const WIKI_TILE = 'https://maps.wikimedia.org/osm-intl';
+
+/** Return tile URL. ESRI (EN): z/y/x order  |  Wikimedia (Tamil): z/x/y.png */
+function tileUrl(tx, ty, zoom, lang) {
+  if (lang === 'ta') return `${WIKI_TILE}/${zoom}/${tx}/${ty}.png`;
   return `${ESRI_TILE}/${zoom}/${ty}/${tx}`;
 }
 
@@ -143,6 +147,8 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
   const [selected,       setSelected]       = useState(null);
   const [showResults,    setShowResults]    = useState(false);
   const [lang,           setLang]           = useState('en');
+  const langRef = useRef('en');
+  useEffect(() => { langRef.current = lang; }, [lang]);
 
   // Translation helper
   const t = useCallback((key) => STRINGS[lang][key] ?? STRINGS.en[key], [lang]);
@@ -181,8 +187,8 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
       if (tx < 0 || ty < 0) continue;
       tileImages.push(
         <Image
-          key={`${zoom}-${tx}-${ty}`}
-          source={{ uri: tileUrl(tx, ty, zoom) }}
+          key={`${zoom}-${tx}-${ty}-${lang}`}
+          source={{ uri: tileUrl(tx, ty, zoom, lang) }}
           style={{
             position: 'absolute',
             left: gridLeft + col * TILE_SIZE,
@@ -201,8 +207,9 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
     console.log(`[LocationPicker] Reverse geocoding (${source}): ${lat}, ${lon}`);
     setReverseLoading(true);
     try {
+      const lang = langRef.current;
       const res = await axios.get(`${NOM}/reverse`, {
-        params: { format: 'json', lat, lon, addressdetails: 1 },
+        params: { format: 'json', lat, lon, addressdetails: 1, 'accept-language': lang },
         headers: NHDR, timeout: 10000,
       });
       if (res.data?.address) {
@@ -247,8 +254,9 @@ export default function LocationPickerModal({ visible, onClose, onConfirm }) {
     setSearching(true);
     console.log('[LocationPicker] Searching:', q.trim());
     try {
+      const lang = langRef.current;
       const res = await axios.get(`${NOM}/search`, {
-        params: { format: 'json', q: q.trim(), addressdetails: 1, limit: 6, countrycodes: 'in' },
+        params: { format: 'json', q: q.trim(), addressdetails: 1, limit: 6, countrycodes: 'in', 'accept-language': lang },
         headers: NHDR, timeout: 10000,
       });
       console.log('[LocationPicker] Search results:', res.data?.length);
