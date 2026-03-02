@@ -16,7 +16,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
+import api, { BASE_URL } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getFarmerOrders } from '../../services/orderService';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
@@ -183,18 +183,55 @@ const FarmerHome = ({ navigation }) => {
   }, []);
 
   const fetchRecommendations = useCallback(async () => {
+    console.log('========================================');
+    console.log('[REC] fetchRecommendations() — START');
     setRecLoading(true);
     setRecError(null);
     try {
+      console.log('[REC] Calling API: GET /recommendations/farmer');
+      console.log('[REC] Full URL    :', `${BASE_URL}/recommendations/farmer`);
       const res = await api.get('/recommendations/farmer');
+
+      console.log('[REC] Response Status :', res.status);
+      console.log('[REC] Response Headers:', JSON.stringify(res.headers));
+      console.log('[REC] Response Data   :', JSON.stringify(res.data, null, 2));
+
       if (res.data?.success) {
-        setRecommendations(res.data.weekly_recommendations || []);
-        setRecDistrict(res.data.district || '');
+        const list = res.data.weekly_recommendations || [];
+        const district = res.data.district || '';
+        console.log('[REC] ✅ Success — district:', district);
+        console.log('[REC] Total recommendations:', list.length);
+        if (list.length > 0) {
+          console.log('[REC] First item:', JSON.stringify(list[0], null, 2));
+        } else {
+          console.warn('[REC] ⚠️  weekly_recommendations array is EMPTY');
+        }
+        setRecommendations(list);
+        setRecDistrict(district);
+      } else {
+        console.warn('[REC] ⚠️  success=false in response');
+        console.warn('[REC] message:', res.data?.message);
+        setRecError(res.data?.message || 'Could not load recommendations');
       }
     } catch (e) {
+      console.error('[REC] ❌ EXCEPTION caught:');
+      console.error('[REC] message   :', e.message);
+      console.error('[REC] name      :', e.name);
+      if (e.response) {
+        console.error('[REC] HTTP status   :', e.response.status);
+        console.error('[REC] HTTP data     :', JSON.stringify(e.response.data));
+        console.error('[REC] HTTP headers  :', JSON.stringify(e.response.headers));
+      } else if (e.request) {
+        console.error('[REC] No response received — possible network/CORS/timeout');
+        console.error('[REC] Request config:', JSON.stringify(e.config?.url), JSON.stringify(e.config?.baseURL));
+      } else {
+        console.error('[REC] Error setting up request:', e.message);
+      }
       setRecError('Could not load recommendations');
     } finally {
       setRecLoading(false);
+      console.log('[REC] fetchRecommendations() — END');
+      console.log('========================================');
     }
   }, []);
 
