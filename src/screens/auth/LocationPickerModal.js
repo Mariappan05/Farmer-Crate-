@@ -42,11 +42,24 @@ const DEFAULT_REGION = {
 
 // ── Parse Nominatim address object into form fields ───────────────────────────
 function parseAddr(addr, displayName) {
+  // Zone: try progressively broader locality identifiers used by Nominatim for Indian addresses
+  const zone =
+    addr.suburb       ||
+    addr.neighbourhood||
+    addr.quarter      ||
+    addr.locality     ||
+    addr.residential  ||
+    addr.hamlet       ||
+    addr.village      ||
+    addr.road         ||
+    addr.town         ||
+    '';
+
   return {
     address:  displayName || '',
     city:     addr.city || addr.town || addr.village || addr.municipality || addr.county || '',
     pincode:  addr.postcode || '',
-    zone:     addr.suburb || addr.neighbourhood || addr.village || addr.hamlet || '',
+    zone,
     state:    addr.state || '',
     district: addr.state_district || addr.district || addr.county || '',
   };

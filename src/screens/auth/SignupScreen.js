@@ -28,8 +28,11 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
+import axios from 'axios';
 import { signup } from '../../services/authService';
 import ToastMessage from '../../utils/Toast';
+import LocationPickerModal from './LocationPickerModal';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -345,6 +348,10 @@ const SignupScreen = ({ navigation }) => {
   const [pincode, setPincode] = useState('');
   const [zone, setZone] = useState('');
 
+  // Location helper state
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+
   // Farmer-specific
   const [farmName, setFarmName] = useState('');
 
@@ -434,6 +441,53 @@ const SignupScreen = ({ navigation }) => {
   useEffect(() => {
     setDistrict('');
   }, [state]);
+
+  /* ── Location helpers ───────────────────────────────────────────────── */
+  const handleMapConfirm = useCallback((fields) => {
+    if (fields.address)  setAddressLine(fields.address);
+    if (fields.city)     setCity(fields.city);
+    if (fields.pincode)  setPincode(fields.pincode);
+    if (fields.zone)     setZone(fields.zone);
+    if (fields.state)    setState(fields.state);
+    if (fields.district) setDistrict(fields.district);
+    setShowMapPicker(false);
+  }, []);
+
+  const getCurrentLocation = useCallback(async () => {
+    console.log('[SignupScreen] GPS button pressed');
+    setLocationLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const { latitude, longitude } = loc.coords;
+      const res = await axios.get(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
+        { headers: { 'User-Agent': 'FarmerCrate/1.0' } },
+      );
+      if (res.data?.address) {
+        const a = res.data.address;
+        setAddressLine(res.data.display_name || '');
+        setPincode(a.postcode || '');
+        const zone = a.suburb || a.neighbourhood || a.quarter || a.locality || a.hamlet || a.village || a.road || '';
+        setZone(zone);
+        setState(a.state || '');
+        setDistrict(a.state_district || a.district || a.county || '');
+        setCity(a.city || a.town || a.village || a.municipality || '');
+        console.log('[SignupScreen] GPS location filled:', res.data.display_name);
+      } else {
+        Alert.alert('Error', 'Could not parse address from your location.');
+      }
+    } catch (e) {
+      console.error('[SignupScreen] GPS error:', e?.message, e);
+      Alert.alert('GPS Error', e?.message || 'Could not detect location.');
+    } finally {
+      setLocationLoading(false);
+    }
+  }, []);
 
   /* ── Validation per step ────────────────────────────────────────────── */
 
@@ -853,6 +907,46 @@ const SignupScreen = ({ navigation }) => {
       <Text style={styles.stepTitle}>Address Details</Text>
       <Text style={styles.stepSubtitle}>Where are you located?</Text>
 
+      {/* ── Location auto-fill buttons ── */}
+      <View style={styles.locationBtnRow}>
+        <TouchableOpacity
+          style={[styles.locationBtn, styles.locationBtnGps]}
+          onPress={getCurrentLocation}
+          disabled={locationLoading}
+          activeOpacity={0.85}
+        >
+          {locationLoading
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Ionicons name="locate" size={18} color="#fff" />}
+          <Text style={styles.locationBtnText} numberOfLines={1}>
+            {locationLoading ? 'Detecting…' : 'Use GPS'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.locationBtn, styles.locationBtnMap]}
+          onPress={() => {
+            try {
+              console.log('[SignupScreen] Opening location picker modal');
+              setShowMapPicker(true);
+            } catch (e) {
+              console.error('[SignupScreen] Failed to open map picker:', e?.message, e);
+              Alert.alert('Error', 'Could not open map picker: ' + e?.message);
+            }
+          }}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="map" size={18} color="#fff" />
+          <Text style={styles.locationBtnText} numberOfLines={1}>Pick on Map</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.orDivider}>
+        <View style={styles.orLine} />
+        <Text style={styles.orText}>OR FILL MANUALLY</Text>
+        <View style={styles.orLine} />
+      </View>
+
       {renderInput({
         label: 'Address Line',
         value: addressLine,
@@ -1051,7 +1145,7 @@ const SignupScreen = ({ navigation }) => {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* ── Green gradient background ── */}
       <View style={styles.bgGradient}>
@@ -1162,6 +1256,11 @@ const SignupScreen = ({ navigation }) => {
           </TouchableOpacity>
         )}
       </KeyboardAvoidingView>
+      <LocationPickerModal
+        visible={showMapPicker}
+        onClose={() => setShowMapPicker(false)}
+        onConfirm={handleMapConfirm}
+      />
       <ToastMessage ref={toastRef} />
     </View>
   );
@@ -1514,6 +1613,38 @@ const styles = StyleSheet.create({
     color: '#1B5E20',
     fontWeight: '600',
   },
+
+  /* ── Location auto-fill buttons (address step) ── */
+  locationBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  locationBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+    borderRadius: 12,
+    gap: 7,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+  },
+  locationBtnGps: { backgroundColor: '#2E7D32' },
+  locationBtnMap: { backgroundColor: '#1565C0' },
+  locationBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  orDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    gap: 8,
+  },
+  orLine: { flex: 1, height: 1, backgroundColor: '#DDD' },
+  orText: { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 1 },
 
   /* ── Review ── */
   reviewSection: {
