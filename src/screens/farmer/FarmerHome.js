@@ -229,10 +229,32 @@ const FarmerHome = ({ navigation }) => {
     setRecLoading(true);
     setRecError(null);
     try {
+      // Resolve farmer district: authState cache first, then profile fetch
+      let farmerDistrict =
+        authState?.user?.district ||
+        authState?.user?.user?.district || '';
+      if (!farmerDistrict) {
+        try {
+          const pRes = await api.get('/farmers/me');
+          const p = pRes.data?.data || pRes.data || {};
+          farmerDistrict =
+            p.district ||
+            p.user?.district ||
+            p.farmer?.district || '';
+        } catch (_) {
+          console.warn('[REC] Could not fetch farmer profile for district');
+        }
+      }
+      console.log('[REC] farmer district:', farmerDistrict || '(unknown)');
+
+      const districtParam = farmerDistrict
+        ? `&district=${encodeURIComponent(farmerDistrict)}`
+        : '';
+
       const [wRes, mRes, yRes] = await Promise.allSettled([
-        api.get('/recommendations/farmer?period=weekly'),
-        api.get('/recommendations/farmer?period=monthly'),
-        api.get('/recommendations/farmer?period=yearly'),
+        api.get(`/recommendations/farmer?period=weekly${districtParam}`),
+        api.get(`/recommendations/farmer?period=monthly${districtParam}`),
+        api.get(`/recommendations/farmer?period=yearly${districtParam}`),
       ]);
       const parse = (res) => {
         if (res.status === 'fulfilled' && res.value.data?.success) {
@@ -241,6 +263,7 @@ const FarmerHome = ({ navigation }) => {
         return [];
       };
       const district =
+        farmerDistrict ||
         (wRes.status === 'fulfilled' && wRes.value.data?.district) ||
         (mRes.status === 'fulfilled' && mRes.value.data?.district) ||
         (yRes.status === 'fulfilled' && yRes.value.data?.district) || '';
@@ -263,7 +286,7 @@ const FarmerHome = ({ navigation }) => {
     } finally {
       setRecLoading(false);
     }
-  }, []);
+  }, [authState]);
 
   useEffect(() => {
     fetchData();

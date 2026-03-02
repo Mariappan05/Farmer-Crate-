@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -298,8 +298,31 @@ export default function CustomerHome({ navigation }) {
   }, [profile, authState]);
 
   const featuredProducts = useMemo(() => {
-    return products.filter((p) => (p.quantity || 0) > 0);
-  }, [products]);
+    const inStock = products.filter((p) => (p.quantity || 0) > 0);
+    // Get customer's district from profile
+    const customerDistrict = (
+      profile?.district ||
+      profile?.user?.district ||
+      ''
+    ).trim().toLowerCase();
+
+    if (!customerDistrict) return inStock;
+
+    // Helper to extract a product's district for comparison
+    const getProductDistrict = (p) => (
+      p.district ||
+      p.farmer_district ||
+      p.farmer?.district ||
+      p.user?.district ||
+      p.city ||
+      ''
+    ).trim().toLowerCase();
+
+    // Sort: same-district products first, then everything else
+    const sameDistrict  = inStock.filter((p) => getProductDistrict(p) === customerDistrict);
+    const otherDistrict = inStock.filter((p) => getProductDistrict(p) !== customerDistrict);
+    return [...sameDistrict, ...otherDistrict];
+  }, [products, profile]);
 
   // --------------------------------------------------
   // AppBar opacity animated
@@ -456,12 +479,12 @@ export default function CustomerHome({ navigation }) {
   // --------------------------------------------------
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#1B5E20" barStyle="light-content" translucent={false} />
+      <StatusBar backgroundColor="#103A12" barStyle="light-content" translucent={false} />
 
       {/* ============ Glassmorphic AppBar ============ */}
       <View style={[styles.appBar, { paddingTop: insets.top + 8 }]}>
         <LinearGradient
-          colors={['#1B5E20', '#2E7D32', '#388E3C']}
+          colors={['#103A12', '#1B5E20', '#2E7D32']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -573,7 +596,7 @@ export default function CustomerHome({ navigation }) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={['#1B5E20', '#388E3C']}
+              colors={['#103A12', '#1B5E20', '#2E7D32']}
               tintColor="#1B5E20"
               progressBackgroundColor="#fff"
             />
@@ -615,12 +638,38 @@ export default function CustomerHome({ navigation }) {
           )}
 
           {/* ====== Featured Products Grid ====== */}
-          <View style={[styles.sectionHeader, { marginTop: 8 }]}>
-            <Text style={styles.sectionTitle}>
-              Fresh Picks{' '}
-              <Text style={styles.productCount}>({featuredProducts.length})</Text>
-            </Text>
-          </View>
+          {(() => {
+            const customerDistrict = (
+              profile?.district ||
+              profile?.user?.district ||
+              ''
+            ).trim();
+            const localCount = customerDistrict
+              ? featuredProducts.filter((p) => {
+                  const d = (
+                    p.district || p.farmer_district ||
+                    p.farmer?.district || p.user?.district || p.city || ''
+                  ).trim().toLowerCase();
+                  return d === customerDistrict.toLowerCase();
+                }).length
+              : 0;
+            return (
+              <View style={[styles.sectionHeader, { marginTop: 8 }]}>
+                <Text style={styles.sectionTitle}>
+                  {customerDistrict && localCount > 0
+                    ? `Fresh Picks • ${customerDistrict}`
+                    : 'Fresh Picks'}
+                  {' '}
+                  <Text style={styles.productCount}>({featuredProducts.length})</Text>
+                </Text>
+                {customerDistrict && localCount > 0 && (
+                  <Text style={{ fontSize: 11, color: '#43A047', fontWeight: '600' }}>
+                    {localCount} local
+                  </Text>
+                )}
+              </View>
+            );
+          })()}
 
           {featuredProducts.length === 0 ? (
             <View style={styles.emptyState}>
