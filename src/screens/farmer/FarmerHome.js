@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   RefreshControl,
   Dimensions,
@@ -22,6 +23,45 @@ import { optimizeImageUrl } from '../../services/cloudinaryService';
 import ToastMessage from '../../utils/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// ─── Product image map for CatBoost recommended products ─────────────────────
+const PRODUCT_IMAGES = {
+  'Rice':              'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&q=80',
+  'Wheat':             'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=400&q=80',
+  'Maize':             'https://images.unsplash.com/photo-1601593346740-925612772716?w=400&q=80',
+  'Sugarcane':         'https://images.unsplash.com/photo-1559181567-c3190468d910?w=400&q=80',
+  'Bajra':             'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=400&q=80',
+  'Jowar':             'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=400&q=80',
+  'Tomato':            'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400&q=80',
+  'Onion':             'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=400&q=80',
+  'Potato':            'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=400&q=80',
+  'Brinjal':           'https://images.unsplash.com/photo-1600189020440-893d827b2a4f?w=400&q=80',
+  'Banana':            'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&q=80',
+  'Coconut':           'https://images.unsplash.com/photo-1623050804186-2d986f8b3413?w=400&q=80',
+  'Mango':             'https://images.unsplash.com/photo-1553279768-865429fa0078?w=400&q=80',
+  'Groundnut':         'https://images.unsplash.com/photo-1567892737950-30c4db37cd89?w=400&q=80',
+  'Sunflower':         'https://images.unsplash.com/photo-1597848212624-a19eb35e2651?w=400&q=80',
+  'Turmeric':          'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=400&q=80',
+  'Chilli':            'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=400&q=80',
+  'Cotton':            'https://images.unsplash.com/photo-1605000797499-95a51c5269ae?w=400&q=80',
+  'Goat':              'https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=400&q=80',
+  'Sheep':             'https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=400&q=80',
+  'Cow Milk':          'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400&q=80',
+  'Goat Milk':         'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400&q=80',
+  'Eggs':              'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=400&q=80',
+  'Tilapia':           'https://images.unsplash.com/photo-1534482421-64566f976cfa?w=400&q=80',
+  'Shrimp':            'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?w=400&q=80',
+  'Prawn':             'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?w=400&q=80',
+};
+const DEFAULT_PRODUCT_IMAGE = 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&q=80';
+
+const GRADE_CONFIG = {
+  Excellent: { bg: '#E8F5E9', text: '#2E7D32', icon: '🏆' },
+  Good:      { bg: '#E3F2FD', text: '#1565C0', icon: '✅' },
+  Fair:      { bg: '#FFF8E1', text: '#F57F17', icon: '⚡' },
+};
+
+const CARD_WIDTH = 160;
 
 const STATUS_COLORS = {
   PENDING: '#FF9800',
@@ -59,6 +99,11 @@ const FarmerHome = ({ navigation }) => {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const toastRef = useRef(null);
+
+  const [recommendations, setRecommendations] = useState([]);
+  const [recDistrict, setRecDistrict]         = useState('');
+  const [recLoading, setRecLoading]           = useState(true);
+  const [recError, setRecError]               = useState(null);
 
   const farmerName =
     authState?.user?.full_name ||
@@ -137,8 +182,25 @@ const FarmerHome = ({ navigation }) => {
     }
   }, []);
 
+  const fetchRecommendations = useCallback(async () => {
+    setRecLoading(true);
+    setRecError(null);
+    try {
+      const res = await api.get('/recommendations/farmer');
+      if (res.data?.success) {
+        setRecommendations(res.data.weekly_recommendations || []);
+        setRecDistrict(res.data.district || '');
+      }
+    } catch (e) {
+      setRecError('Could not load recommendations');
+    } finally {
+      setRecLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchData();
+    fetchRecommendations();
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 600,
@@ -149,6 +211,7 @@ const FarmerHome = ({ navigation }) => {
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
+    fetchRecommendations();
   };
 
   const recentOrders = [...orders]
@@ -212,7 +275,7 @@ const FarmerHome = ({ navigation }) => {
   if (loading) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <ActivityIndicator size="large" color="#4CAF50" />
         <Text style={styles.loadingText}>Loading dashboard...</Text>
       </View>
@@ -221,10 +284,10 @@ const FarmerHome = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerContent}>
           <View style={{ flex: 1 }}>
             <Text style={styles.greeting}>{getGreeting()} 👋</Text>
@@ -262,6 +325,119 @@ const FarmerHome = ({ navigation }) => {
               <Text style={styles.statTitle}>{card.title}</Text>
             </LinearGradient>
           ))}
+        </View>
+
+        {/* ── Weekly Recommendations ───────────────────────────────────────── */}
+        <View style={styles.recSection}>
+          <LinearGradient colors={['#1B5E20', '#2E7D32']} style={styles.recHeader}>
+            <View style={styles.recHeaderLeft}>
+              <Text style={styles.recTitle}>🌾 Weekly Recommendations</Text>
+              {recDistrict ? (
+                <Text style={styles.recSubtitle}>📍 Based on {recDistrict} district</Text>
+              ) : null}
+            </View>
+            <View style={styles.recBadge}>
+              <Text style={styles.recBadgeText}>AI Powered</Text>
+            </View>
+          </LinearGradient>
+
+          {recLoading ? (
+            <View style={styles.recLoader}>
+              <ActivityIndicator size="large" color="#4CAF50" />
+              <Text style={styles.recLoaderText}>Fetching recommendations…</Text>
+            </View>
+          ) : recError ? (
+            <TouchableOpacity style={styles.recError} onPress={fetchRecommendations}>
+              <Ionicons name="cloud-offline-outline" size={36} color="#F44336" />
+              <Text style={styles.recErrorText}>{recError}</Text>
+              <Text style={styles.recRetry}>Tap to retry</Text>
+            </TouchableOpacity>
+          ) : recommendations.length === 0 ? (
+            <View style={styles.recEmpty}>
+              <Ionicons name="leaf-outline" size={40} color="#ccc" />
+              <Text style={styles.recEmptyText}>No recommendations yet</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={recommendations}
+              horizontal
+              keyExtractor={(item, i) => `rec-${item.product}-${i}`}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.recList}
+              snapToInterval={CARD_WIDTH + 14}
+              decelerationRate="fast"
+              renderItem={({ item }) => {
+                const grade = GRADE_CONFIG[item.grade] || GRADE_CONFIG.Fair;
+                const imgUri = PRODUCT_IMAGES[item.product] || DEFAULT_PRODUCT_IMAGE;
+                return (
+                  <View style={styles.recCard}>
+                    {/* Product Image */}
+                    <View style={styles.recImgContainer}>
+                      <Image
+                        source={{ uri: imgUri }}
+                        style={styles.recImg}
+                        resizeMode="cover"
+                      />
+                      {/* Grade badge */}
+                      <View style={[styles.gradeBadge, { backgroundColor: grade.bg }]}>
+                        <Text style={[styles.gradeBadgeText, { color: grade.text }]}>
+                          {grade.icon} {item.grade}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.recCardBody}>
+                      {/* Product Name */}
+                      <Text style={styles.recProductName} numberOfLines={1}>
+                        {item.product}
+                      </Text>
+
+                      {/* Category */}
+                      <View style={styles.recCategoryRow}>
+                        <Ionicons name="pricetag-outline" size={11} color="#888" />
+                        <Text style={styles.recCategory}>{item.category}</Text>
+                      </View>
+
+                      {/* Price */}
+                      <View style={styles.recPriceRow}>
+                        <Ionicons name="cash-outline" size={13} color="#2E7D32" />
+                        <Text style={styles.recPrice}>
+                          ₹{(item.estimated_price_per_quintal || 0).toLocaleString('en-IN')}
+                          <Text style={styles.recPriceUnit}>/qtl</Text>
+                        </Text>
+                      </View>
+
+                      {/* Score bar */}
+                      <View style={styles.scoreBarBg}>
+                        <View
+                          style={[
+                            styles.scoreBarFill,
+                            { width: `${Math.round((item.overall_score || 0) * 100)}%` },
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.scoreText}>
+                        Suitability: {Math.round((item.overall_score || 0) * 100)}%
+                      </Text>
+
+                      {/* Already posted / New opportunity */}
+                      {item.already_posted ? (
+                        <View style={styles.alreadyPosted}>
+                          <Ionicons name="checkmark-circle" size={13} color="#4CAF50" />
+                          <Text style={styles.alreadyPostedText}>You post this</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.newOpportunity}>
+                          <Ionicons name="bulb-outline" size={13} color="#FF9800" />
+                          <Text style={styles.newOpportunityText}>New Opportunity</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              }}
+            />
+          )}
         </View>
 
         {/* Product Status Overview */}
@@ -457,4 +633,99 @@ const styles = StyleSheet.create({
   orderBottom: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, alignItems: 'center' },
   orderAmount: { fontSize: 16, fontWeight: '700', color: '#1B5E20' },
   orderDate: { fontSize: 12, color: '#999' },
+
+  /* ── Weekly Recommendations ─────────── */
+  recSection: {
+    marginTop: 22,
+    marginHorizontal: 0,
+  },
+  recHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    marginHorizontal: 16,
+    borderRadius: 16,
+    marginBottom: 14,
+  },
+  recHeaderLeft: { flex: 1 },
+  recTitle: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  recSubtitle: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 3 },
+  recBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  recBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  recList: { paddingHorizontal: 16, paddingBottom: 8 },
+  recLoader: { alignItems: 'center', paddingVertical: 30 },
+  recLoaderText: { color: '#888', fontSize: 13, marginTop: 10 },
+  recError: { alignItems: 'center', paddingVertical: 28 },
+  recErrorText: { color: '#F44336', fontSize: 14, marginTop: 8 },
+  recRetry: { color: '#4CAF50', fontSize: 13, marginTop: 4, textDecorationLine: 'underline' },
+  recEmpty: { alignItems: 'center', paddingVertical: 28 },
+  recEmptyText: { color: '#aaa', fontSize: 14, marginTop: 8 },
+
+  /* Card */
+  recCard: {
+    width: CARD_WIDTH,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    marginRight: 14,
+    elevation: 5,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.13,
+    shadowRadius: 8,
+    overflow: 'hidden',
+  },
+  recImgContainer: { width: '100%', height: 110, position: 'relative' },
+  recImg: { width: '100%', height: '100%' },
+  gradeBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  gradeBadgeText: { fontSize: 10, fontWeight: '700' },
+  recCardBody: { padding: 10 },
+  recProductName: { fontSize: 14, fontWeight: '800', color: '#1B5E20', marginBottom: 4 },
+  recCategoryRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
+  recCategory: { fontSize: 11, color: '#888', marginLeft: 3 },
+  recPriceRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 7 },
+  recPrice: { fontSize: 13, fontWeight: '700', color: '#2E7D32', marginLeft: 4 },
+  recPriceUnit: { fontSize: 10, fontWeight: '400', color: '#888' },
+  scoreBarBg: {
+    height: 4,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 2,
+    marginBottom: 3,
+    overflow: 'hidden',
+  },
+  scoreBarFill: { height: '100%', backgroundColor: '#43A047', borderRadius: 2 },
+  scoreText: { fontSize: 10, color: '#888', marginBottom: 7 },
+  alreadyPosted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  alreadyPostedText: { fontSize: 10, color: '#2E7D32', fontWeight: '700', marginLeft: 4 },
+  newOpportunity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF8E1',
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  newOpportunityText: { fontSize: 10, color: '#E65100', fontWeight: '700', marginLeft: 4 },
 });
