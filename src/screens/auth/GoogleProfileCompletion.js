@@ -32,6 +32,7 @@ import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import { googleCompleteProfile, decodeJwtPayload } from '../../services/authService';
 import { pickImage, uploadImageToCloudinary } from '../../services/cloudinaryService';
+import LocationPickerModal from './LocationPickerModal';
 
 const GoogleProfileCompletion = ({ navigation, route }) => {
   const { email, name, googleId, role } = route.params;
@@ -74,6 +75,18 @@ const GoogleProfileCompletion = ({ navigation, route }) => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+
+  // ─── Map location confirm ────────────────────────────────────────────────
+  const handleMapConfirm = (fields) => {
+    if (fields.address)  setAddress(fields.address);
+    if (fields.city)     setCity(fields.city);
+    if (fields.pincode)  setPincode(fields.pincode);
+    if (fields.zone)     setZone(fields.zone);
+    if (fields.state)    setState(fields.state);
+    if (fields.district) setDistrict(fields.district);
+    setShowMapPicker(false);
+  };
 
   // ─── Location auto-fill ──────────────────────────────────────────────────
   const getCurrentLocation = async () => {
@@ -413,23 +426,57 @@ const GoogleProfileCompletion = ({ navigation, route }) => {
               maxLength: 3,
             })}
             <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Location Details</Text>
-            <TouchableOpacity
-              style={styles.locationBtn}
-              onPress={getCurrentLocation}
-              disabled={locationLoading}
-              activeOpacity={0.85}
-            >
-              <LinearGradient colors={['#4CAF50', '#66BB6A']} style={styles.locationBtnInner}>
-                {locationLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Ionicons name="locate-outline" size={20} color="#fff" />
-                )}
-                <Text style={styles.locationBtnText}>
-                  {locationLoading ? 'Fetching Location...' : 'Get Current Location'}
+
+            {/* Location action buttons */}
+            <View style={styles.locationBtnRow}>
+              {/* Get Current Location */}
+              <TouchableOpacity
+                style={[styles.locationBtn, { flex: 1, marginRight: 8 }]}
+                onPress={getCurrentLocation}
+                disabled={locationLoading}
+                activeOpacity={0.85}
+              >
+                <LinearGradient colors={['#43A047', '#66BB6A']} style={styles.locationBtnInner}>
+                  {locationLoading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="locate-outline" size={18} color="#fff" />
+                  )}
+                  <Text style={styles.locationBtnText} numberOfLines={1}>
+                    {locationLoading ? 'Fetching…' : 'Use GPS'}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Pick on Map */}
+              <TouchableOpacity
+                style={[styles.locationBtn, { flex: 1, marginLeft: 8 }]}
+                onPress={() => setShowMapPicker(true)}
+                activeOpacity={0.85}
+              >
+                <LinearGradient colors={['#1976D2', '#42A5F5']} style={styles.locationBtnInner}>
+                  <Ionicons name="map-outline" size={18} color="#fff" />
+                  <Text style={styles.locationBtnText} numberOfLines={1}>Pick on Map</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+
+            {/* Filled location preview badge */}
+            {(city || state) ? (
+              <View style={styles.locationBadge}>
+                <Ionicons name="location" size={15} color="#E53935" style={{ marginRight: 6 }} />
+                <Text style={styles.locationBadgeText} numberOfLines={1}>
+                  {[city, district, state].filter(Boolean).join(', ')}
+                  {pincode ? `  📮 ${pincode}` : ''}
                 </Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => { setAddress(''); setCity(''); setPincode(''); setZone(''); setState(''); setDistrict(''); }}
+                  hitSlop={{ top: 6, left: 6, right: 6, bottom: 6 }}
+                >
+                  <Ionicons name="close-circle" size={16} color="#999" />
+                </TouchableOpacity>
+              </View>
+            ) : null}
 
             {renderInput('Address', address, setAddress, { icon: 'home-outline' })}
             {renderInput('City', city, setCity, { icon: 'business-outline', autoCapitalize: 'words' })}
@@ -441,6 +488,13 @@ const GoogleProfileCompletion = ({ navigation, route }) => {
             {renderInput('Zone', zone, setZone, { icon: 'map-outline' })}
             {renderInput('State', state, setState, { icon: 'location-outline' })}
             {renderInput('District', district, setDistrict, { icon: 'business-outline' })}
+
+            {/* Map picker modal */}
+            <LocationPickerModal
+              visible={showMapPicker}
+              onClose={() => setShowMapPicker(false)}
+              onConfirm={handleMapConfirm}
+            />
 
             {/* Farmer fields */}
             {role === 'farmer' && (
@@ -631,15 +685,38 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(76,175,80,0.08)',
   },
   docPickerText: { flex: 1, marginLeft: 12, fontSize: 14, color: '#666' },
-  locationBtn: { marginBottom: 16, borderRadius: 12, overflow: 'hidden' },
+  locationBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginBottom: 16,
+  },
+  locationBtn: { borderRadius: 12, overflow: 'hidden', marginBottom: 0 },
   locationBtnInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     height: 48,
     borderRadius: 12,
+    paddingHorizontal: 8,
   },
-  locationBtnText: { color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 8 },
+  locationBtnText: { color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 6 },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  locationBadgeText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#2E7D32',
+    fontWeight: '500',
+  },
   submitBtn: { marginTop: 28, borderRadius: 16, overflow: 'hidden' },
   submitBtnInner: {
     flexDirection: 'row',
