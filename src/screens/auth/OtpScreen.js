@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
     width: 96, height: 96, borderRadius: 48,
     backgroundColor: '#fff',
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15, shadowRadius: 16, elevation: 8,
     marginBottom: 16,
   },
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     width: '100%', maxWidth: 400,
     backgroundColor: 'rgba(255,255,255,0.97)',
     borderRadius: 32, padding: 28,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 12 },
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.12, shadowRadius: 24, elevation: 10,
   },
   cardTitle: {
@@ -475,7 +475,7 @@ const styles = StyleSheet.create({
     fontSize: 24, fontWeight: 'bold', color: '#1B5E20',
     backgroundColor: '#F8F9FA',
     borderWidth: 2, borderColor: '#E0E0E0',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
   otpInputFilled: {
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
   timerRow: { flexDirection: 'row', alignItems: 'center' },
   timerText: { color: '#9E9E9E', fontSize: 14, fontWeight: '500' },
   resendBtn: { flexDirection: 'row', alignItems: 'center', padding: 4 },
-  resendText: { color: '#388E3C', fontSize: 15, fontWeight: '700' },
+  resendText: { color: '#388E3C', fontSize: 15, fontWeight: '800' },
   // Back
   backRow: {
     flexDirection: 'row', justifyContent: 'center',

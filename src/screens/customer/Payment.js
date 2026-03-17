@@ -427,6 +427,15 @@ const Payment = ({ navigation, route }) => {
       product_id: item.product_id || item.id,
       quantity: item.quantity || 1,
       price: item.price || item.current_price || 0,
+      name: item.product?.name || item.product?.product_name || item.product_name || item.name || '',
+      image_url:
+        item.product?.image_url ||
+        (Array.isArray(item.product?.images) && item.product.images.length > 0
+          ? (typeof item.product.images[0] === 'string' ? item.product.images[0] : item.product.images[0]?.image_url || item.product.images[0]?.url || null)
+          : null) ||
+        item.image_url ||
+        item.image ||
+        null,
     })),
     delivery_address: { full_name: fullName.trim(), phone: phone.trim(), address_line: addressLine.trim(), city: city.trim(), state, district, pincode: pincode.trim(), zone },
     payment_method: paymentMethod,
@@ -442,8 +451,29 @@ const Payment = ({ navigation, route }) => {
   const handleOnlinePayment = async () => {
     setIsProcessing(true);
     try {
-      // Step 1: create order on backend (returns payment_details for Razorpay)
-      const payload = buildOrderPayload();
+      // Step 1: Generate QR code string & capture/upload image (same as COD)
+      const qrString = generateQRCode();
+      setQrCode(qrString);
+      setShowQR(true);
+
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      let qrImageUrl = '';
+      try {
+        if (qrRef.current) {
+          const uri = await captureRef(qrRef, { format: 'png', quality: 0.9 });
+          const uploadedUrl = await uploadImageToCloudinary(uri);
+          if (uploadedUrl) qrImageUrl = uploadedUrl;
+        }
+      } catch (qrErr) {
+        console.log('[Payment] QR capture/upload error:', qrErr);
+      }
+
+      console.log('[Payment] QR string:', qrString, '| QR image URL:', qrImageUrl);
+
+      // Step 2: create order on backend (returns payment_details for Razorpay)
+      const payload = buildOrderPayload(qrString, qrImageUrl);
+      console.log('[Payment] Creating order with payload:', JSON.stringify(payload, null, 2));
       const res = await api.post('/orders', payload);
       const data = res.data?.data || res.data;
       const paymentDetails = data?.payment_details;
@@ -456,7 +486,7 @@ const Payment = ({ navigation, route }) => {
         return;
       }
 
-      // Step 2: open Razorpay checkout
+      // Step 3: open Razorpay checkout
       const amountPaise = Math.round(Number(paymentDetails.amount || pricing.total) * 100);
       const options = {
         key: paymentDetails.key_id,
@@ -471,16 +501,29 @@ const Payment = ({ navigation, route }) => {
 
       const rzpResponse = await RazorpayCheckout.open(options);
 
-      // Step 3: verify & complete payment
+      // Step 4: verify & complete payment
+      // Always use local `payload` as the source of items/delivery_address.
+      // Omit payment_method — that column doesn't exist in the DB.
+      const completeOrderData = {
+        items: payload.items,
+        delivery_address: payload.delivery_address,
+        total_amount: payload.total_amount,
+        subtotal: payload.subtotal,
+        admin_commission: payload.admin_commission,
+        delivery_charges: payload.delivery_charges,
+        qr_code: payload.qr_code,
+        qr_image_url: payload.qr_image_url,
+      };
       const completePayload = {
         razorpay_order_id: paymentDetails.razorpay_order_id,
         razorpay_payment_id: rzpResponse.razorpay_payment_id,
         razorpay_signature: rzpResponse.razorpay_signature,
-        order_data: orderData,
+        order_data: completeOrderData,
       };
+      console.log('[Payment] Completing payment with payload:', JSON.stringify(completePayload, null, 2));
       await api.post('/orders/complete', completePayload);
 
-      // Step 4: clear cart & navigate
+      // Step 5: clear cart & navigate
       try { await clearCart(); } catch (_) {}
       navigation.replace('OrderConfirm', {
         order: {
@@ -493,6 +536,8 @@ const Payment = ({ navigation, route }) => {
           subtotal: pricing.subtotal,
           admin_commission: pricing.adminCommission,
           delivery_charges: pricing.deliveryCharges,
+          qr_code: qrString,
+          qr_image_url: qrImageUrl,
         },
       });
     } catch (e) {
@@ -501,11 +546,16 @@ const Payment = ({ navigation, route }) => {
         toastRef.current?.show('Payment cancelled.', 'info');
       } else {
         const msg = e?.description || e?.message || 'Payment failed. Please try again.';
-        console.error('[Payment] Online payment error:', msg, '\nCode:', e?.code, '\nStatus:', e?.response?.status, '\nDetails:', JSON.stringify(e?.response?.data || e));
+        console.error('[Payment] Online payment error:', msg);
+        console.error('[Payment] Error code:', e?.code);
+        console.error('[Payment] HTTP status:', e?.response?.status);
+        console.error('[Payment] Response data:', JSON.stringify(e?.response?.data, null, 2));
+        console.error('[Payment] Full error:', e);
         toastRef.current?.show(msg, 'error', 4000);
       }
     } finally {
       setIsProcessing(false);
+      setShowQR(false);
     }
   };
 
@@ -563,6 +613,7 @@ const Payment = ({ navigation, route }) => {
       };
 
       // 4. Create order
+      console.log('[Payment] COD order payload:', JSON.stringify(orderPayload, null, 2));
       const order = await createOrder(orderPayload);
 
       // 5. If QR image was uploaded, update the order
@@ -595,7 +646,10 @@ const Payment = ({ navigation, route }) => {
       });
     } catch (e) {
       const msg = e.response?.data?.message || e.message || 'Failed to place order. Please try again.';
-      console.error('[Payment] COD order error:', msg, '\nStatus:', e?.response?.status, '\nDetails:', JSON.stringify(e?.response?.data));
+      console.error('[Payment] COD order error:', msg);
+      console.error('[Payment] HTTP status:', e?.response?.status);
+      console.error('[Payment] Response data:', JSON.stringify(e?.response?.data, null, 2));
+      console.error('[Payment] Full error:', e);
       toastRef.current?.show(msg, 'error', 4000);
     } finally {
       setIsProcessing(false);
@@ -606,7 +660,7 @@ const Payment = ({ navigation, route }) => {
   /* ─── RENDER ─── */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
       <View style={styles.header}>
@@ -986,7 +1040,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,

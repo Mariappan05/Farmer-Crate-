@@ -201,7 +201,7 @@ const QRScan = ({ navigation }) => {
   if (!permission.granted) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <MaterialCommunityIcons name="camera-off-outline" size={60} color="#ccc" />
         <Text style={styles.permTitle}>Camera Permission Required</Text>
         <Text style={styles.permText}>QR scanning requires camera access to scan order QR codes.</Text>
@@ -322,7 +322,7 @@ const QRScan = ({ navigation }) => {
 /* ── Styles ───────────────────────────────────────────────── */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5', paddingHorizontal: 30 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F8F4', paddingHorizontal: 30 },
 
   permTitle: { fontSize: 18, fontWeight: '700', color: '#333', marginTop: 16 },
   permText: { fontSize: 14, color: '#666', textAlign: 'center', marginTop: 8, lineHeight: 20 },
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingBottom: 8, backgroundColor: 'rgba(0,0,0,0.4)',
   },
   topBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  topTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  topTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
 
   scannerArea: { alignItems: 'center' },
   scanFrame: {

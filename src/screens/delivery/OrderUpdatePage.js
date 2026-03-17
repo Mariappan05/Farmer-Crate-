@@ -209,10 +209,10 @@ const OrderUpdatePage = ({ navigation, route }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -373,7 +373,7 @@ const OrderUpdatePage = ({ navigation, route }) => {
             activeOpacity={0.7}
           >
             <LinearGradient
-              colors={['#1B5E20', '#388E3C']}
+              colors={['#103A12', '#1B5E20', '#2E7D32']}
               style={styles.updateBtnGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 14,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
-  currentStatusText: { fontSize: 16, fontWeight: '700', textTransform: 'uppercase' },
+  currentStatusText: { fontSize: 16, fontWeight: '800', textTransform: 'uppercase' },
 
   // Card
   card: {
@@ -439,14 +439,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: '#1B5E20', textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardTitle: { fontSize: 14, fontWeight: '800', color: '#1B5E20', textTransform: 'uppercase', letterSpacing: 0.5 },
 
   // Status options
   statusOption: {
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusOptionText: { flex: 1, fontSize: 15, color: '#555' },
-  statusOptionTextActive: { fontWeight: '700', color: '#333' },
+  statusOptionTextActive: { fontWeight: '800', color: '#333' },
 
   // Photo
   photoSubtext: { fontSize: 13, color: '#888', marginBottom: 14, lineHeight: 18 },

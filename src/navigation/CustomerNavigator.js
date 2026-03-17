@@ -38,7 +38,7 @@ const SLIDE = {
   animation: 'slide_from_right',
   gestureEnabled: true,
   gestureDirection: 'horizontal',
-  contentStyle: { backgroundColor: '#fff' },
+  contentStyle: { backgroundColor: '#F4F8F4' },
 };
 
 const TAB_ITEMS = [
@@ -49,43 +49,34 @@ const TAB_ITEMS = [
   { name: 'Profile', icon: 'person',  iconOff: 'person-outline' },
 ];
 
-// ─── Animated Tab Button ──────────────────────────────────────────────────────
+// ─── Modern Pill Tab Button ──────────────────────────────────────────────────
 const TabButton = ({ item, onPress, isFocused, cartCount }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const dotAnim   = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
+  const pillAnim  = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
 
   useEffect(() => {
-    Animated.spring(dotAnim, {
+    Animated.spring(pillAnim, {
       toValue: isFocused ? 1 : 0,
-      useNativeDriver: true,
-      tension: 80,
-      friction: 8,
+      useNativeDriver: false,
+      tension: 120,
+      friction: 10,
     }).start();
     if (isFocused) {
       Animated.sequence([
-        Animated.timing(scaleAnim, { toValue: 0.85, duration: 100, useNativeDriver: true }),
-        Animated.spring(scaleAnim, { toValue: 1, tension: 200, friction: 7, useNativeDriver: true }),
+        Animated.timing(scaleAnim,  { toValue: 0.88, duration: 70,  useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1,    tension: 220, friction: 7, useNativeDriver: true }),
       ]).start();
     }
   }, [isFocused]);
 
-  const handlePress = () => {
-    Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.82, duration: 80, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, tension: 180, friction: 6, useNativeDriver: true }),
-    ]).start();
-    onPress();
-  };
-
-  const dotScale = dotAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
-  const dotOpacity = dotAnim;
+  const pillBg = pillAnim.interpolate({ inputRange: [0, 1], outputRange: ['rgba(232,245,233,0)', '#E8F5E9'] });
+  const pillW  = pillAnim.interpolate({ inputRange: [0, 1], outputRange: [36, 64] });
 
   return (
-    <TouchableOpacity
-      onPress={handlePress}
-      style={styles.tabBtn}
-      activeOpacity={1}
-    >
+    <TouchableOpacity onPress={onPress} style={styles.tabBtn} activeOpacity={0.8}>
+      {/* Animated pill background */}
+      <Animated.View style={[styles.pill, { backgroundColor: pillBg, width: pillW }]} />
+
       <Animated.View style={[styles.tabIconWrap, { transform: [{ scale: scaleAnim }] }]}>
         {/* Cart badge */}
         {item.name === 'Cart' && cartCount > 0 && (
@@ -95,20 +86,13 @@ const TabButton = ({ item, onPress, isFocused, cartCount }) => {
         )}
         <Ionicons
           name={isFocused ? item.icon : item.iconOff}
-          size={24}
+          size={22}
           color={isFocused ? '#1B5E20' : '#9E9E9E'}
         />
       </Animated.View>
-      <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
+      <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]} numberOfLines={1}>
         {item.name}
       </Text>
-      {/* Active indicator dot */}
-      <Animated.View
-        style={[
-          styles.activeDot,
-          { transform: [{ scaleX: dotScale }], opacity: dotOpacity },
-        ]}
-      />
     </TouchableOpacity>
   );
 };
@@ -117,10 +101,10 @@ const TabButton = ({ item, onPress, isFocused, cartCount }) => {
 const CustomTabBar = ({ state, descriptors, navigation }) => {
   const { cartCount } = useCart();
   const insets = useSafeAreaInsets();
-  const extraBottom = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 20 : 6);
+  const pb = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 16 : 4);
 
   return (
-    <View style={[styles.tabBar, { paddingBottom: extraBottom }]}>
+    <View style={[styles.tabBar, { paddingBottom: pb }]}>
       {state.routes.map((route, index) => {
         const isFocused = state.index === index;
         const item = TAB_ITEMS[index] || { icon: 'ellipse', iconOff: 'ellipse-outline', name: route.name };
@@ -149,45 +133,48 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
 const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-    paddingTop: 6,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 0,
+    paddingTop: 8,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     ...Platform.select({
-      android: { elevation: 12 },
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 8 },
+      android: { elevation: 20 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.10, shadowRadius: 14 },
     }),
   },
   tabBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 4,
+    paddingVertical: 4,
+    position: 'relative',
+  },
+  pill: {
+    position: 'absolute',
+    top: 0,
+    height: 38,
+    borderRadius: 19,
+    zIndex: 0,
   },
   tabIconWrap: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    width: 32,
+    width: 28,
     height: 28,
+    zIndex: 1,
   },
   tabLabel: {
     fontSize: 10,
     color: '#9E9E9E',
     fontWeight: '500',
-    marginTop: 2,
+    marginTop: 1,
+    zIndex: 1,
   },
   tabLabelActive: {
     color: '#1B5E20',
     fontWeight: '700',
-  },
-  activeDot: {
-    position: 'absolute',
-    bottom: -2,
-    width: 20,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: '#1B5E20',
   },
   badge: {
     position: 'absolute',

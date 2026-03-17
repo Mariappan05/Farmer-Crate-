@@ -137,10 +137,10 @@ const DeliveryEarnings = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <Text style={styles.headerTitle}>Earnings</Text>
         <TouchableOpacity onPress={onRefresh} style={styles.headerBtn}>
           <Ionicons name="refresh-outline" size={22} color="#fff" />
@@ -178,7 +178,7 @@ const DeliveryEarnings = ({ navigation }) => {
         >
           {/* Main Earnings Display */}
           <LinearGradient
-            colors={['#1B5E20', '#2E7D32', '#388E3C']}
+            colors={['#103A12', '#1B5E20', '#2E7D32']}
             style={styles.totalCard}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -314,7 +314,7 @@ const DeliveryEarnings = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F8E9' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
 
   // Header
   header: {
@@ -324,12 +324,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  headerTitle: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
   headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -342,18 +342,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#F0F0F0',
   },
   periodChip: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 11,
+    borderRadius: 14,
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F4F8F4',
   },
-  periodChipActive: { backgroundColor: '#388E3C' },
-  periodText: { fontSize: 12, color: '#555', fontWeight: '600' },
-  periodTextActive: { color: '#fff', fontWeight: '700' },
+  periodChipActive: { backgroundColor: '#2E7D32' },
+  periodText: { fontSize: 12, color: '#666', fontWeight: '600' },
+  periodTextActive: { color: '#fff', fontWeight: '800' },
 
   // Loading
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -361,15 +361,15 @@ const styles = StyleSheet.create({
 
   // Total earnings card
   totalCard: {
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 28,
     alignItems: 'center',
     marginBottom: 16,
     shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 7,
   },
   totalLabel: { fontSize: 14, color: '#C8E6C9', fontWeight: '600', marginBottom: 4 },
   totalAmount: { fontSize: 42, fontWeight: '900', color: '#fff', letterSpacing: 1 },
@@ -380,62 +380,62 @@ const styles = StyleSheet.create({
   breakdownCard: {
     flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 14,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    elevation: 3,
     gap: 4,
   },
-  breakdownVal: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  breakdownLabel: { fontSize: 11, color: '#888' },
+  breakdownVal: { fontSize: 18, fontWeight: '800', color: '#1A1A1A' },
+  breakdownLabel: { fontSize: 11, color: '#888', fontWeight: '500' },
 
   // Stats row
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   statCard: {
     flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
     borderLeftWidth: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 5,
+    elevation: 3,
   },
-  statVal: { fontSize: 20, fontWeight: 'bold', color: '#333' },
-  statLabel: { fontSize: 12, color: '#888', marginTop: 4 },
+  statVal: { fontSize: 20, fontWeight: '800', color: '#1A1A1A' },
+  statLabel: { fontSize: 12, color: '#888', marginTop: 4, fontWeight: '500' },
 
   // Chart
   chartCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 4,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: '#1B5E20', textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardTitle: { fontSize: 14, fontWeight: '800', color: '#1B5E20', textTransform: 'uppercase', letterSpacing: 0.6 },
   chartRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
   chartMonth: { width: 55, fontSize: 12, color: '#666', fontWeight: '500' },
   chartBarContainer: {
     flex: 1,
     height: 20,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#E8F5E9',
     borderRadius: 10,
     overflow: 'hidden',
   },
   chartBar: { height: '100%', backgroundColor: '#4CAF50', borderRadius: 10 },
   chartValues: { width: 75, alignItems: 'flex-end' },
-  chartEarning: { fontSize: 12, fontWeight: '700', color: '#333' },
+  chartEarning: { fontSize: 12, fontWeight: '800', color: '#333' },
   chartCount: { fontSize: 10, color: '#aaa' },
 
   // Delivery list
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 3,

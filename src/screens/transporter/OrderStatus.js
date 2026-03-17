@@ -280,10 +280,10 @@ const OrderStatus = ({ navigation }) => {
   /* ── Main render ────────────────────────────────────────── */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <Text style={styles.headerTitle}>Order Status</Text>
         <Text style={styles.headerSub}>{filteredOrders.length} active orders</Text>
       </LinearGradient>
@@ -334,15 +334,15 @@ const OrderStatus = ({ navigation }) => {
 
 /* ── Styles ───────────────────────────────────────────────── */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 12, color: '#666', fontSize: 14 },
 
   header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
-  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
   headerSub: { color: '#C8E6C9', fontSize: 13, marginTop: 2 },
 
-  filterRow: { backgroundColor: '#fff', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3 },
+  filterRow: { backgroundColor: '#fff', elevation: 2, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3 },
   filterScroll: { paddingHorizontal: 16, paddingVertical: 12 },
   filterChip: {
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
@@ -356,10 +356,10 @@ const styles = StyleSheet.create({
 
   orderCard: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
+    elevation: 2, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
   },
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
-  orderId: { fontSize: 15, fontWeight: '700', color: '#1B5E20' },
+  orderId: { fontSize: 15, fontWeight: '800', color: '#1B5E20' },
   orderDate: { fontSize: 11, color: '#999', marginTop: 2 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   statusText: { fontSize: 11, fontWeight: '700' },
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
   actionBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 
   emptyCard: { alignItems: 'center', padding: 40, marginTop: 40 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#333', marginTop: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#333', marginTop: 12 },
   emptyText: { fontSize: 14, color: '#888', marginTop: 4, textAlign: 'center' },
 });
 

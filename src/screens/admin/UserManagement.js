@@ -381,8 +381,8 @@ const UserManagement = ({ navigation }) => {
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
-        <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.headerBar}>
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
+        <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.headerBar}>
           <Text style={styles.headerTitle}>User Management</Text>
         </LinearGradient>
         <View style={{ padding: 16 }}>
@@ -399,10 +399,10 @@ const UserManagement = ({ navigation }) => {
   /* ==================================================================== */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.headerBar}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.headerBar}>
         <Text style={styles.headerTitle}>User Management</Text>
         <Text style={styles.headerSub}>{filtered.length} users</Text>
       </LinearGradient>
@@ -501,11 +501,11 @@ const ScrollableChips = ({ filters, active, onPress }) => (
 /* ========================================================================== */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
 
   /* Header */
-  headerBar: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 18, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
-  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '700' },
+  headerBar: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 18, borderBottomLeftRadius: 22, borderBottomRightRadius: 22 },
+  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 0.2 },
   headerSub: { color: '#C8E6C9', fontSize: 13, marginTop: 2 },
 
   /* Stats */
@@ -513,16 +513,16 @@ const styles = StyleSheet.create({
   statChip: {
     flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 6,
     marginHorizontal: 3,
     borderLeftWidth: 3,
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.07,
-    shadowRadius: 4,
+    elevation: 4,
+    shadowColor: '#1B5E20',
+    shadowOpacity: 0.09,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
   statChipIcon: {
@@ -594,12 +594,12 @@ const styles = StyleSheet.create({
   /* User Card */
   userCard: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     marginBottom: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
+    elevation: 4,
+    shadowColor: '#1B5E20',
+    shadowOpacity: 0.08,
+    shadowRadius: 7,
     shadowOffset: { width: 0, height: 2 },
     overflow: 'hidden',
   },
@@ -607,8 +607,8 @@ const styles = StyleSheet.create({
   userAvatar: {},
   userAvatarImg: { width: 44, height: 44, borderRadius: 22 },
   userAvatarPlaceholder: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  userAvatarLetter: { fontSize: 18, fontWeight: '700', color: '#388E3C' },
-  userName: { fontSize: 15, fontWeight: '700', color: '#212121' },
+  userAvatarLetter: { fontSize: 18, fontWeight: '800', color: '#2E7D32' },
+  userName: { fontSize: 15, fontWeight: '800', color: '#1A1A1A' },
   userEmail: { fontSize: 12, color: '#757575', marginTop: 1 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   statusBadgeText: { fontSize: 11, fontWeight: '600' },
@@ -636,7 +636,7 @@ const styles = StyleSheet.create({
 
   /* Empty */
   emptyWrap: { alignItems: 'center', paddingVertical: 60 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#424242', marginTop: 12 },
+  emptyTitle: { fontSize: 17, fontWeight: '800', color: '#424242', marginTop: 12 },
   emptySubtitle: { fontSize: 13, color: '#9E9E9E', marginTop: 4, textAlign: 'center' },
 });
 

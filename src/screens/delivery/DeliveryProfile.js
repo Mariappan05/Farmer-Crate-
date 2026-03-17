@@ -202,10 +202,10 @@ const DeliveryProfile = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
         <TouchableOpacity
           onPress={() => (isEditing ? handleSave() : setIsEditing(true))}

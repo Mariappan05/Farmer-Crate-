@@ -227,10 +227,10 @@ const OrderSummary = ({ navigation, route }) => {
   const status = order?.status || 'pending';
   const statusCfg = getStatusConfig(status);
   const items = order?.items || order?.order_items || [];
-  const subtotal = order?.subtotal || order?.total_amount || items.reduce((s, i) => s + (i.price || 0) * (i.quantity || 1), 0);
-  const adminCommission = order?.admin_commission || 0;
-  const deliveryCharges = order?.delivery_charges || order?.delivery_fee || 0;
-  const totalAmount = order?.total_amount || (subtotal + adminCommission + deliveryCharges);
+  const subtotal = parseFloat(order?.subtotal || order?.total_amount || items.reduce((s, i) => s + (i.price || 0) * (i.quantity || 1), 0)) || 0;
+  const adminCommission = parseFloat(order?.admin_commission || 0) || 0;
+  const deliveryCharges = parseFloat(order?.delivery_charges || order?.delivery_fee || 0) || 0;
+  const totalAmount = parseFloat(order?.total_amount || order?.total_price || (subtotal + adminCommission + deliveryCharges)) || 0;
   const paymentMethod = order?.payment_method || 'N/A';
   const qrCode = order?.qr_code || '';
   const createdAt = order?.created_at || order?.createdAt || order?.order_date;
@@ -256,7 +256,7 @@ const OrderSummary = ({ navigation, route }) => {
   if (isLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -275,7 +275,7 @@ const OrderSummary = ({ navigation, route }) => {
   if (error && !order) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -296,7 +296,7 @@ const OrderSummary = ({ navigation, route }) => {
   /* ─── MAIN RENDER ─── */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
       <View style={styles.header}>
@@ -305,7 +305,17 @@ const OrderSummary = ({ navigation, route }) => {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Order Details</Text>
-          <Text style={styles.headerSubtitle}>#{orderId}</Text>
+          {(() => {
+            const items = order?.items || order?.order_items || [];
+            const names = items.map((item) =>
+              item.name || item.product_name || item.product?.name || `Product #${item.product_id || item.id || ''}`
+            ).filter(Boolean);
+            return names.length > 0
+              ? <Text style={styles.headerSubtitle} numberOfLines={1}>{names.join(', ')}</Text>
+              : order?.product_name
+                ? <Text style={styles.headerSubtitle} numberOfLines={1}>{order.product_name}</Text>
+                : null;
+          })()}
         </View>
         <TouchableOpacity onPress={onRefresh} style={{ padding: 4 }}>
           <Ionicons name="refresh-outline" size={22} color="#A5D6A7" />
@@ -325,7 +335,16 @@ const OrderSummary = ({ navigation, route }) => {
               <Ionicons name={statusCfg.icon} size={22} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.statusOrderId}>Order #{orderId}</Text>
+              {(() => {
+                const names = items.map((item) =>
+                  item.name || item.product_name || item.product?.name || `Product #${item.product_id || item.id || ''}`
+                ).filter(Boolean);
+                return names.length > 0
+                  ? <Text style={styles.statusOrderId} numberOfLines={2}>{names.join(', ')}</Text>
+                  : order?.product_name
+                    ? <Text style={styles.statusOrderId} numberOfLines={2}>{order.product_name}</Text>
+                    : <Text style={styles.statusOrderId}>Your Order</Text>;
+              })()}
               <Text style={[styles.statusLabel, { color: statusCfg.color }]}>{statusCfg.label}</Text>
               {createdAt && <Text style={styles.statusDate}>Placed on {formatDate(createdAt)}</Text>}
             </View>
@@ -591,7 +610,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
@@ -623,7 +642,7 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 10,
     overflow: 'hidden',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F4F8F4',
   },
   itemImage: {
     width: 60,

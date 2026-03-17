@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   logoCircle: {
     width: 90, height: 90, borderRadius: 45, backgroundColor: '#1B5E20',
     justifyContent: 'center', alignItems: 'center', marginBottom: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 6,
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 6,
   },
   appName: { fontSize: 28, fontWeight: 'bold', color: '#1B5E20', marginBottom: 8 },
   versionBadge: { backgroundColor: '#E8F5E9', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 14 },
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   /* Cards */
   card: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 5, elevation: 2,
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 5, elevation: 2,
   },
   cardTitle: { fontSize: 14, fontWeight: 'bold', color: '#888', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
   aboutText: { fontSize: 14, color: '#555', lineHeight: 22 },

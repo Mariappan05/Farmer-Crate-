@@ -77,14 +77,24 @@ const normalizeOrder = (o) => ({
  * ------------------------------------------------------------------------ */
 
 const getProductImage = (item) => {
-  const product = item?.product || item;
-  if (!product) return null;
-  const imgs = product.images;
-  if (Array.isArray(imgs) && imgs.length > 0) {
-    const primary = imgs.find((i) => i?.is_primary) || imgs[0];
-    return typeof primary === 'string' ? primary : primary?.image_url || primary?.url || null;
+  if (!item) return null;
+  // Direct image fields on the item itself
+  if (item.image_url) return item.image_url;
+  if (item.image) return item.image;
+  if (item.product_image) return item.product_image;
+  if (item.product_image_url) return item.product_image_url;
+  // Sequelize returns association as capital-P "Product" — check both cases
+  const product = item.Product || item.product;
+  if (product) {
+    const imgs = product.images;
+    if (Array.isArray(imgs) && imgs.length > 0) {
+      const primary = imgs.find((i) => i?.is_primary) || imgs[0];
+      return typeof primary === 'string' ? primary : primary?.image_url || primary?.url || null;
+    }
+    if (product.image_url) return product.image_url;
+    if (product.image) return product.image;
   }
-  return product.image_url || product.image || null;
+  return null;
 };
 
 const formatDate = (dateStr) => {
@@ -99,12 +109,59 @@ const formatCurrency = (amount) => {
 };
 
 const getOrderTotal = (order) => {
-  if (order.total_amount || order.total) return parseFloat(order.total_amount || order.total) || 0;
+  // Backend model uses total_price; also accept total_amount / total as fallbacks
+  const direct = order.total_price || order.total_amount || order.total;
+  if (direct) return parseFloat(direct) || 0;
   const items = order.items || order.order_items || [];
   return items.reduce((sum, it) => sum + (parseFloat(it.total || it.subtotal || 0)), 0);
 };
 
-const getOrderItems = (order) => order.items || order.order_items || [];
+const getOrderItems = (order) => {
+  // Resolve the product-level image once, for injection into items that lack one
+  const productImageFromAssociation = getProductImage({ Product: order.Product || order.product });
+
+  if (Array.isArray(order.items) && order.items.length > 0) {
+    return order.items.map((it) => ({
+      ...it,
+      image_url: it.image_url || it.image || productImageFromAssociation || null,
+      name: it.name || it.product_name || order.Product?.name || order.product?.name || '',
+    }));
+  }
+  if (Array.isArray(order.order_items) && order.order_items.length > 0) {
+    return order.order_items.map((it) => ({
+      ...it,
+      image_url: it.image_url || it.image || productImageFromAssociation || null,
+      name: it.name || it.product_name || order.Product?.name || order.product?.name || '',
+    }));
+  }
+  if (order.items_json) {
+    try {
+      const parsed = typeof order.items_json === 'string' ? JSON.parse(order.items_json) : order.items_json;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((it) => ({
+          ...it,
+          // Inject image from Sequelize Product association for orders saved without image_url
+          image_url: it.image_url || it.image || productImageFromAssociation || null,
+          name: it.name || it.product_name || order.Product?.name || order.product?.name || '',
+        }));
+      }
+    } catch (_) {}
+  }
+  // Fallback: build a synthetic item directly from the Sequelize Product association
+  const prod = order.Product || order.product;
+  if (prod) {
+    return [{
+      product_id: order.product_id,
+      name: prod.name || prod.product_name || '',
+      product_name: prod.name || prod.product_name || '',
+      image_url: productImageFromAssociation,
+      quantity: order.quantity || 1,
+      price: parseFloat(order.total_price || prod.current_price || 0),
+      total: parseFloat(order.total_price || (prod.current_price || 0) * (order.quantity || 1)),
+    }];
+  }
+  return [];
+};
 
 /* --------------------------------------------------------------------------
  * SHIMMER
@@ -181,10 +238,14 @@ const OrderDetailModal = ({ visible, order, onClose, onTrack, onViewSummary }) =
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }}>
-            {/* Order ID + Status */}
+            {/* Product Name */}
             <View style={styles.modalRow}>
-              <Text style={styles.modalLabel}>Order ID</Text>
-              <Text style={styles.modalValue}>#{order.order_id || order.id}</Text>
+              <Text style={styles.modalLabel}>Product</Text>
+              <Text style={[styles.modalValue, { flex: 1, textAlign: 'right' }]} numberOfLines={2}>
+                {items.length > 0
+                  ? items.map(i => i.name || i.product_name || i.product?.name || i.Product?.name || 'Product').join(', ')
+                  : (order.Product?.name || order.product?.name || `Order #${order.order_id || order.id}`)}
+              </Text>
             </View>
             <View style={styles.modalRow}>
               <Text style={styles.modalLabel}>Status</Text>
@@ -201,15 +262,59 @@ const OrderDetailModal = ({ visible, order, onClose, onTrack, onViewSummary }) =
               </Text>
             </View>
 
-            {/* Delivery Address */}
-            {(order.delivery_address || order.shipping_address) && (
-              <View style={styles.modalRow}>
-                <Text style={styles.modalLabel}>Delivery</Text>
-                <Text style={[styles.modalValue, { flex: 1, textAlign: 'right' }]} numberOfLines={2}>
-                  {order.delivery_address || order.shipping_address}
-                </Text>
+            {/* Price Breakdown */}
+            {(order.subtotal || order.admin_commission || order.delivery_charges || order.transport_charge) ? (
+              <View style={styles.breakdownBox}>
+                {parseFloat(order.subtotal || 0) > 0 && (
+                  <View style={styles.breakdownRow}>
+                    <Text style={styles.breakdownLabel}>Subtotal</Text>
+                    <Text style={styles.breakdownAmt}>{formatCurrency(parseFloat(order.subtotal))}</Text>
+                  </View>
+                )}
+                {parseFloat(order.admin_commission || 0) > 0 && (
+                  <View style={styles.breakdownRow}>
+                    <Text style={styles.breakdownLabel}>Platform Fee</Text>
+                    <Text style={styles.breakdownAmt}>{formatCurrency(parseFloat(order.admin_commission))}</Text>
+                  </View>
+                )}
+                {parseFloat(order.delivery_charges || order.transport_charge || 0) > 0 && (
+                  <View style={styles.breakdownRow}>
+                    <Text style={styles.breakdownLabel}>Delivery Charges</Text>
+                    <Text style={styles.breakdownAmt}>{formatCurrency(parseFloat(order.delivery_charges || order.transport_charge))}</Text>
+                  </View>
+                )}
+                <View style={[styles.breakdownRow, { borderTopWidth: 1, borderTopColor: '#ddd', marginTop: 6, paddingTop: 6 }]}>
+                  <Text style={[styles.breakdownLabel, { fontWeight: '700', color: '#333' }]}>Total</Text>
+                  <Text style={[styles.breakdownAmt, { fontWeight: '700', color: '#1B5E20' }]}>{formatCurrency(getOrderTotal(order))}</Text>
+                </View>
               </View>
-            )}
+            ) : null}
+
+            {/* Delivery Address */}
+            {(order.delivery_address || order.shipping_address) && (() => {
+              const raw = order.delivery_address || order.shipping_address;
+              let addrText = raw;
+              if (typeof raw === 'string') {
+                try {
+                  const parsed = JSON.parse(raw);
+                  if (parsed && typeof parsed === 'object') {
+                    addrText = [parsed.full_name, parsed.address_line, parsed.city, parsed.district, parsed.state, parsed.pincode]
+                      .filter(Boolean).join(', ');
+                  }
+                } catch (_) { /* use raw string */ }
+              } else if (raw && typeof raw === 'object') {
+                addrText = [raw.full_name, raw.address_line, raw.city, raw.district, raw.state, raw.pincode]
+                  .filter(Boolean).join(', ');
+              }
+              return (
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Delivery</Text>
+                  <Text style={[styles.modalValue, { flex: 1, textAlign: 'right' }]} numberOfLines={3}>
+                    {addrText}
+                  </Text>
+                </View>
+              );
+            })()}
 
             {/* Payment method */}
             {order.payment_method && (
@@ -273,6 +378,44 @@ const OrderDetailModal = ({ visible, order, onClose, onTrack, onViewSummary }) =
               </View>
             )}
 
+            {/* Source Transporter (from farmer to hub) */}
+            {order.source_transporter && (
+              <View style={[styles.infoCard, { backgroundColor: '#E8F5E9' }]}>
+                <MaterialCommunityIcons name="truck-outline" size={20} color="#1B5E20" />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.infoCardTitle}>Source Transporter</Text>
+                  <Text style={styles.infoCardValue}>
+                    {order.source_transporter.name || order.source_transporter.full_name || 'N/A'}
+                  </Text>
+                  {order.source_transporter.mobile_number && (
+                    <Text style={styles.infoCardMeta}>{'\uD83D\uDCDE'} {order.source_transporter.mobile_number}</Text>
+                  )}
+                  {order.source_transporter.zone && (
+                    <Text style={styles.infoCardMeta}>{'\uD83D\uDCCD'} {order.source_transporter.zone}{order.source_transporter.district ? `, ${order.source_transporter.district}` : ''}</Text>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* Destination Transporter (hub to customer) */}
+            {order.destination_transporter && (
+              <View style={[styles.infoCard, { backgroundColor: '#E3F2FD' }]}>
+                <MaterialCommunityIcons name="truck-delivery-outline" size={20} color="#0288D1" />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={[styles.infoCardTitle, { color: '#0288D1' }]}>Destination Transporter</Text>
+                  <Text style={styles.infoCardValue}>
+                    {order.destination_transporter.name || order.destination_transporter.full_name || 'N/A'}
+                  </Text>
+                  {order.destination_transporter.mobile_number && (
+                    <Text style={styles.infoCardMeta}>{'\uD83D\uDCDE'} {order.destination_transporter.mobile_number}</Text>
+                  )}
+                  {order.destination_transporter.zone && (
+                    <Text style={styles.infoCardMeta}>{'\uD83D\uDCCD'} {order.destination_transporter.zone}{order.destination_transporter.district ? `, ${order.destination_transporter.district}` : ''}</Text>
+                  )}
+                </View>
+              </View>
+            )}
+
             {/* Delivery Person */}
             {order.delivery_person && (
               <View style={styles.infoCard}>
@@ -326,10 +469,19 @@ const OrderCard = ({ order, onPress, onTrack }) => {
 
   return (
     <TouchableOpacity style={[styles.card, { borderLeftWidth: 4, borderLeftColor: cfg.color }]} activeOpacity={0.7} onPress={onPress}>
-      {/* Top row: Order ID + Status */}
+      {/* Top row: Product names + Status */}
       <View style={styles.cardHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.orderId}>Order #{order.order_id || order.id}</Text>
+        <View style={{ flex: 1, marginRight: 8 }}>
+          <Text style={styles.orderId} numberOfLines={1}>
+            {items.length > 0
+              ? (() => {
+                  const names = items.map(i => i.name || i.product_name || i.product?.name || i.Product?.name || 'Product');
+                  return names.length > 2
+                    ? `${names.slice(0, 2).join(', ')} +${names.length - 2} more`
+                    : names.join(', ');
+                })()
+              : (order.Product?.name || order.product?.name || `Order #${order.order_id || order.id}`)}
+          </Text>
           <Text style={styles.orderDate}>{formatDate(order.created_at || order.order_date)}</Text>
         </View>
         <StatusBadge status={order.status} />
@@ -491,6 +643,7 @@ const OrderHistory = ({ navigation }) => {
 
   /* -- Render helpers ---------------------------------------- */
   const renderFilterChips = () => (
+    <View style={styles.chipContainer}>
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
@@ -514,6 +667,7 @@ const OrderHistory = ({ navigation }) => {
         );
       })}
     </ScrollView>
+    </View>
   );
 
   const renderEmpty = () => (
@@ -601,7 +755,7 @@ const OrderHistory = ({ navigation }) => {
  * ------------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
 
   /* Header */
   header: {
@@ -613,19 +767,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerTitle: { fontSize: 24, fontWeight: '700', color: '#1B5E20' },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#1B5E20' },
   headerSub: { fontSize: 13, color: '#888', marginTop: 2 },
   refreshBtn: { padding: 8 },
 
   /* Filter chips */
-  chipRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 8, backgroundColor: '#fff', alignItems: 'center' },
+  chipContainer: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8F5E9',
+    ...Platform.select({
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+      android: { elevation: 2 },
+    }),
+  },
+  chipRow: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 10, gap: 8, alignItems: 'center' },
   chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 20,
     backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: 'transparent',
+    minHeight: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  chipActive: { backgroundColor: '#1B5E20' },
+  chipActive: { backgroundColor: '#1B5E20', borderColor: '#1B5E20' },
   chipText: { fontSize: 13, color: '#555', fontWeight: '500' },
   chipTextActive: { color: '#fff', fontWeight: '600' },
 
@@ -639,12 +807,12 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 14,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.09, shadowRadius: 8 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.09, shadowRadius: 8 },
       android: { elevation: 3 },
     }),
   },
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
-  orderId: { fontSize: 15, fontWeight: '700', color: '#1B5E20' },
+  orderId: { fontSize: 15, fontWeight: '800', color: '#1B5E20' },
   orderDate: { fontSize: 12, color: '#888', marginTop: 2 },
 
   /* Badge */
@@ -661,14 +829,14 @@ const styles = StyleSheet.create({
   /* Image row */
   imageRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   thumbImage: { width: 56, height: 56, borderRadius: 10, backgroundColor: '#f0f0f0' },
-  imagePlaceholder: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' },
+  imagePlaceholder: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F8F4' },
   moreItems: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F5E9' },
   moreItemsText: { fontSize: 13, fontWeight: '600', color: '#1B5E20' },
 
   /* Card footer */
   cardFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   itemCount: { fontSize: 12, color: '#888' },
-  totalAmount: { fontSize: 16, fontWeight: '700', color: '#1B5E20', marginTop: 2 },
+  totalAmount: { fontSize: 16, fontWeight: '800', color: '#1B5E20', marginTop: 2 },
   trackBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -694,7 +862,7 @@ const styles = StyleSheet.create({
 
   /* Empty */
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#333', marginTop: 16 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#333', marginTop: 16 },
   emptySubtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginTop: 8, lineHeight: 20 },
   shopBtn: {
     marginTop: 20,
@@ -726,7 +894,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: '#1B5E20' },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#1B5E20' },
   modalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -746,7 +914,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#f0f0f0',
   },
-  modalItemImage: { width: 48, height: 48, borderRadius: 8, backgroundColor: '#f5f5f5' },
+  modalItemImage: { width: 48, height: 48, borderRadius: 8, backgroundColor: '#F4F8F4' },
   modalItemName: { fontSize: 14, fontWeight: '600', color: '#333' },
   modalItemMeta: { fontSize: 12, color: '#888', marginTop: 2 },
   modalItemTotal: { fontSize: 14, fontWeight: '600', color: '#1B5E20' },
@@ -763,6 +931,19 @@ const styles = StyleSheet.create({
   infoCardTitle: { fontSize: 11, color: '#888', fontWeight: '500' },
   infoCardValue: { fontSize: 14, fontWeight: '600', color: '#333', marginTop: 2 },
   infoCardMeta: { fontSize: 12, color: '#666', marginTop: 2 },
+
+  /* Price breakdown */
+  breakdownBox: {
+    backgroundColor: '#F1F8E9',
+    borderRadius: 10,
+    padding: 12,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#DCEDC8',
+  },
+  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
+  breakdownLabel: { fontSize: 13, color: '#555' },
+  breakdownAmt: { fontSize: 13, color: '#333', fontWeight: '500' },
 
   /* Modal actions */
   modalActions: {

@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   /* Cards */
   card: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 5, elevation: 2,
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 5, elevation: 2,
   },
   cardTitle: { fontSize: 15, fontWeight: 'bold', color: '#333', marginBottom: 14 },
 
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1B5E20', borderRadius: 14, paddingVertical: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
   },
-  submitBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 
   /* Thank You */
   thankYou: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   tyTitle: { fontSize: 28, fontWeight: 'bold', color: '#1B5E20', marginBottom: 10 },
   tySub: { fontSize: 15, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 30, paddingHorizontal: 10 },
   doneBtn: { backgroundColor: '#1B5E20', borderRadius: 20, paddingHorizontal: 32, paddingVertical: 14 },
-  doneBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  doneBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 
   /* Modal */
   modalOverlay: {
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '85%',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
   },
   modalTitle: { fontSize: 17, fontWeight: 'bold', color: '#1B5E20', marginBottom: 14 },
   modalItem: {

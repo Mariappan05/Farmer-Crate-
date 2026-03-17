@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width, height } = Dimensions.get('window');
 
@@ -202,7 +203,15 @@ const GetStartedScreen = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <StatusBar backgroundColor="#388E3C" barStyle="light-content" />
+      <StatusBar backgroundColor="#103A12" barStyle="light-content" />
+
+      {/* Full-screen gradient background */}
+      <LinearGradient
+        colors={['#103A12', '#1B5E20', '#2E7D32', '#388E3C']}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
 
       {/* Background decorative circles */}
       <View style={styles.decorCircleTopLeft} />
@@ -308,7 +317,7 @@ const GetStartedScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#103A12',
     overflow: 'hidden',
   },
   // Decorative corner circles
@@ -316,37 +325,37 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -60,
     left: -60,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
   },
   decorCircleTopRight: {
     position: 'absolute',
     top: -40,
     right: -50,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   decorCircleBottomLeft: {
     position: 'absolute',
     bottom: -70,
     left: -40,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(56, 142, 60, 0.5)',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   decorCircleBottomRight: {
     position: 'absolute',
     bottom: -50,
     right: -60,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(27, 94, 32, 0.3)',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
   },
   // Floating corner icons
   cornerIcon: {
@@ -384,7 +393,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.4)',
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -419,18 +428,18 @@ const styles = StyleSheet.create({
   // Glassmorphic card
   glassCard: {
     width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    borderRadius: 24,
-    paddingVertical: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderRadius: 28,
+    paddingVertical: 32,
     paddingHorizontal: 24,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderColor: 'rgba(255, 255, 255, 0.38)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 14,
   },
   cardSparkle: {
     marginBottom: 8,
@@ -460,21 +469,23 @@ const styles = StyleSheet.create({
   getStartedButton: {
     flexDirection: 'row',
     backgroundColor: '#1B5E20',
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
+    borderRadius: 18,
+    paddingVertical: 17,
+    paddingHorizontal: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
   },
   getStartedButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '800',
     letterSpacing: 0.8,
   },
   // Dot indicators

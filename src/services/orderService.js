@@ -41,6 +41,21 @@ export const getFarmerOrders = async () => {
   return data;
 };
 
+export const acceptFarmerOrder = async (orderId) => {
+  const { data } = await api.put(`/farmers/orders/${orderId}/accept`);
+  return data;
+};
+
+export const rejectFarmerOrder = async (orderId) => {
+  const { data } = await api.put(`/farmers/orders/${orderId}/reject`);
+  return data;
+};
+
+export const getFarmerOrderById = async (orderId) => {
+  const { data } = await api.get(`/orders/${orderId}`);
+  return data;
+};
+
 export const updateFarmerOrderStatus = async (orderId, status) => {
   const { data } = await api.put(`/farmers/orders/${orderId}/status`, { status });
   return data;

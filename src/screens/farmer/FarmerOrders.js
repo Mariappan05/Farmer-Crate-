@@ -11,17 +11,19 @@ import {
   StatusBar,
   Modal,
   ScrollView,
+  Image,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
-import { getFarmerOrders, updateFarmerOrderStatus } from '../../services/orderService';
+import { getFarmerOrders, acceptFarmerOrder, rejectFarmerOrder } from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
 
-const STATUS_LIST = ['All', 'PENDING', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
+const STATUS_LIST = ['All', 'PLACED', 'PENDING', 'CONFIRMED', 'ASSIGNED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'];
 
 const STATUS_COLORS = {
+  PLACED: '#FF9800',
   PENDING: '#FF9800',
   CONFIRMED: '#2196F3',
   ASSIGNED: '#9C27B0',
@@ -29,6 +31,12 @@ const STATUS_COLORS = {
   OUT_FOR_DELIVERY: '#FF5722',
   DELIVERED: '#4CAF50',
   CANCELLED: '#F44336',
+};
+
+// Map backend mixed-case status to uppercase canonical key
+const normalizeStatus = (s) => {
+  if (!s) return 'PLACED';
+  return s.toUpperCase().replace(/ /g, '_');
 };
 
 const FarmerOrders = ({ navigation }) => {
@@ -48,10 +56,13 @@ const FarmerOrders = ({ navigation }) => {
     try {
       const data = await getFarmerOrders();
       const raw = Array.isArray(data) ? data : data?.orders || data?.data || [];
-      // Normalize: backend sends current_status, frontend uses status
-      const list = raw.map(o => ({ ...o, status: o.current_status || o.status || 'PENDING' }));
+      // Normalize: backend sends current_status (mixed case), map to uppercase
+      const list = raw.map(o => ({
+        ...o,
+        status: normalizeStatus(o.current_status || o.status),
+      }));
       setOrders(list.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date)));
-      console.log('[FarmerOrders] Fetched', list.length, 'orders');
+      console.log('[FarmerOrders] Fetched', list.length, 'orders. Sample:', JSON.stringify(list[0]));
     } catch (e) {
       const msg = e?.response?.data?.message || e.message || 'Failed to load orders';
       console.error('[FarmerOrders] fetchOrders error:', msg, '\nStatus:', e?.response?.status, '\nDetails:', JSON.stringify(e?.response?.data));
@@ -71,16 +82,25 @@ const FarmerOrders = ({ navigation }) => {
       ? orders
       : orders.filter((o) => (o.status || o.current_status || '').toUpperCase() === activeFilter.toUpperCase());
 
-  const handleAction = async (orderId, status) => {
+  const handleAction = async (orderId, action) => {
     setActionLoading(orderId);
     try {
-      await updateFarmerOrderStatus(orderId, status);
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status } : o))
-      );
-      toastRef.current?.show(`Order ${status === 'CONFIRMED' ? 'accepted' : 'cancelled'} successfully`, 'success');
+      if (action === 'accept') {
+        await acceptFarmerOrder(orderId);
+        setOrders((prev) =>
+          prev.map((o) => ((o.order_id || o.id) === orderId ? { ...o, status: 'CONFIRMED' } : o))
+        );
+        toastRef.current?.show('Order accepted successfully!', 'success');
+      } else {
+        await rejectFarmerOrder(orderId);
+        setOrders((prev) =>
+          prev.map((o) => ((o.order_id || o.id) === orderId ? { ...o, status: 'CANCELLED' } : o))
+        );
+        toastRef.current?.show('Order rejected.', 'success');
+      }
     } catch (e) {
-      toastRef.current?.show(e.message || 'Failed to update order', 'error');
+      const msg = e?.response?.data?.message || e.message || 'Failed to update order';
+      toastRef.current?.show(msg, 'error');
     } finally {
       setActionLoading(null);
     }
@@ -103,108 +123,116 @@ const FarmerOrders = ({ navigation }) => {
   };
 
   const renderOrderCard = ({ item }) => {
+    const realId = item.order_id || item.id;
     const statusColor = STATUS_COLORS[item.status] || '#888';
-    const isPending = item.status === 'PENDING';
+    const isActionable = ['PLACED', 'PENDING'].includes(item.status);
 
-    const products = item.items || item.products || item.order_items || [];
+    // API returns per-item records with a Product association
+    const product = item.Product || item.product || {};
+    const imgUri = product.image_url || product.image || product.photo || null;
+    const productName = product.name || product.product_name || item.product_name || 'Product';
+    const unitPrice = parseFloat(product.current_price || product.price || item.unit_price || item.price_per_unit || 0);
+    const qty = parseInt(item.quantity || 1);
+    const total = parseFloat(item.total_price || item.total_amount || item.total || 0);
+    const customerName = item.customer?.name || item.customer?.full_name || item.customer_name || 'Customer';
 
     return (
       <TouchableOpacity
         style={[styles.orderCard, { borderLeftWidth: 4, borderLeftColor: statusColor }]}
         onPress={() => openDetail(item)}
-        activeOpacity={0.7}
+        activeOpacity={0.85}
       >
-        {/* Order Header */}
+        {/* ── Header ── */}
         <View style={styles.cardHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.orderId} numberOfLines={1}>
-              {item.customer_name || item.user?.full_name || (products[0] && (products[0].product_name || products[0].name)) || 'Order'}
-            </Text>
+            <Text style={styles.orderId}>Order #{realId}</Text>
             <Text style={styles.orderDate}>{formatDate(item.created_at || item.date)}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor + '18' }]}>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
             <Text style={[styles.statusText, { color: statusColor }]}>
               {(item.status || '').replace(/_/g, ' ')}
             </Text>
           </View>
         </View>
 
-        {/* Customer */}
+        {/* ── Customer ── */}
         <View style={styles.customerRow}>
-          <Ionicons name="person-outline" size={16} color="#888" />
-          <Text style={styles.customerName} numberOfLines={1}>
-            {item.customer_name || item.user?.full_name || 'Customer'}
-          </Text>
+          <Ionicons name="person-circle-outline" size={17} color="#888" />
+          <Text style={styles.customerName} numberOfLines={1}>{customerName}</Text>
         </View>
 
-        {/* Products Summary */}
-        {products.length > 0 && (
-          <View style={styles.productsSection}>
-            {products.slice(0, 3).map((p, idx) => (
-              <Text key={idx} style={styles.productLine} numberOfLines={1}>
-                • {p.product_name || p.name} × {p.quantity || 1}
+        {/* ── Product (single item record) ── */}
+        <View style={styles.productsSection}>
+          <View style={styles.productRow}>
+            {imgUri ? (
+              <Image source={{ uri: imgUri }} style={styles.productThumb} />
+            ) : (
+              <View style={styles.productThumbPlaceholder}>
+                <MaterialCommunityIcons name="food-apple-outline" size={26} color="#aaa" />
+              </View>
+            )}
+            <View style={styles.productInfoWrap}>
+              <Text style={styles.productName} numberOfLines={2}>{productName}</Text>
+              <Text style={styles.productMeta}>
+                Qty: {qty}{unitPrice > 0 ? `  ·  ₹${unitPrice.toFixed(2)}/unit` : ''}
               </Text>
-            ))}
-            {products.length > 3 && (
-              <Text style={styles.moreProducts}>+{products.length - 3} more items</Text>
+            </View>
+            {total > 0 && (
+              <Text style={styles.productItemTotal}>₹{total.toLocaleString('en-IN')}</Text>
             )}
           </View>
-        )}
-
-        {/* Total */}
-        <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalAmount}>
-            ₹{parseFloat(item.total_amount || item.total || 0).toLocaleString('en-IN')}
-          </Text>
         </View>
 
-        {/* Actions for pending orders */}
-        {isPending && (
+        {/* ── Total ── */}
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Order Total</Text>
+          <Text style={styles.totalAmount}>₹{total.toLocaleString('en-IN')}</Text>
+        </View>
+
+        {/* ── Action Required: Accept / Reject ── */}
+        {isActionable && (
           <View style={styles.actionsRow}>
             <TouchableOpacity
               style={[styles.actionBtn, styles.rejectBtn]}
-              onPress={() => {
+              onPress={() =>
                 Alert.alert('Reject Order', 'Are you sure you want to reject this order?', [
                   { text: 'No', style: 'cancel' },
-                  { text: 'Yes, Reject', onPress: () => handleAction(item.id, 'CANCELLED') },
-                ]);
-              }}
-              disabled={actionLoading === item.id}
+                  { text: 'Yes, Reject', style: 'destructive', onPress: () => handleAction(realId, 'reject') },
+                ])
+              }
+              disabled={actionLoading === realId}
             >
-              {actionLoading === item.id ? (
+              {actionLoading === realId ? (
                 <ActivityIndicator size="small" color="#F44336" />
               ) : (
                 <>
-                  <Ionicons name="close-circle-outline" size={18} color="#F44336" />
+                  <Ionicons name="close-circle-outline" size={19} color="#F44336" />
                   <Text style={styles.rejectText}>Reject</Text>
                 </>
               )}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, styles.acceptBtn]}
-              onPress={() => handleAction(item.id, 'CONFIRMED')}
-              disabled={actionLoading === item.id}
+              onPress={() => handleAction(realId, 'accept')}
+              disabled={actionLoading === realId}
             >
-              {actionLoading === item.id ? (
+              {actionLoading === realId ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <>
-                  <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
-                  <Text style={styles.acceptText}>Accept</Text>
+                  <Ionicons name="checkmark-circle-outline" size={19} color="#fff" />
+                  <Text style={styles.acceptText}>Accept Order</Text>
                 </>
               )}
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Track button for non-pending */}
-        {!isPending && item.status !== 'CANCELLED' && (
+        {/* ── Track for confirmed+ orders ── */}
+        {!isActionable && item.status !== 'CANCELLED' && (
           <TouchableOpacity
             style={styles.trackBtn}
-            onPress={() =>
-              navigation.navigate('FarmerOrderTracking', { orderId: item.id, order: item })
-            }
+            onPress={() => navigation.navigate('FarmerOrderTracking', { orderId: realId, order: item })}
           >
             <MaterialCommunityIcons name="truck-outline" size={16} color="#1B5E20" />
             <Text style={styles.trackText}>Track Order</Text>
@@ -218,72 +246,117 @@ const FarmerOrders = ({ navigation }) => {
   const renderDetailModal = () => {
     if (!selectedOrder) return null;
     const o = selectedOrder;
+    const realId = o.order_id || o.id;
     const statusColor = STATUS_COLORS[o.status] || '#888';
-    const products = o.items || o.products || o.order_items || [];
+    const isActionable = ['PLACED', 'PENDING'].includes(o.status);
+
+    const product = o.Product || o.product || {};
+    const imgUri = product.image_url || product.image || product.photo || null;
+    const productName = product.name || product.product_name || o.product_name || 'Product';
+    const unitPrice = parseFloat(product.current_price || product.price || o.unit_price || o.price_per_unit || 0);
+    const qty = parseInt(o.quantity || 1);
+    const total = parseFloat(o.total_price || o.total_amount || o.total || 0);
+    const customerName = o.customer?.name || o.customer?.full_name || o.customer_name || 'N/A';
+    const deliveryAddr = o.delivery_address || o.Order?.delivery_address || o.order?.delivery_address || null;
 
     return (
       <Modal visible={detailModal} transparent animationType="slide" onRequestClose={() => setDetailModal(false)}>
         <View style={styles.overlay}>
           <View style={styles.detailCard}>
+            {/* Header */}
             <View style={styles.detailHeader}>
-              <Text style={styles.detailTitle}>Order Details</Text>
-              <TouchableOpacity onPress={() => setDetailModal(false)}>
-                <Ionicons name="close" size={24} color="#333" />
+              <Text style={styles.detailTitle}>Order #{realId}</Text>
+              <TouchableOpacity onPress={() => setDetailModal(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={22} color="#333" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
-              <View style={[styles.statusBadgeLg, { backgroundColor: statusColor + '18', alignSelf: 'flex-start' }]}>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 520 }}>
+              {/* Status badge */}
+              <View style={[styles.statusBadgeLg, { backgroundColor: statusColor + '22', alignSelf: 'flex-start' }]}>
                 <Text style={[styles.statusTextLg, { color: statusColor }]}>
                   {(o.status || '').replace(/_/g, ' ')}
                 </Text>
               </View>
 
               <Text style={styles.detailLabel}>Customer</Text>
-              <Text style={styles.detailValue}>{o.customer_name || o.user?.full_name || 'N/A'}</Text>
+              <Text style={styles.detailValue}>{customerName}</Text>
 
-              <Text style={styles.detailLabel}>Date</Text>
+              <Text style={styles.detailLabel}>Order Date</Text>
               <Text style={styles.detailValue}>{formatDate(o.created_at || o.date)}</Text>
 
-              {products.length > 0 && (
-                <>
-                  <Text style={styles.detailLabel}>Products</Text>
-                  {products.map((p, idx) => (
-                    <View key={idx} style={styles.detailProductRow}>
-                      <Text style={styles.detailProductName} numberOfLines={1}>
-                        {p.product_name || p.name}
-                      </Text>
-                      <Text style={styles.detailProductQty}>×{p.quantity || 1}</Text>
-                      <Text style={styles.detailProductPrice}>
-                        ₹{parseFloat(p.price || p.total || 0).toFixed(2)}
-                      </Text>
-                    </View>
-                  ))}
-                </>
-              )}
-
-              <View style={styles.detailTotalRow}>
-                <Text style={styles.detailTotalLabel}>Total Amount</Text>
-                <Text style={styles.detailTotalValue}>
-                  ₹{parseFloat(o.total_amount || o.total || 0).toLocaleString('en-IN')}
-                </Text>
-              </View>
-
-              {o.delivery_address && (
+              {deliveryAddr ? (
                 <>
                   <Text style={styles.detailLabel}>Delivery Address</Text>
-                  <Text style={styles.detailValue}>{o.delivery_address}</Text>
+                  <Text style={styles.detailValue}>{deliveryAddr}</Text>
                 </>
-              )}
+              ) : null}
+
+              {/* Product row */}
+              <Text style={[styles.detailLabel, { marginBottom: 10, marginTop: 16 }]}>Product</Text>
+              <View style={styles.detailProductRow}>
+                {imgUri ? (
+                  <Image source={{ uri: imgUri }} style={styles.detailProductImg} />
+                ) : (
+                  <View style={[styles.detailProductImg, styles.detailProductImgPlaceholder]}>
+                    <MaterialCommunityIcons name="food-apple-outline" size={28} color="#ccc" />
+                  </View>
+                )}
+                <View style={styles.detailProductInfo}>
+                  <Text style={styles.detailProductName} numberOfLines={2}>{productName}</Text>
+                  <Text style={styles.detailProductMeta}>
+                    Qty: {qty}{unitPrice > 0 ? `  ·  ₹${unitPrice.toFixed(2)}/unit` : ''}
+                  </Text>
+                </View>
+                {total > 0 && (
+                  <Text style={styles.detailProductPrice}>₹{total.toLocaleString('en-IN')}</Text>
+                )}
+              </View>
+
+              {/* Total */}
+              <View style={styles.detailTotalRow}>
+                <Text style={styles.detailTotalLabel}>Total Amount</Text>
+                <Text style={styles.detailTotalValue}>₹{total.toLocaleString('en-IN')}</Text>
+              </View>
             </ScrollView>
 
-            {o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && (
+            {/* Accept / Reject inside modal */}
+            {isActionable && (
+              <View style={[styles.actionsRow, { marginTop: 14 }]}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.rejectBtn]}
+                  onPress={() =>
+                    Alert.alert('Reject Order', 'Reject this order?', [
+                      { text: 'No', style: 'cancel' },
+                      { text: 'Reject', style: 'destructive', onPress: () => { handleAction(realId, 'reject'); setDetailModal(false); } },
+                    ])
+                  }
+                  disabled={actionLoading === realId}
+                >
+                  <Ionicons name="close-circle-outline" size={18} color="#F44336" />
+                  <Text style={styles.rejectText}>Reject</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.acceptBtn]}
+                  onPress={() => { handleAction(realId, 'accept'); setDetailModal(false); }}
+                  disabled={actionLoading === realId}
+                >
+                  {actionLoading === realId ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
+                      <Text style={styles.acceptText}>Accept Order</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {!isActionable && o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && (
               <TouchableOpacity
                 style={styles.detailTrackBtn}
-                onPress={() => {
-                  setDetailModal(false);
-                  navigation.navigate('FarmerOrderTracking', { orderId: o.id, order: o });
-                }}
+                onPress={() => { setDetailModal(false); navigation.navigate('FarmerOrderTracking', { orderId: realId, order: o }); }}
               >
                 <MaterialCommunityIcons name="truck-outline" size={18} color="#fff" />
                 <Text style={styles.detailTrackText}>Track Order</Text>
@@ -297,10 +370,10 @@ const FarmerOrders = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Text style={styles.headerTitle}>My Orders</Text>
       </LinearGradient>
 
@@ -348,7 +421,7 @@ const FarmerOrders = ({ navigation }) => {
       ) : (
         <FlatList
           data={filteredOrders}
-          keyExtractor={(item) => String(item.id || item.order_id)}
+          keyExtractor={(item, index) => String(item.order_id || item.id || index)}
           renderItem={renderOrderCard}
           contentContainerStyle={{ padding: 16, paddingBottom: 20 }}
           refreshControl={
@@ -414,27 +487,37 @@ const styles = StyleSheet.create({
   /* Order Card */
   orderCard: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+    marginBottom: 14,
+    elevation: 4,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.10,
+    shadowRadius: 8,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  orderId: { fontSize: 16, fontWeight: '700', color: '#333' },
-  orderDate: { fontSize: 12, color: '#999', marginTop: 2 },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  statusText: { fontSize: 12, fontWeight: '600', textTransform: 'capitalize' },
+  orderId: { fontSize: 15, fontWeight: '800', color: '#1A1A1A', letterSpacing: 0.1 },
+  orderDate: { fontSize: 12, color: '#999', marginTop: 3 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  statusText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
 
   customerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 6 },
-  customerName: { fontSize: 14, color: '#555' },
+  customerName: { fontSize: 14, color: '#555', fontWeight: '500' },
 
-  productsSection: { marginTop: 10, paddingLeft: 4 },
-  productLine: { fontSize: 13, color: '#666', marginBottom: 2 },
-  moreProducts: { fontSize: 12, color: '#999', fontStyle: 'italic', marginTop: 2 },
+  /* Product rows in card */
+  productsSection: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#F5F5F5', paddingTop: 12, gap: 10 },
+  productRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  productThumb: { width: 52, height: 52, borderRadius: 10, backgroundColor: '#F5F5F5' },
+  productThumbPlaceholder: {
+    width: 52, height: 52, borderRadius: 10,
+    backgroundColor: '#F0F4F0', justifyContent: 'center', alignItems: 'center',
+  },
+  productInfoWrap: { flex: 1 },
+  productName: { fontSize: 14, fontWeight: '700', color: '#1A1A1A', marginBottom: 3 },
+  productMeta: { fontSize: 12, color: '#888' },
+  productItemTotal: { fontSize: 14, fontWeight: '700', color: '#1B5E20' },
+  moreProducts: { fontSize: 12, color: '#4CAF50', fontWeight: '600', marginTop: 2 },
 
   totalRow: {
     flexDirection: 'row',
@@ -445,15 +528,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
   },
-  totalLabel: { fontSize: 14, color: '#888' },
-  totalAmount: { fontSize: 18, fontWeight: '700', color: '#1B5E20' },
+  totalLabel: { fontSize: 13, color: '#888', fontWeight: '500' },
+  totalAmount: { fontSize: 19, fontWeight: '800', color: '#1B5E20' },
 
   actionsRow: { flexDirection: 'row', marginTop: 14, gap: 10 },
-  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, gap: 6 },
-  rejectBtn: { backgroundColor: '#FFEBEE' },
-  acceptBtn: { backgroundColor: '#4CAF50' },
-  rejectText: { color: '#F44336', fontWeight: '600', fontSize: 14 },
-  acceptText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, gap: 6 },
+  rejectBtn: { backgroundColor: '#FFEBEE', borderWidth: 1, borderColor: '#FFCDD2' },
+  acceptBtn: { backgroundColor: '#2E7D32', elevation: 3 },
+  rejectText: { color: '#F44336', fontWeight: '700', fontSize: 14 },
+  acceptText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   trackBtn: {
     flexDirection: 'row',
@@ -465,40 +548,55 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 6,
   },
-  trackText: { color: '#1B5E20', fontWeight: '600', fontSize: 14 },
+  trackText: { color: '#1B5E20', fontWeight: '700', fontSize: 13 },
 
   /* Detail Modal */
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  detailCard: { backgroundColor: '#fff', width: '90%', borderRadius: 18, padding: 20, maxHeight: '80%' },
-  detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  detailTitle: { fontSize: 20, fontWeight: '700', color: '#333' },
-  statusBadgeLg: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12, marginBottom: 14 },
-  statusTextLg: { fontSize: 14, fontWeight: '600', textTransform: 'capitalize' },
-  detailLabel: { fontSize: 13, fontWeight: '600', color: '#888', marginTop: 12 },
-  detailValue: { fontSize: 15, color: '#333', marginTop: 2 },
-  detailProductRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
-  detailProductName: { flex: 1, fontSize: 14, color: '#333' },
-  detailProductQty: { fontSize: 14, color: '#888', marginHorizontal: 10 },
-  detailProductPrice: { fontSize: 14, fontWeight: '600', color: '#1B5E20' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
+  detailCard: { backgroundColor: '#fff', width: '92%', borderRadius: 20, padding: 20, maxHeight: '88%' },
+  detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  detailTitle: { fontSize: 18, fontWeight: '800', color: '#1A1A1A' },
+  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
+  statusBadgeLg: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12, marginBottom: 12 },
+  statusTextLg: { fontSize: 13, fontWeight: '700', textTransform: 'capitalize' },
+  detailLabel: { fontSize: 12, fontWeight: '700', color: '#888', marginTop: 14, textTransform: 'uppercase', letterSpacing: 0.5 },
+  detailValue: { fontSize: 15, color: '#333', marginTop: 3, fontWeight: '500' },
+
+  /* Product row in modal */
+  detailProductRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+    gap: 12,
+  },
+  detailProductImg: { width: 60, height: 60, borderRadius: 12, backgroundColor: '#F5F5F5' },
+  detailProductImgPlaceholder: { justifyContent: 'center', alignItems: 'center' },
+  detailProductInfo: { flex: 1 },
+  detailProductName: { fontSize: 14, fontWeight: '700', color: '#1A1A1A', marginBottom: 4 },
+  detailProductMeta: { fontSize: 12, color: '#888' },
+  detailProductPrice: { fontSize: 15, fontWeight: '800', color: '#1B5E20' },
+
   detailTotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 14,
     paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopWidth: 1.5,
+    borderTopColor: '#E8F5E9',
   },
-  detailTotalLabel: { fontSize: 16, fontWeight: '600', color: '#333' },
-  detailTotalValue: { fontSize: 20, fontWeight: '700', color: '#1B5E20' },
+  detailTotalLabel: { fontSize: 15, fontWeight: '700', color: '#333' },
+  detailTotalValue: { fontSize: 22, fontWeight: '800', color: '#1B5E20' },
   detailTrackBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
-    paddingVertical: 12,
-    backgroundColor: '#4CAF50',
-    borderRadius: 12,
+    marginTop: 14,
+    paddingVertical: 13,
+    backgroundColor: '#2E7D32',
+    borderRadius: 14,
     gap: 8,
+    elevation: 3,
   },
-  detailTrackText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  detailTrackText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 });

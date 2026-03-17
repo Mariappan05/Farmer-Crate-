@@ -52,7 +52,7 @@ const BillAction = ({ navigation, route }) => {
   if (!order) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <Ionicons name="document-outline" size={50} color="#ccc" />
         <Text style={styles.emptyText}>No bill data available</Text>
         <TouchableOpacity style={styles.goBackBtn} onPress={() => navigation.goBack()}>
@@ -160,10 +160,10 @@ const BillAction = ({ navigation, route }) => {
   /* ── Render ─────────────────────────────────────────────── */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -331,8 +331,8 @@ const BillAction = ({ navigation, route }) => {
 
 /* ── Styles ───────────────────────────────────────────────── */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F8F4' },
   emptyText: { color: '#999', fontSize: 14, marginTop: 12 },
   goBackBtn: { marginTop: 16, backgroundColor: '#1B5E20', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10 },
   goBackBtnText: { color: '#fff', fontWeight: '600' },
@@ -342,17 +342,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 16,
   },
   backBtn: { padding: 4 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
 
   body: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
 
   card: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
+    elevation: 2, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
   },
 
   summaryHeader: { flexDirection: 'row', alignItems: 'center' },
-  billNumber: { fontSize: 16, fontWeight: '700', color: '#1B5E20' },
+  billNumber: { fontSize: 16, fontWeight: '800', color: '#1B5E20' },
   billDate: { fontSize: 12, color: '#888', marginTop: 2 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   statusText: { fontSize: 11, fontWeight: '700' },
@@ -369,19 +369,19 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 14, color: '#666' },
   totalVal: { fontSize: 14, color: '#333', fontWeight: '500' },
   grandTotalRow: { borderTopWidth: 2, borderTopColor: '#1B5E20', marginTop: 8, paddingTop: 10 },
-  grandTotalLabel: { fontSize: 16, fontWeight: '700', color: '#1B5E20' },
-  grandTotalVal: { fontSize: 18, fontWeight: '700', color: '#1B5E20' },
+  grandTotalLabel: { fontSize: 16, fontWeight: '800', color: '#1B5E20' },
+  grandTotalVal: { fontSize: 18, fontWeight: '800', color: '#1B5E20' },
 
   actionsCard: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
+    elevation: 2, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
   },
-  actionsTitle: { fontSize: 16, fontWeight: '700', color: '#1B5E20', marginBottom: 14 },
+  actionsTitle: { fontSize: 16, fontWeight: '800', color: '#1B5E20', marginBottom: 14 },
 
   actionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 14, marginBottom: 10,
   },
-  actionBtnTitle: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  actionBtnTitle: { color: '#fff', fontSize: 15, fontWeight: '800' },
   actionBtnSub: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 2 },
 
   // Modal

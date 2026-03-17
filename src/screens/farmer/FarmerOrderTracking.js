@@ -182,7 +182,7 @@ const FarmerOrderTracking = ({ navigation, route }) => {
   if (loading) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <ActivityIndicator size="large" color="#4CAF50" />
         <Text style={{ marginTop: 12, color: '#666' }}>Loading tracking info...</Text>
       </View>
@@ -193,10 +193,10 @@ const FarmerOrderTracking = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       <LinearGradient
-        colors={['#1B5E20', '#388E3C']}
+        colors={['#103A12', '#1B5E20', '#2E7D32']}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -295,12 +295,20 @@ const FarmerOrderTracking = ({ navigation, route }) => {
               {order?.customer_name || order?.user?.full_name || 'N/A'}
             </Text>
           </View>
-          {order?.delivery_address && (
-            <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={18} color="#666" />
-              <Text style={styles.infoText}>{order.delivery_address}</Text>
-            </View>
-          )}
+          {order?.delivery_address && (() => {
+            const raw = order.delivery_address;
+            let addr = raw;
+            if (typeof raw === 'string') { try { addr = JSON.parse(raw); } catch (_) {} }
+            const addrText = typeof addr === 'object' && addr !== null
+              ? [addr.full_name, addr.phone ? `Ph: ${addr.phone}` : null, addr.address_line, addr.city, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ')
+              : String(addr);
+            return (
+              <View style={styles.infoRow}>
+                <Ionicons name="location-outline" size={18} color="#666" />
+                <Text style={styles.infoText}>{addrText}</Text>
+              </View>
+            );
+          })()}
           {(order?.customer_phone || order?.user?.phone) && (
             <View style={styles.infoRow}>
               <Ionicons name="call-outline" size={18} color="#666" />
@@ -345,7 +353,7 @@ const FarmerOrderTracking = ({ navigation, route }) => {
 export default FarmerOrderTracking;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   header: {
@@ -358,7 +366,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 20,
   },
   backBtn: { padding: 6 },
-  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
 
   /* Summary */
   summaryCard: {
@@ -368,15 +376,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
   },
   summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  summaryOrderId: { fontSize: 18, fontWeight: '700', color: '#333' },
+  summaryOrderId: { fontSize: 18, fontWeight: '800', color: '#333' },
   summaryDate: { fontSize: 13, color: '#999', marginTop: 2 },
-  summaryTotal: { fontSize: 22, fontWeight: '700', color: '#1B5E20' },
+  summaryTotal: { fontSize: 22, fontWeight: '800', color: '#1B5E20' },
   cancelledBadge: { backgroundColor: '#FFEBEE', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 10 },
   cancelledText: { color: '#F44336', fontWeight: '600', fontSize: 13 },
 
@@ -406,12 +414,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
   },
-  cardTitle: { fontSize: 17, fontWeight: '700', color: '#1B5E20', marginBottom: 16 },
+  cardTitle: { fontSize: 17, fontWeight: '800', color: '#1B5E20', marginBottom: 16 },
 
   timelineItem: { flexDirection: 'row' },
   timelineLeft: { alignItems: 'center', width: 30 },
@@ -457,7 +465,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
@@ -469,5 +477,5 @@ const styles = StyleSheet.create({
   productBorder: { borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   productName: { fontSize: 14, fontWeight: '600', color: '#333' },
   productMeta: { fontSize: 12, color: '#888', marginTop: 2 },
-  productTotal: { fontSize: 14, fontWeight: '700', color: '#1B5E20' },
+  productTotal: { fontSize: 14, fontWeight: '800', color: '#1B5E20' },
 });

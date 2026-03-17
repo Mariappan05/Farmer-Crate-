@@ -345,8 +345,8 @@ const AdminOrderTracking = ({ route, navigation }) => {
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
-        <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.headerBar}>
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
+        <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.headerBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
@@ -364,8 +364,8 @@ const AdminOrderTracking = ({ route, navigation }) => {
   if (error && !order) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
-        <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.headerBar}>
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
+        <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.headerBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
@@ -387,10 +387,10 @@ const AdminOrderTracking = ({ route, navigation }) => {
   /* ==================================================================== */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.headerBar}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.headerBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -580,7 +580,7 @@ const AdminOrderTracking = ({ route, navigation }) => {
 /* ========================================================================== */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
 
   /* Header */
   headerBar: {
@@ -593,7 +593,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 20,
   },
   backBtn: { marginRight: 12, padding: 4 },
-  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
   headerSub: { color: '#C8E6C9', fontSize: 13, marginTop: 1 },
 
   /* Loader */
@@ -628,7 +628,7 @@ const styles = StyleSheet.create({
   },
   timelineNodeActive: {
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOpacity: 0.2,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
 
   /* Cancelled */
   cancelledWrap: { alignItems: 'center', paddingVertical: 24 },
-  cancelledText: { fontSize: 16, fontWeight: '700', color: '#D32F2F', marginTop: 8 },
+  cancelledText: { fontSize: 16, fontWeight: '800', color: '#D32F2F', marginTop: 8 },
 
   /* Card */
   card: {
@@ -650,12 +650,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOpacity: 0.06,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#212121', marginBottom: 10 },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#212121', marginBottom: 10 },
 
   /* Summary */
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
@@ -670,11 +670,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F5F5F5',
   },
-  productImg: { width: 52, height: 52, borderRadius: 10, backgroundColor: '#f5f5f5' },
+  productImg: { width: 52, height: 52, borderRadius: 10, backgroundColor: '#F4F8F4' },
   productImgPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   productName: { fontSize: 14, fontWeight: '600', color: '#212121' },
   productQty: { fontSize: 12, color: '#757575', marginTop: 2 },
-  productTotal: { fontSize: 14, fontWeight: '700', color: '#1B5E20' },
+  productTotal: { fontSize: 14, fontWeight: '800', color: '#1B5E20' },
 
   /* Info Card */
   infoCard: {
@@ -684,14 +684,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOpacity: 0.06,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
   infoCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   infoCardIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  infoCardTitle: { fontSize: 15, fontWeight: '700', color: '#212121', flex: 1, marginLeft: 10 },
+  infoCardTitle: { fontSize: 15, fontWeight: '800', color: '#212121', flex: 1, marginLeft: 10 },
   infoCardBody: {},
   infoRow: { flexDirection: 'row', paddingVertical: 3 },
   infoLabel: { fontSize: 12, color: '#9E9E9E', width: 70 },

@@ -135,10 +135,10 @@ const ContactAdmin = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       <LinearGradient
-        colors={['#1B5E20', '#388E3C']}
+        colors={['#103A12', '#1B5E20', '#2E7D32']}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -244,7 +244,7 @@ const ContactAdmin = ({ navigation }) => {
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={['#1B5E20', '#388E3C']}
+                colors={['#103A12', '#1B5E20', '#2E7D32']}
                 style={styles.submitGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
@@ -318,7 +318,7 @@ const ContactAdmin = ({ navigation }) => {
 export default ContactAdmin;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
 
   header: {
     flexDirection: 'row',
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 20,
   },
   backBtn: { padding: 6 },
-  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
 
   /* Admin Info */
   adminInfoCard: {
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  adminInfoTitle: { fontSize: 17, fontWeight: '700', color: '#1B5E20' },
+  adminInfoTitle: { fontSize: 17, fontWeight: '800', color: '#1B5E20' },
   adminInfoSub: { fontSize: 13, color: '#888', marginTop: 2 },
   adminContactRow: { marginTop: 14, gap: 8 },
   adminContactItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -368,12 +368,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
   },
-  formTitle: { fontSize: 17, fontWeight: '700', color: '#1B5E20', marginBottom: 12 },
+  formTitle: { fontSize: 17, fontWeight: '800', color: '#1B5E20', marginBottom: 12 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginTop: 12, marginBottom: 6 },
 
   dropdown: {
@@ -428,11 +428,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 8,
   },
-  submitText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  submitText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 
   /* Tickets */
   ticketsSection: { margin: 16 },
-  ticketsTitle: { fontSize: 17, fontWeight: '700', color: '#1B5E20', marginBottom: 12 },
+  ticketsTitle: { fontSize: 17, fontWeight: '800', color: '#1B5E20', marginBottom: 12 },
   ticketsLoading: { paddingVertical: 20, alignItems: 'center' },
 
   noTickets: { alignItems: 'center', paddingVertical: 30 },
@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 10,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,

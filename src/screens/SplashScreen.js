@@ -195,7 +195,7 @@ const SplashScreen = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <StatusBar backgroundColor="#1B5E20" barStyle="light-content" />
+      <StatusBar backgroundColor="#103A12" barStyle="light-content" />
 
       {/* Background decorative circles for gradient effect */}
       <View style={styles.bgCircleTopRight} />
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.5)',
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

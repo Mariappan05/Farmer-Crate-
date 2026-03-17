@@ -1,4 +1,4 @@
-﻿/**
+/**
  * TrendingPage.js
  * Trending products - conversion of Flutter TrendingPage.dart
  *
@@ -200,7 +200,7 @@ const ProductCard = ({ product, rank, onPress, onAddToCart }) => {
       {img ? (
         <Image source={{ uri: optimizeImageUrl(img, { width: 80, height: 80 }) }} style={styles.productImage} />
       ) : (
-        <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }]}>
+        <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F5E9' }]}>
           <Ionicons name="leaf-outline" size={24} color="#aaa" />
         </View>
       )}
@@ -328,7 +328,7 @@ const TrendingPage = ({ navigation }) => {
   /* -- Main -------------------------------------------------- */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
       <View style={styles.headerBar}>
@@ -385,7 +385,7 @@ const TrendingPage = ({ navigation }) => {
  * ------------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
 
   headerBar: {
     backgroundColor: '#1B5E20',
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 8 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 8 },
       android: { elevation: 4 },
     }),
   },
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
       android: { elevation: 2 },
     }),
   },

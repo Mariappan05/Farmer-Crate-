@@ -161,7 +161,7 @@ const TransporterDashboard = ({ navigation }) => {
   if (loading) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <ActivityIndicator size="large" color="#1B5E20" />
         <Text style={styles.loadingText}>Loading dashboard...</Text>
       </View>
@@ -170,10 +170,12 @@ const TransporterDashboard = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
+        <View style={styles.headerBlob1} />
+        <View style={styles.headerBlob2} />
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.greeting}>Welcome back,</Text>
@@ -356,66 +358,68 @@ const TransporterDashboard = ({ navigation }) => {
 
 /* ── Styles ───────────────────────────────────────────────── */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F8F4' },
   loadingText: { marginTop: 12, color: '#666', fontSize: 14 },
 
-  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
+  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
+  headerBlob1: { position: 'absolute', width: 190, height: 190, borderRadius: 95, backgroundColor: 'rgba(255,255,255,0.08)', top: -80, right: -40 },
+  headerBlob2: { position: 'absolute', width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(0,0,0,0.07)', bottom: -10, left: -20 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  greeting: { color: '#C8E6C9', fontSize: 14 },
-  userName: { color: '#fff', fontSize: 22, fontWeight: '700', marginTop: 2 },
+  greeting: { color: 'rgba(255,255,255,0.72)', fontSize: 14, fontWeight: '500' },
+  userName: { color: '#fff', fontSize: 22, fontWeight: '800', marginTop: 2, letterSpacing: 0.2 },
   profileBtn: { padding: 4 },
 
   body: { flex: 1, paddingHorizontal: 16 },
 
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, marginBottom: 8 },
   statCard: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 14, marginHorizontal: 4,
-    alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1, shadowRadius: 4,
+    flex: 1, backgroundColor: '#fff', borderRadius: 18, padding: 14, marginHorizontal: 4,
+    alignItems: 'center', elevation: 4, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.09, shadowRadius: 6,
   },
-  statIconWrap: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  statValue: { fontSize: 22, fontWeight: '700', color: '#1B5E20' },
-  statLabel: { fontSize: 11, color: '#888', marginTop: 2, textAlign: 'center' },
+  statIconWrap: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  statValue: { fontSize: 22, fontWeight: '800', color: '#1B5E20' },
+  statLabel: { fontSize: 11, color: '#888', marginTop: 2, textAlign: 'center', fontWeight: '500' },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 10 },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#1B5E20', marginTop: 20, marginBottom: 10 },
+  sectionTitle: { fontSize: 17, fontWeight: '800', color: '#1A1A1A', marginTop: 20, marginBottom: 10, borderLeftWidth: 4, borderLeftColor: '#4CAF50', paddingLeft: 10 },
 
   actionsRow: { flexDirection: 'row', justifyContent: 'space-between' },
   actionCard: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, marginHorizontal: 4,
-    alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08, shadowRadius: 4,
+    flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 14, marginHorizontal: 4,
+    alignItems: 'center', elevation: 3, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 5,
   },
-  actionIconWrap: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  actionLabel: { fontSize: 11, color: '#333', fontWeight: '600', textAlign: 'center' },
+  actionIconWrap: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  actionLabel: { fontSize: 11, color: '#333', fontWeight: '700', textAlign: 'center' },
 
   emptyCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 30, alignItems: 'center',
-    elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4,
+    backgroundColor: '#fff', borderRadius: 18, padding: 30, alignItems: 'center',
+    elevation: 3, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6,
   },
-  emptyText: { color: '#999', fontSize: 14, marginTop: 8 },
-  addPersonBtn: { marginTop: 12, backgroundColor: '#1B5E20', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
-  addPersonBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  emptyText: { color: '#888', fontSize: 14, marginTop: 8, fontWeight: '500' },
+  addPersonBtn: { marginTop: 14, backgroundColor: '#1B5E20', paddingHorizontal: 22, paddingVertical: 11, borderRadius: 22 },
+  addPersonBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
 
   dpScroll: { marginBottom: 4 },
   dpCard: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 14, marginRight: 12, width: 140,
-    alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08, shadowRadius: 4,
+    backgroundColor: '#fff', borderRadius: 16, padding: 14, marginRight: 12, width: 140,
+    alignItems: 'center', elevation: 3, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 5,
   },
   dpAvatarWrap: { position: 'relative', marginBottom: 8 },
   dpAvatar: { width: 50, height: 50, borderRadius: 25 },
   dpAvatarPlaceholder: { backgroundColor: '#1B5E20', justifyContent: 'center', alignItems: 'center' },
   dpStatusDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#fff' },
-  dpName: { fontSize: 13, fontWeight: '600', color: '#333', textAlign: 'center' },
+  dpName: { fontSize: 13, fontWeight: '700', color: '#1A1A1A', textAlign: 'center' },
   dpPhone: { fontSize: 11, color: '#888', marginTop: 2 },
-  dpAvailTag: { fontSize: 11, fontWeight: '600', marginTop: 4 },
+  dpAvailTag: { fontSize: 11, fontWeight: '700', marginTop: 4 },
   dpOrders: { fontSize: 11, color: '#666', marginTop: 2 },
 
   orderCard: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
+    elevation: 4, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.09, shadowRadius: 7,
   },
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   orderId: { fontSize: 15, fontWeight: '700', color: '#1B5E20' },
@@ -428,11 +432,12 @@ const styles = StyleSheet.create({
   addressText: { fontSize: 12, color: '#666', marginLeft: 6, flex: 1 },
   assignBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: '#1B5E20', borderRadius: 10, paddingVertical: 10,
+    backgroundColor: '#1B5E20', borderRadius: 14, paddingVertical: 11,
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 4, elevation: 4,
   },
-  assignBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  assignBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
   assignedRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 6 },
-  assignedText: { color: '#1B5E20', fontSize: 13, fontWeight: '600' },
+  assignedText: { color: '#1B5E20', fontSize: 13, fontWeight: '800' },
 });
 
 export default TransporterDashboard;

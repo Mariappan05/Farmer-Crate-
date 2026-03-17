@@ -44,7 +44,7 @@ const BillPreview = ({ navigation, route }) => {
   if (!order) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <Ionicons name="document-outline" size={50} color="#ccc" />
         <Text style={styles.emptyText}>No bill data available</Text>
         <TouchableOpacity style={styles.retryBtn} onPress={() => navigation.goBack()}>
@@ -171,10 +171,10 @@ const BillPreview = ({ navigation, route }) => {
   /* ── Render ─────────────────────────────────────────────── */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -235,9 +235,15 @@ const BillPreview = ({ navigation, route }) => {
               <Text style={styles.personLabel}>Customer (Delivery)</Text>
               <Text style={styles.personName}>{customer.full_name || customer.name || order.customer_name || 'N/A'}</Text>
               {customer.phone && <Text style={styles.personDetail}>{customer.phone}</Text>}
-              {(customer.address || order.delivery_address) && (
-                <Text style={styles.personDetail}>{customer.address || customer.address_line || order.delivery_address}</Text>
-              )}
+              {(customer.address || order.delivery_address) && (() => {
+                const raw = customer.address || customer.address_line || order.delivery_address;
+                let addr = raw;
+                if (typeof raw === 'string') { try { addr = JSON.parse(raw); } catch (_) {} }
+                const addrText = typeof addr === 'object' && addr !== null
+                  ? [addr.full_name, addr.address_line, addr.city, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ')
+                  : String(addr);
+                return <Text style={styles.personDetail}>{addrText}</Text>;
+              })()}
             </View>
           </View>
         </View>
@@ -326,8 +332,8 @@ const BillPreview = ({ navigation, route }) => {
 
 /* ── Styles ───────────────────────────────────────────────── */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F8F4' },
   emptyText: { color: '#999', fontSize: 14, marginTop: 12 },
   retryBtn: { marginTop: 16, backgroundColor: '#1B5E20', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10 },
   retryBtnText: { color: '#fff', fontWeight: '600' },
@@ -337,23 +343,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 16,
   },
   backBtn: { padding: 4 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
 
   body: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
 
   card: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
+    elevation: 2, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
   },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#1B5E20', marginBottom: 12 },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#1B5E20', marginBottom: 12 },
 
   billHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  billTitle: { fontSize: 22, fontWeight: '700', color: '#1B5E20' },
+  billTitle: { fontSize: 22, fontWeight: '800', color: '#1B5E20' },
   billSubtitle: { fontSize: 13, color: '#888', marginTop: 2 },
   billInfoRow: { flexDirection: 'row', justifyContent: 'space-between' },
   billInfoItem: { alignItems: 'center' },
   billInfoLabel: { fontSize: 11, color: '#888' },
-  billInfoValue: { fontSize: 14, fontWeight: '700', color: '#333', marginTop: 2 },
+  billInfoValue: { fontSize: 14, fontWeight: '800', color: '#333', marginTop: 2 },
 
   personRow: { flexDirection: 'row', gap: 12 },
   personIcon: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
@@ -370,21 +376,21 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 14, color: '#666' },
   summaryValue: { fontSize: 14, color: '#333', fontWeight: '600' },
   totalRow: { borderTopWidth: 2, borderTopColor: '#1B5E20', marginTop: 4, paddingTop: 12 },
-  totalLabel: { fontSize: 16, fontWeight: '700', color: '#1B5E20' },
-  totalValue: { fontSize: 18, fontWeight: '700', color: '#1B5E20' },
+  totalLabel: { fontSize: 16, fontWeight: '800', color: '#1B5E20' },
+  totalValue: { fontSize: 18, fontWeight: '800', color: '#1B5E20' },
 
   actionRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   actionBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     paddingVertical: 14, borderRadius: 14,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 4,
+    elevation: 2, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 4,
   },
   actionBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 
   billActionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff',
     borderRadius: 14, padding: 16, marginBottom: 12,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
+    elevation: 2, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
   },
   billActionBtnText: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1B5E20' },
 });

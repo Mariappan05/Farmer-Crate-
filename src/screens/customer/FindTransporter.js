@@ -1,4 +1,4 @@
-﻿/**
+/**
  * FindTransporter.js
  * Find and select transporters - conversion of Flutter findtrans.dart (606 lines)
  *
@@ -407,7 +407,7 @@ const FindTransporter = ({ navigation, route }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
       <View style={styles.headerBar}>

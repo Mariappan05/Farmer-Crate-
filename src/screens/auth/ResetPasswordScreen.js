@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
     width: 96, height: 96, borderRadius: 48,
     backgroundColor: '#fff',
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15, shadowRadius: 16, elevation: 8,
     marginBottom: 16,
   },
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     width: '100%', maxWidth: 400,
     backgroundColor: 'rgba(255,255,255,0.97)',
     borderRadius: 32, padding: 32,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 12 },
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.12, shadowRadius: 24, elevation: 10,
   },
   cardTitle: {

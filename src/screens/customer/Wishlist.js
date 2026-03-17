@@ -292,7 +292,7 @@ export default function Wishlist({ navigation }) {
         activeOpacity={0.8}
       >
         <LinearGradient
-          colors={['#1B5E20', '#388E3C']}
+          colors={['#103A12', '#1B5E20', '#2E7D32']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.browseBtnGradient}
@@ -306,10 +306,10 @@ export default function Wishlist({ navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar backgroundColor="#1B5E20" barStyle="light-content" />
+      <StatusBar backgroundColor="#103A12" barStyle="light-content" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#2E7D32', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <View style={styles.headerContent}>
           <TouchableOpacity
             style={styles.backBtn}
@@ -348,7 +348,7 @@ export default function Wishlist({ navigation }) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={['#1B5E20', '#388E3C']}
+              colors={['#103A12', '#1B5E20', '#2E7D32']}
               tintColor="#1B5E20"
             />
           }
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerCenter: { alignItems: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#fff' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#fff' },
   headerCount: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
 
   /* Loading */
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 12,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
   },
   wishName: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#222',
     marginBottom: 2,
   },
@@ -492,14 +492,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 6,
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#333',
     marginBottom: 8,
   },
@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
   },
   browseBtnText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#fff',
   },
 });

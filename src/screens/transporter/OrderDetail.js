@@ -178,7 +178,7 @@ const OrderDetail = ({ navigation, route }) => {
   if (loading) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <ActivityIndicator size="large" color="#1B5E20" />
         <Text style={styles.loadingText}>Loading order details...</Text>
       </View>
@@ -188,7 +188,7 @@ const OrderDetail = ({ navigation, route }) => {
   if (!order) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <Ionicons name="alert-circle-outline" size={50} color="#ccc" />
         <Text style={styles.loadingText}>Order not found</Text>
         <TouchableOpacity style={styles.retryBtn} onPress={() => navigation.goBack()}>
@@ -206,10 +206,10 @@ const OrderDetail = ({ navigation, route }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -459,8 +459,8 @@ const InfoCard = ({ title, icon, iconColor, name, phone, address, extra }) => (
 
 /* ── Styles ───────────────────────────────────────────────── */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F8F4' },
   loadingText: { marginTop: 12, color: '#666', fontSize: 14 },
   retryBtn: { marginTop: 16, backgroundColor: '#1B5E20', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10 },
   retryBtnText: { color: '#fff', fontWeight: '600' },
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
     paddingTop: 12, paddingBottom: 16, gap: 12,
   },
   backBtn: { padding: 4 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
   headerSub: { color: '#C8E6C9', fontSize: 12, marginTop: 2 },
   headerBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
   headerBadgeText: { fontSize: 11, fontWeight: '700' },
@@ -479,9 +479,9 @@ const styles = StyleSheet.create({
 
   card: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
+    elevation: 2, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
   },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#1B5E20', marginBottom: 12 },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#1B5E20', marginBottom: 12 },
 
   cancelledRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: '#FFEBEE', borderRadius: 10 },
   cancelledText: { fontSize: 15, fontWeight: '600', color: '#F44336' },

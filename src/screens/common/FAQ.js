@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
   /* FAQ items */
   faqItem: {
     backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
   },
   faqItemActive: { borderLeftWidth: 3, borderLeftColor: '#1B5E20' },
   faqQuestion: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   contactCard: {
     backgroundColor: '#fff', borderRadius: 16, padding: 24, marginTop: 10,
     alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
   contactTitle: { fontSize: 17, fontWeight: 'bold', color: '#222', marginTop: 10 },
   contactSub: { fontSize: 13, color: '#888', marginTop: 4, marginBottom: 16 },

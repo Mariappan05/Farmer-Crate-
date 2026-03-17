@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Notifications.js
  * Customer notification center - conversion of Flutter NotificationsPage.dart
  *
@@ -144,7 +144,7 @@ const NotificationItem = ({ notification, onPress, onDelete }) => {
   const handleSwipeEnd = (evt) => {
     const dx = evt.nativeEvent.pageX - panStartX.current;
     if (dx < -80) {
-      // Swipe far enough → delete
+      // Swipe far enough ? delete
       Animated.parallel([
         Animated.timing(translateX, { toValue: -SCREEN_WIDTH, duration: 250, useNativeDriver: false }),
         Animated.timing(itemHeight, { toValue: 0, duration: 250, useNativeDriver: false, delay: 100 }),
@@ -350,7 +350,7 @@ const Notifications = ({ navigation }) => {
   /* -- Main ------------------------------------------------- */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
       <View style={styles.headerBar}>
@@ -449,7 +449,7 @@ const Notifications = ({ navigation }) => {
  * ------------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
 
   headerBar: {
     backgroundColor: '#1B5E20',
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
   headerSubtitle: { fontSize: 12, color: '#A5D6A7', marginTop: 1 },
   headerBtn: { padding: 6, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)' },
 
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginBottom: 10,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
       android: { elevation: 2 },
     }),
   },
@@ -553,12 +553,12 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#E8F5E9',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
   },
-  emptyTitle: { fontSize: 20, fontWeight: '700', color: '#333' },
+  emptyTitle: { fontSize: 20, fontWeight: '800', color: '#333' },
   emptySubtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginTop: 8, lineHeight: 20 },
   emptyRefreshBtn: {
     flexDirection: 'row',

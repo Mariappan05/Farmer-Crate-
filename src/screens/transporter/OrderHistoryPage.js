@@ -105,9 +105,9 @@ const OrderHistoryPage = ({ navigation }) => {
   /* ── Render ─────────────────────────────────────────────── */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <Text style={styles.headerTitle}>Order History</Text>
         <Text style={styles.headerSub}>{totalOrders} total orders</Text>
       </LinearGradient>
@@ -226,22 +226,22 @@ const OrderHistoryPage = ({ navigation }) => {
 
 /* ── Styles ───────────────────────────────────────────────── */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 12, color: '#666', fontSize: 14 },
 
   header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
-  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 0.2 },
   headerSub: { color: '#C8E6C9', fontSize: 13, marginTop: 2 },
 
   statsRow: { flexDirection: 'row', paddingHorizontal: 16, marginTop: -8, marginBottom: 8 },
   statCard: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12, marginHorizontal: 4,
-    borderLeftWidth: 3, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08, shadowRadius: 3, alignItems: 'center',
+    flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 12, marginHorizontal: 4,
+    borderLeftWidth: 3, elevation: 4, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.09, shadowRadius: 6, alignItems: 'center',
   },
-  statValue: { fontSize: 20, fontWeight: '700', color: '#1B5E20' },
-  statLabel: { fontSize: 11, color: '#888', marginTop: 2 },
+  statValue: { fontSize: 20, fontWeight: '800', color: '#1B5E20' },
+  statLabel: { fontSize: 11, color: '#888', marginTop: 2, fontWeight: '500' },
 
   filterRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#E0E0E0' },
@@ -253,10 +253,10 @@ const styles = StyleSheet.create({
 
   orderCard: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
+    elevation: 4, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.09, shadowRadius: 7,
   },
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
-  orderId: { fontSize: 15, fontWeight: '700', color: '#1B5E20' },
+  orderId: { fontSize: 15, fontWeight: '800', color: '#1B5E20' },
   orderDate: { fontSize: 11, color: '#999', marginTop: 2 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   statusText: { fontSize: 11, fontWeight: '700' },
@@ -268,10 +268,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingTop: 10, marginTop: 8,
   },
   amountLabel: { fontSize: 13, color: '#666' },
-  amountValue: { fontSize: 16, fontWeight: '700', color: '#1B5E20' },
+  amountValue: { fontSize: 16, fontWeight: '800', color: '#1B5E20' },
 
   emptyCard: { alignItems: 'center', padding: 40, marginTop: 40 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#333', marginTop: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#1A1A1A', marginTop: 12 },
   emptyText: { fontSize: 14, color: '#888', marginTop: 4, textAlign: 'center' },
 });
 

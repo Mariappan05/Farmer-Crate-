@@ -238,10 +238,10 @@ const OrderDetails = ({ navigation, route }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -445,7 +445,7 @@ const OrderDetails = ({ navigation, route }) => {
               activeOpacity={0.7}
             >
               <LinearGradient
-                colors={['#1B5E20', '#388E3C']}
+                colors={['#103A12', '#1B5E20', '#2E7D32']}
                 style={styles.primaryActionGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
@@ -499,11 +499,11 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 14,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 7,
+    elevation: 4,
   },
   statusBadge: {
     flexDirection: 'row',
@@ -523,17 +523,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 7,
+    elevation: 4,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: '#1B5E20', textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardTitle: { fontSize: 14, fontWeight: '800', color: '#1B5E20', textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  // Person info
-  personName: { fontSize: 17, fontWeight: '700', color: '#333', marginBottom: 8 },
+  personName: { fontSize: 17, fontWeight: '800', color: '#1A1A1A', marginBottom: 8 },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 },
   infoText: { flex: 1, fontSize: 13, color: '#666', lineHeight: 19 },
 
@@ -562,7 +561,7 @@ const styles = StyleSheet.create({
   productImage: { width: 50, height: 50, borderRadius: 10 },
   productName: { fontSize: 14, fontWeight: '600', color: '#333' },
   productQty: { fontSize: 12, color: '#888', marginTop: 2 },
-  productPrice: { fontSize: 15, fontWeight: '700', color: '#1B5E20' },
+  productPrice: { fontSize: 15, fontWeight: '800', color: '#1B5E20' },
   noItems: { fontSize: 13, color: '#aaa', textAlign: 'center', padding: 16 },
   totalRow: {
     flexDirection: 'row',
@@ -573,7 +572,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1.5,
     borderTopColor: '#E8F5E9',
   },
-  totalLabel: { fontSize: 14, fontWeight: '700', color: '#333' },
+  totalLabel: { fontSize: 14, fontWeight: '800', color: '#1A1A1A' },
   totalValue: { fontSize: 20, fontWeight: '800', color: '#1B5E20' },
   paymentRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
   paymentText: { fontSize: 13, color: '#888' },
@@ -619,7 +618,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 16,
   },
-  primaryActionText: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
+  primaryActionText: { color: '#fff', fontSize: 17, fontWeight: '800' },
   secondaryActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',

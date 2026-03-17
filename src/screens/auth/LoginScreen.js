@@ -426,16 +426,21 @@ const LoginScreen = ({ navigation }) => {
   // ─── UI – mirrors Flutter Signin.dart build() ──────────────────────────
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#2E7D32" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
-      {/* Green gradient simulation (top-dark → bottom-light) */}
-      <View style={styles.gradientTop} />
-      <View style={styles.gradientBottom} />
+      {/* True gradient background */}
+      <LinearGradient
+        colors={['#103A12', '#1B5E20', '#2E7D32', '#388E3C']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.6, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
 
       {/* Decorative circles – Flutter Stack Positioned */}
       <View style={styles.circleTopLeft} />
       <View style={styles.circleBottomRight} />
       <View style={styles.circleTopRight} />
+      <View style={styles.circleMid} />
 
       {/* Animated floating crop icons */}
       {CROP_ICONS.map((cfg, idx) => (
@@ -665,55 +670,47 @@ const LoginScreen = ({ navigation }) => {
   );
 };
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Styles – mirrors Flutter Signin.dart widgets
- * ──────────────────────────────────────────────────────────────────────────── */
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#43A047', // mid-green base
-  },
-  // Gradient simulation layers
-  gradientTop: {
-    ...StyleSheet.absoluteFillObject,
-    height: SCREEN_HEIGHT * 0.5,
-    backgroundColor: '#2E7D32',
-  },
-  gradientBottom: {
-    position: 'absolute',
-    top: SCREEN_HEIGHT * 0.5,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#66BB6A',
+    backgroundColor: '#103A12',
   },
   // Flutter Stack: Positioned decorative circles
   circleTopLeft: {
     position: 'absolute',
-    top: -60,
-    left: -60,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    top: -70,
+    left: -70,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   circleBottomRight: {
     position: 'absolute',
-    bottom: -40,
-    right: -40,
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255,255,255,0.10)',
+    bottom: -50,
+    right: -50,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   circleTopRight: {
     position: 'absolute',
-    top: 40,
-    right: -30,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    top: 50,
+    right: -40,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  circleMid: {
+    position: 'absolute',
+    top: SCREEN_HEIGHT * 0.38,
+    left: -30,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(0,0,0,0.08)',
   },
   scrollContent: {
     flexGrow: 1,
@@ -724,79 +721,82 @@ const styles = StyleSheet.create({
   // Logo / header
   headerSection: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   logoCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 108,
+    height: 108,
+    borderRadius: 54,
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 10,
-    marginBottom: 14,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 14,
+    marginBottom: 16,
     borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.4)',
+    borderColor: 'rgba(255,255,255,0.5)',
   },
   logoImg: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
   },
   appName: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 34,
+    fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 1.2,
-    textShadowColor: 'rgba(0,0,0,0.25)',
+    letterSpacing: 1.5,
+    textShadowColor: 'rgba(0,0,0,0.30)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    textShadowRadius: 10,
   },
   appSubtitle: {
     fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 4,
+    color: 'rgba(255,255,255,0.82)',
+    marginTop: 6,
+    fontWeight: '400',
   },
-  // White form card (Flutter Container with white opacity 0.97)
+  // White form card
   card: {
     width: '100%',
     maxWidth: 400,
-    backgroundColor: 'rgba(255,255,255,0.97)',
-    borderRadius: 32,
-    padding: 32,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 28,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.22,
+    shadowRadius: 32,
+    elevation: 16,
   },
   cardTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#388E3C',
-    marginBottom: 24,
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#1B5E20',
+    marginBottom: 22,
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
-  inputGroup: { marginBottom: 20 },
+  inputGroup: { marginBottom: 18 },
   inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#2E7D32',
-    marginBottom: 8,
+    marginBottom: 7,
+    letterSpacing: 0.2,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
+    backgroundColor: '#F4F8F4',
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#E0E0E0',
+    borderColor: '#C8E6C9',
     paddingHorizontal: 14,
-    height: 56,
+    height: 54,
   },
   inputRowError: {
     borderColor: '#F44336',
@@ -814,59 +814,59 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     color: '#212121',
-    height: 56,
+    height: 54,
   },
   eyeBtn: { padding: 6 },
   forgotBtn: {
     alignSelf: 'flex-end',
-    marginBottom: 16,
+    marginBottom: 18,
     paddingVertical: 2,
   },
   forgotText: {
-    color: '#388E3C',
-    fontWeight: '600',
-    fontSize: 14,
+    color: '#2E7D32',
+    fontWeight: '700',
+    fontSize: 13,
   },
   loginBtn: {
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: 'hidden',
-    shadowColor: '#2E7D32',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.40,
+    shadowRadius: 10,
+    elevation: 6,
     marginBottom: 0,
   },
   loginBtnGradient: {
-    height: 56,
+    height: 54,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 14,
   },
   loginBtnText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
-    letterSpacing: 1.5,
+    fontWeight: '800',
+    letterSpacing: 2,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 18,
   },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#E0E0E0' },
-  dividerText: { marginHorizontal: 12, color: '#9E9E9E', fontWeight: '500' },
-  // Google sign-in placeholder
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#E8F5E9' },
+  dividerText: { marginHorizontal: 12, color: '#9E9E9E', fontWeight: '600', fontSize: 12 },
+  // Google sign-in
   googleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
-    borderRadius: 16,
-    height: 56,
+    borderRadius: 14,
+    height: 54,
     borderWidth: 1.5,
     borderColor: '#E0E0E0',
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -889,27 +889,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 24,
   },
-  signupPrompt: { color: 'rgba(255,255,255,0.9)', fontSize: 16 },
+  signupPrompt: { color: 'rgba(255,255,255,0.88)', fontSize: 15 },
   signupLink: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '800',
     textDecorationLine: 'underline',
   },
 
   /* ── Google Role Picker Modal ── */
   roleModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
   },
   roleModalSheet: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: 32,
+    paddingBottom: 36,
   },
   roleModalHandle: {
     width: 40,
@@ -921,7 +921,7 @@ const styles = StyleSheet.create({
   },
   roleModalTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#1B5E20',
     textAlign: 'center',
   },
@@ -938,7 +938,7 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 16,
     borderRadius: 16,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   roleIconCircle: {
     width: 44,
@@ -949,14 +949,14 @@ const styles = StyleSheet.create({
   },
   roleCardLabel: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   roleCancelBtn: {
-    marginTop: 4,
+    marginTop: 6,
     paddingVertical: 14,
     alignItems: 'center',
-    borderRadius: 12,
-    backgroundColor: '#F5F5F5',
+    borderRadius: 14,
+    backgroundColor: '#E8F5E9',
   },
   roleCancelText: {
     fontSize: 15,

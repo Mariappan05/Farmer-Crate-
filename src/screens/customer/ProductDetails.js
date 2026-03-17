@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -409,7 +409,7 @@ export default function ProductDetails({ navigation, route }) {
   if (loading && !product) {
     return (
       <View style={styles.centered}>
-        <StatusBar backgroundColor="#1B5E20" barStyle="light-content" />
+        <StatusBar backgroundColor="#103A12" barStyle="light-content" />
         <ActivityIndicator size="large" color="#4CAF50" />
         <Text style={{ marginTop: 12, color: '#666' }}>Loading product...</Text>
       </View>
@@ -419,7 +419,7 @@ export default function ProductDetails({ navigation, route }) {
   if (!product) {
     return (
       <View style={styles.centered}>
-        <StatusBar backgroundColor="#1B5E20" barStyle="light-content" />
+        <StatusBar backgroundColor="#103A12" barStyle="light-content" />
         <MaterialCommunityIcons name="alert-circle-outline" size={64} color="#ccc" />
         <Text style={{ marginTop: 12, color: '#666', fontSize: 16 }}>Product not found</Text>
         <TouchableOpacity style={styles.goBackBtn} onPress={() => navigation.goBack()}>
@@ -653,7 +653,7 @@ export default function ProductDetails({ navigation, route }) {
           activeOpacity={0.8}
         >
           <LinearGradient
-            colors={inStock ? ['#1B5E20', '#388E3C'] : ['#999', '#aaa']}
+            colors={inStock ? ['#103A12', '#1B5E20', '#2E7D32'] : ['#999', '#aaa']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.buyNowGradient}

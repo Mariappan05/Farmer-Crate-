@@ -308,7 +308,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
   if (loading && !order) {
     return (
       <View style={[trackStyles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <View style={trackStyles.headerBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={trackStyles.backBtn}>
             <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -328,7 +328,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
   if (error && !order) {
     return (
       <View style={[trackStyles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <View style={trackStyles.headerBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={trackStyles.backBtn}>
             <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -361,7 +361,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
   /* -- Main render ------------------------------------------- */
   return (
     <View style={[trackStyles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       <View style={trackStyles.headerBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={trackStyles.backBtn}>

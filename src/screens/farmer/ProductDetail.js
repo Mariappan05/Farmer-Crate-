@@ -158,7 +158,7 @@ const ProductDetail = ({ navigation, route }) => {
   if (loading) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <ActivityIndicator size="large" color="#4CAF50" />
         <Text style={{ marginTop: 12, color: '#666' }}>Loading product...</Text>
       </View>
@@ -182,11 +182,11 @@ const ProductDetail = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
       <LinearGradient
-        colors={['#1B5E20', '#388E3C']}
+        colors={['#103A12', '#1B5E20', '#2E7D32']}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>

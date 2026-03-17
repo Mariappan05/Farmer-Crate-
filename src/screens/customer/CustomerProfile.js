@@ -36,6 +36,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
 import { pickImage, uploadImageToCloudinary, optimizeImageUrl } from '../../services/cloudinaryService';
 import { useAuth } from '../../context/AuthContext';
@@ -229,12 +230,12 @@ const ddStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: '#333' },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: '#333' },
   closeBtn: { padding: 4 },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F4F8F4',
     borderRadius: 10,
     marginHorizontal: 16,
     marginVertical: 10,
@@ -487,7 +488,7 @@ const CustomerProfile = ({ navigation }) => {
   if (isLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <View style={styles.headerBar}>
           <Text style={styles.headerTitle}>My Profile</Text>
         </View>
@@ -519,7 +520,7 @@ const CustomerProfile = ({ navigation }) => {
   /* ── Render ─────────────────────────────────────────────────────── */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header bar */}
       <View style={styles.headerBar}>
@@ -551,8 +552,13 @@ const CustomerProfile = ({ navigation }) => {
           />
         }
       >
-        {/* ── Profile Header (green background) ────────────────────── */}
-        <View style={styles.profileHeaderBg}>
+        {/* ── Profile Header ────────────────────────────────────── */}
+        <LinearGradient
+          colors={['#103A12', '#1B5E20', '#2E7D32']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.profileHeaderBg}
+        >
           {/* Avatar */}
           <TouchableOpacity
             onPress={isEditing ? handleImagePick : null}
@@ -589,7 +595,7 @@ const CustomerProfile = ({ navigation }) => {
             <Ionicons name="person" size={12} color="#1B5E20" />
             <Text style={styles.roleBadgeText}>Customer</Text>
           </View>
-        </View>
+        </LinearGradient>
 
         {/* ── Personal Information Card ────────────────────────────── */}
         <View style={styles.card}>
@@ -921,11 +927,11 @@ const CustomerProfile = ({ navigation }) => {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f1f8e9' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
 
   /* Header bar */
   headerBar: {
-    backgroundColor: '#1B5E20',
+    backgroundColor: '#103A12',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -933,59 +939,59 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     ...Platform.select({
       android: { elevation: 6 },
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 6 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.18, shadowRadius: 6 },
     }),
   },
   headerBackBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#fff', flex: 1, textAlign: 'center' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#fff', flex: 1, textAlign: 'center' },
   editToggleBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   editToggleBtnActive: {
-    backgroundColor: '#FFF3F3',
+    backgroundColor: 'rgba(255,255,255,0.28)',
   },
 
   /* Profile header gradient area */
   profileHeaderBg: {
-    backgroundColor: '#1B5E20',
     alignItems: 'center',
     paddingTop: 10,
-    paddingBottom: 28,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    paddingBottom: 30,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    overflow: 'hidden',
   },
 
-  avatarWrapper: { position: 'relative', marginBottom: 12 },
+  avatarWrapper: { position: 'relative', marginBottom: 14 },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 104,
+    height: 104,
+    borderRadius: 52,
     borderWidth: 3,
     borderColor: '#fff',
   },
   avatarFallback: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#E8F5E9',
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: 'rgba(255,255,255,0.22)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: '#fff',
+    borderColor: 'rgba(255,255,255,0.6)',
   },
-  avatarInitial: { fontSize: 36, fontWeight: 'bold', color: '#1B5E20' },
+  avatarInitial: { fontSize: 36, fontWeight: '800', color: '#fff' },
   cameraOverlay: {
     position: 'absolute',
     bottom: 2,
@@ -1000,20 +1006,20 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
 
-  profileName: { fontSize: 20, fontWeight: '700', color: '#fff' },
-  profileEmail: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  profileName: { fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+  profileEmail: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 3 },
 
   roleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 20,
     marginTop: 10,
   },
-  roleBadgeText: { fontSize: 12, fontWeight: '600', color: '#1B5E20' },
+  roleBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
 
   /* Cards */
   card: {
@@ -1025,16 +1031,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F0F0F0',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6 },
-      android: { elevation: 3 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 7 },
+      android: { elevation: 4 },
     }),
   },
   cardEditing: {
     borderColor: '#A5D6A7',
     borderWidth: 1.5,
     ...Platform.select({
-      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 8 },
-      android: { elevation: 4 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.14, shadowRadius: 8 },
+      android: { elevation: 5 },
     }),
   },
   cardHeader: {
@@ -1044,9 +1050,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#F0F0F0',
   },
-  cardHeaderText: { fontSize: 15, fontWeight: '700', color: '#333', flex: 1 },
+  cardHeaderText: { fontSize: 15, fontWeight: '800', color: '#1A1A1A', flex: 1 },
   editingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1056,7 +1062,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 10,
   },
-  editingBadgeText: { fontSize: 11, color: '#1B5E20', fontWeight: '600' },
+  editingBadgeText: { fontSize: 11, color: '#1B5E20', fontWeight: '700' },
 
   /* Form fields */
   formField: {
@@ -1064,20 +1070,20 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingVertical: 11,
     borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f5',
+    borderBottomColor: '#F5F5F5',
   },
-  fieldLabel: { fontSize: 11, color: '#999', fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.3 },
+  fieldLabel: { fontSize: 11, color: '#999', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
   fieldLabelActive: { color: '#1B5E20' },
-  fieldValue: { fontSize: 14, color: '#333', marginTop: 4 },
+  fieldValue: { fontSize: 14, color: '#1A1A1A', marginTop: 4 },
   input: {
     fontSize: 14,
-    color: '#222',
-    backgroundColor: '#F7FAF7',
+    color: '#1A1A1A',
+    backgroundColor: '#F4F8F4',
     borderWidth: 1.5,
-    borderColor: '#A5D6A7',
-    borderRadius: 10,
+    borderColor: '#C8E6C9',
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 7,
+    paddingVertical: Platform.OS === 'ios' ? 11 : 8,
     marginTop: 5,
   },
 
@@ -1086,15 +1092,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F7FAF7',
+    backgroundColor: '#F4F8F4',
     borderWidth: 1.5,
-    borderColor: '#A5D6A7',
-    borderRadius: 10,
+    borderColor: '#C8E6C9',
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 7,
+    paddingVertical: Platform.OS === 'ios' ? 11 : 8,
     marginTop: 5,
   },
-  dropdownText: { fontSize: 14, color: '#222' },
+  dropdownText: { fontSize: 14, color: '#1A1A1A' },
 
   /* Save/Cancel action row */
   actionRow: {
@@ -1109,13 +1115,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#E8F5E9',
     borderRadius: 14,
     paddingVertical: 15,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#C8E6C9',
   },
-  cancelBtnText: { color: '#777', fontWeight: '600', fontSize: 15 },
+  cancelBtnText: { color: '#777', fontWeight: '700', fontSize: 15 },
   saveBtn: {
     flex: 2,
     flexDirection: 'row',
@@ -1126,11 +1132,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 15,
     ...Platform.select({
-      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
-      android: { elevation: 4 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8 },
+      android: { elevation: 5 },
     }),
   },
-  saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 
   /* Menu items */
   menuItem: {
@@ -1140,18 +1146,18 @@ const styles = StyleSheet.create({
   },
   menuItemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#F0F0F0',
   },
   menuIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: '#E8F5E9',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  menuLabel: { flex: 1, fontSize: 15, color: '#333', fontWeight: '500' },
+  menuLabel: { flex: 1, fontSize: 15, color: '#1A1A1A', fontWeight: '600' },
 
   logoutBtn: {
     flexDirection: 'row',
@@ -1161,9 +1167,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF3F3',
     marginHorizontal: 14,
     marginTop: 16,
-    borderRadius: 14,
+    borderRadius: 16,
     paddingVertical: 15,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#FFCDD2',
   },
   logoutText: { fontSize: 15, fontWeight: '700', color: '#F44336' },
@@ -1172,7 +1178,7 @@ const styles = StyleSheet.create({
   logoutOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
   logoutModal: {
     backgroundColor: '#fff', borderRadius: 24, padding: 28, alignItems: 'center', width: '100%',
-    shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 16,
+    shadowColor: '#1B5E20', shadowOpacity: 0.18, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 16,
   },
   logoutIconCircle: {
     width: 72, height: 72, borderRadius: 36, backgroundColor: '#F44336',
@@ -1183,8 +1189,8 @@ const styles = StyleSheet.create({
   logoutModalMsg: { fontSize: 14, color: '#757575', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
   logoutModalBtns: { flexDirection: 'row', gap: 12, width: '100%' },
   logoutCancelBtn: {
-    flex: 1, backgroundColor: '#F5F5F5', borderRadius: 14, paddingVertical: 14,
-    alignItems: 'center', borderWidth: 1, borderColor: '#E0E0E0',
+    flex: 1, backgroundColor: '#E8F5E9', borderRadius: 14, paddingVertical: 14,
+    alignItems: 'center', borderWidth: 1, borderColor: '#C8E6C9',
   },
   logoutCancelText: { fontSize: 15, fontWeight: '700', color: '#424242' },
   logoutConfirmBtn: {
@@ -1205,11 +1211,11 @@ const styles = StyleSheet.create({
 
   /* Skeleton header */
   skeletonHeader: {
-    backgroundColor: '#1B5E20',
     alignItems: 'center',
     paddingVertical: 24,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    backgroundColor: '#1B5E20',
   },
 });
 
@@ -1226,14 +1232,14 @@ const ppStyles = StyleSheet.create({
   option: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
   optionIcon: { width: 50, height: 50, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   optionText: { flex: 1 },
-  optionLabel: { fontSize: 16, fontWeight: '700', color: '#212121' },
+  optionLabel: { fontSize: 16, fontWeight: '800', color: '#212121' },
   optionSub: { fontSize: 12, color: '#9E9E9E', marginTop: 2 },
-  divider: { height: 1, backgroundColor: '#F5F5F5', marginVertical: 2 },
+  divider: { height: 1, backgroundColor: '#EEF5EE', marginVertical: 2 },
   cancelBtn: {
-    marginTop: 12, backgroundColor: '#F5F5F5', borderRadius: 14,
+    marginTop: 12, backgroundColor: '#E8F5E9', borderRadius: 14,
     paddingVertical: 14, alignItems: 'center',
   },
-  cancelText: { fontSize: 15, fontWeight: '700', color: '#757575' },
+  cancelText: { fontSize: 15, fontWeight: '800', color: '#757575' },
 });
 
 export default CustomerProfile;

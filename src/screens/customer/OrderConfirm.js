@@ -54,19 +54,18 @@ const ConfettiDot = ({ delay, x, color, size = 8 }) => {
   const opacity = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 1, 0] });
 
   return (
-    <Animated.View
-      style={{
-        position: 'absolute',
-        left: x,
-        top: 20,
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: color,
-        opacity,
-        transform: [{ translateY }],
-      }}
-    />
+    <View style={{ position: 'absolute', left: x, top: 20 }}>
+      <Animated.View
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: color,
+          opacity,
+          transform: [{ translateY }],
+        }}
+      />
+    </View>
   );
 };
 
@@ -110,12 +109,19 @@ const OrderConfirm = ({ navigation, route }) => {
 
   // ── Derived data ──
   const orderId = order?.order_id || order?.id || 'N/A';
-  const totalAmount = order?.total_amount || 0;
+  const totalAmount = parseFloat(order?.total_amount || order?.total_price || 0) || 0;
   const paymentMethod = order?.payment_method || 'COD';
   const qrCodeStr = order?.qr_code || '';
-  const subtotal = order?.subtotal || totalAmount;
-  const adminCommission = order?.admin_commission || 0;
-  const deliveryCharges = order?.delivery_charges || 0;
+  const subtotal = parseFloat(order?.subtotal || totalAmount) || 0;
+  const adminCommission = parseFloat(order?.admin_commission || 0) || 0;
+  const deliveryCharges = parseFloat(order?.delivery_charges || 0) || 0;
+
+  // Product names from items
+  const orderItems = order?.items || [];
+  const productNames = orderItems.map((item) => {
+    const name = item.name || item.product_name || item.product?.name || `Product #${item.product_id || item.id || ''}`;
+    return `${name}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`;
+  });
 
   const deliveryAddr = order?.delivery_address;
   const addressText = typeof deliveryAddr === 'string'
@@ -134,7 +140,7 @@ const OrderConfirm = ({ navigation, route }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Green accent top bar */}
       <View style={styles.greenBar}>
@@ -175,12 +181,17 @@ const OrderConfirm = ({ navigation, route }) => {
 
         <Animated.View style={{ opacity: contentOpacity, transform: [{ translateY: contentSlide }] }}>
 
-          {/* ── Order ID Card ── */}
+          {/* ── Items Ordered Card ── */}
           <View style={styles.orderIdCard}>
             <View style={styles.orderIdRow}>
-              <View>
-                <Text style={styles.orderIdLabel}>Order ID</Text>
-                <Text style={styles.orderIdValue}>#{orderId}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.orderIdLabel}>Items Ordered</Text>
+                {productNames.length > 0
+                  ? productNames.map((pName, idx) => (
+                      <Text key={idx} style={styles.orderIdValue} numberOfLines={2}>{pName}</Text>
+                    ))
+                  : <Text style={styles.orderIdValue}>Your order has been placed</Text>
+                }
               </View>
               <View style={styles.statusBadge}>
                 <View style={styles.statusDot} />
@@ -192,7 +203,7 @@ const OrderConfirm = ({ navigation, route }) => {
           {/* ── Order Summary Card ── */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <MaterialCommunityIcons name="receipt-text-outline" size={20} color="#1B5E20" />
+              <MaterialCommunityIcons name="receipt-outline" size={20} color="#1B5E20" />
               <Text style={styles.cardTitle}>Order Summary</Text>
             </View>
 
@@ -445,7 +456,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
@@ -544,7 +555,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,

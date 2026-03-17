@@ -179,7 +179,7 @@ const TransporterProfile = ({ navigation }) => {
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>

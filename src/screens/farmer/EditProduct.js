@@ -585,11 +585,11 @@ const EditProduct = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
       <LinearGradient
-        colors={['#1B5E20', '#388E3C']}
+        colors={['#103A12', '#1B5E20', '#2E7D32']}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -774,7 +774,7 @@ const EditProduct = ({ navigation }) => {
 export default EditProduct;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   emptyText: { marginTop: 12, fontSize: 15, color: '#999', textAlign: 'center' },
   addFirstBtn: {
@@ -784,7 +784,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
   },
-  addFirstBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  addFirstBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 
   header: {
     flexDirection: 'row',
@@ -796,7 +796,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 20,
   },
   backBtn: { padding: 6 },
-  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
 
   searchContainer: {
     flexDirection: 'row',
@@ -808,7 +808,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
@@ -822,7 +822,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#E8F5E9',
   },
   filterChipText: { fontSize: 13, fontWeight: '600' },
 
@@ -833,7 +833,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     overflow: 'hidden',
     elevation: 3,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 6,
@@ -877,11 +877,11 @@ const styles = StyleSheet.create({
   statusTextSmall: { fontSize: 12, fontWeight: '600' },
 
   cardBody: { padding: 14 },
-  productName: { fontSize: 18, fontWeight: '700', color: '#333' },
+  productName: { fontSize: 18, fontWeight: '800', color: '#333' },
   productCategory: { fontSize: 13, color: '#888', marginTop: 2 },
   productDesc: { fontSize: 13, color: '#666', marginTop: 6 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 10 },
-  price: { fontSize: 20, fontWeight: '700', color: '#1B5E20' },
+  price: { fontSize: 20, fontWeight: '800', color: '#1B5E20' },
   unit: { fontSize: 14, color: '#666', marginLeft: 2 },
   quantity: { fontSize: 13, color: '#888', marginLeft: 'auto' },
 
@@ -897,7 +897,7 @@ const styles = StyleSheet.create({
   actionBtnText: { fontSize: 13, fontWeight: '600' },
 
   /* Modal */
-  modalContainer: { flex: 1, backgroundColor: '#F5F5F5' },
+  modalContainer: { flex: 1, backgroundColor: '#F4F8F4' },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -908,8 +908,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#333' },
-  saveText: { fontSize: 16, fontWeight: '700', color: '#4CAF50' },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#333' },
+  saveText: { fontSize: 16, fontWeight: '800', color: '#4CAF50' },
   modalForm: { padding: 16, paddingBottom: 40 },
 
   label: { fontSize: 14, fontWeight: '600', color: '#333', marginTop: 14, marginBottom: 6 },
@@ -989,7 +989,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   quickEditCard: { backgroundColor: '#fff', width: '85%', borderRadius: 16, padding: 20 },
-  quickEditTitle: { fontSize: 18, fontWeight: '700', color: '#333', marginBottom: 8 },
+  quickEditTitle: { fontSize: 18, fontWeight: '800', color: '#333', marginBottom: 8 },
   quickEditBtns: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 12 },
   qeBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
 });
@@ -1006,12 +1006,12 @@ const epStyles = StyleSheet.create({
   option: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
   optionIcon: { width: 50, height: 50, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   optionText: { flex: 1 },
-  optionLabel: { fontSize: 16, fontWeight: '700', color: '#212121' },
+  optionLabel: { fontSize: 16, fontWeight: '800', color: '#212121' },
   optionSub: { fontSize: 12, color: '#9E9E9E', marginTop: 2 },
-  divider: { height: 1, backgroundColor: '#F5F5F5', marginVertical: 2 },
+  divider: { height: 1, backgroundColor: '#EEF5EE', marginVertical: 2 },
   cancelBtn: {
-    marginTop: 12, backgroundColor: '#F5F5F5', borderRadius: 14,
+    marginTop: 12, backgroundColor: '#E8F5E9', borderRadius: 14,
     paddingVertical: 14, alignItems: 'center',
   },
-  cancelText: { fontSize: 15, fontWeight: '700', color: '#757575' },
+  cancelText: { fontSize: 15, fontWeight: '800', color: '#757575' },
 });

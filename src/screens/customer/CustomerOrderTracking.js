@@ -1,4 +1,4 @@
-﻿/**
+/**
  * CustomerOrderTracking.js
  * Animated order tracking - conversion of Flutter customer_order_tracking.dart (1126 lines)
  *
@@ -275,7 +275,7 @@ const CustomerOrderTracking = ({ navigation, route }) => {
   if (loading && !order) {
     return (
       <View style={[trackStyles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <View style={trackStyles.headerBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={trackStyles.backBtn}>
             <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -295,7 +295,7 @@ const CustomerOrderTracking = ({ navigation, route }) => {
   if (error && !order) {
     return (
       <View style={[trackStyles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <View style={trackStyles.headerBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={trackStyles.backBtn}>
             <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -327,7 +327,7 @@ const CustomerOrderTracking = ({ navigation, route }) => {
   /* -- Main render ------------------------------------------- */
   return (
     <View style={[trackStyles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
       <View style={trackStyles.headerBar}>

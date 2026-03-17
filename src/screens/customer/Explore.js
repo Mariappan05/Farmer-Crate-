@@ -374,10 +374,10 @@ export default function Explore({ navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar backgroundColor="#1B5E20" barStyle="light-content" />
+      <StatusBar backgroundColor="#103A12" barStyle="light-content" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#2E7D32', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>Explore</Text>
           <TouchableOpacity
@@ -504,7 +504,7 @@ export default function Explore({ navigation }) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={['#1B5E20', '#388E3C']}
+              colors={['#103A12', '#1B5E20', '#2E7D32']}
               tintColor="#1B5E20"
             />
           }
@@ -531,7 +531,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
   },
-  headerTitle: { fontSize: 24, fontWeight: '700', color: '#fff' },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
   viewToggle: {
     width: 40,
     height: 40,
@@ -561,8 +561,8 @@ const styles = StyleSheet.create({
   catChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 20,
+    backgroundColor: '#F4F8F4',
+    borderRadius: 22,
     paddingHorizontal: 14,
     paddingVertical: 8,
     gap: 4,
@@ -577,13 +577,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginHorizontal: 16,
     marginTop: 8,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 12,
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+    shadowOpacity: 0.09,
+    shadowRadius: 7,
     zIndex: 10,
   },
   recentHeader: {
@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  recentTitle: { fontSize: 14, fontWeight: '700', color: '#333' },
+  recentTitle: { fontSize: 14, fontWeight: '800', color: '#1A1A1A' },
   clearBtn: { fontSize: 13, color: '#E53935', fontWeight: '600' },
   recentItem: {
     flexDirection: 'row',
@@ -620,14 +620,14 @@ const styles = StyleSheet.create({
   gridCard: {
     width: CARD_WIDTH,
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
     marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    elevation: 3,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowRadius: 6,
   },
   gridImageWrapper: { position: 'relative' },
   gridImage: {
@@ -650,13 +650,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 6,
   },
-  gridPrice: { fontSize: 14, fontWeight: '700', color: '#1B5E20' },
+  gridPrice: { fontSize: 14, fontWeight: '800', color: '#1B5E20' },
   gridUnit: { fontSize: 11, fontWeight: '400', color: '#888' },
   addCartBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#4CAF50',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#2E7D32',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -665,16 +665,16 @@ const styles = StyleSheet.create({
   /* List Card */
   listCard: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 12,
     flexDirection: 'row',
     marginBottom: 10,
     marginHorizontal: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
+    elevation: 3,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
     gap: 12,
   },
   listImage: { width: 80, height: 80, borderRadius: 10 },
@@ -705,7 +705,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 6,
   },
-  listPrice: { fontSize: 15, fontWeight: '700', color: '#1B5E20' },
+  listPrice: { fontSize: 15, fontWeight: '800', color: '#1B5E20' },
   listUnit: { fontSize: 11, fontWeight: '400', color: '#888' },
   listCartBtn: {
     flexDirection: 'row',
@@ -725,7 +725,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 60,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#444', marginTop: 12 },
+  emptyTitle: { fontSize: 17, fontWeight: '800', color: '#444', marginTop: 12 },
   emptySubtitle: { fontSize: 13, color: '#888', marginTop: 4 },
 
   /* List Content */

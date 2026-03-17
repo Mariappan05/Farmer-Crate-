@@ -394,7 +394,7 @@ const FarmerDetails = ({ navigation, route }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       <ScrollView
         refreshControl={
@@ -464,12 +464,12 @@ const FarmerDetails = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F4F8F4',
   },
   loadingText: { marginTop: 12, fontSize: 14, color: '#666' },
   goBackBtn: {
@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
   },
   profileName: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#fff',
     marginTop: 10,
   },
@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     elevation: 3,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -572,20 +572,20 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     overflow: 'hidden',
     elevation: 1,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 2,
   },
   productImage: { width: 90, height: 90 },
   productImagePlaceholder: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#E8F5E9',
     justifyContent: 'center',
     alignItems: 'center',
   },
   productInfo: { flex: 1, padding: 10, justifyContent: 'center' },
   productName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  productPrice: { fontSize: 15, fontWeight: '700', color: '#1B5E20', marginTop: 4 },
+  productPrice: { fontSize: 15, fontWeight: '800', color: '#1B5E20', marginTop: 4 },
   productCategory: { fontSize: 12, color: '#888', marginTop: 2 },
   productStock: { fontSize: 12, color: '#666', marginTop: 2 },
 
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     padding: 12,
     elevation: 1,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 2,
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
   orderStatusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   orderStatusText: { fontSize: 11, fontWeight: '600' },
   orderDate: { fontSize: 12, color: '#888', marginTop: 4 },
-  orderAmount: { fontSize: 15, fontWeight: '700', color: '#1B5E20', marginTop: 4 },
+  orderAmount: { fontSize: 15, fontWeight: '800', color: '#1B5E20', marginTop: 4 },
 
   // Customer card
   customerCard: {
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
     elevation: 1,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 2,
@@ -655,7 +655,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#1B5E20' },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#1B5E20' },
   modalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

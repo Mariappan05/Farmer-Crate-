@@ -218,7 +218,7 @@ const AppSettings = ({ navigation }) => {
   /* ── Render ─────────────────────────────────────────────────────── */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
       <View style={styles.header}>
@@ -574,7 +574,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: '#1B5E20',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.06,
         shadowRadius: 5,
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 8,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#E8F5E9',
     justifyContent: 'center',
     alignItems: 'center',
   },

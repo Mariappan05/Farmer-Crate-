@@ -1,4 +1,4 @@
-﻿/**
+/**
  * TransporterLive.js
  * Live delivery simulation - conversion of Flutter transpoterlive.dart (880 lines)
  *
@@ -328,7 +328,7 @@ const TransporterLive = ({ navigation, route }) => {
   if (loading && !order) {
     return (
       <View style={[liveStyles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
         <View style={liveStyles.headerBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
             <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -348,7 +348,7 @@ const TransporterLive = ({ navigation, route }) => {
 
   return (
     <View style={[liveStyles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
       <View style={liveStyles.headerBar}>

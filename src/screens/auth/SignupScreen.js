@@ -368,6 +368,7 @@ const SignupScreen = ({ navigation }) => {
 
   // Refs
   const scrollRef = useRef(null);
+  const skipDistrictResetRef = useRef(false);
 
   /* ── Animations ─────────────────────────────────────────────────────── */
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -437,8 +438,12 @@ const SignupScreen = ({ navigation }) => {
     }).start();
   }, [currentStep, stepAnim, fadeAnim, progressAnim]);
 
-  // Reset district when state changes
+  // Reset district when state changes (skip when map/GPS sets both simultaneously)
   useEffect(() => {
+    if (skipDistrictResetRef.current) {
+      skipDistrictResetRef.current = false;
+      return;
+    }
     setDistrict('');
   }, [state]);
 
@@ -448,7 +453,11 @@ const SignupScreen = ({ navigation }) => {
     if (fields.city)     setCity(fields.city);
     if (fields.pincode)  setPincode(fields.pincode);
     if (fields.zone)     setZone(fields.zone);
-    if (fields.state)    setState(fields.state);
+    if (fields.state) {
+      // If a district is also coming from the map, flag the effect to skip clearing it
+      if (fields.district) skipDistrictResetRef.current = true;
+      setState(fields.state);
+    }
     if (fields.district) setDistrict(fields.district);
     setShowMapPicker(false);
   }, []);
@@ -474,8 +483,10 @@ const SignupScreen = ({ navigation }) => {
         setPincode(a.postcode || '');
         const zone = a.suburb || a.neighbourhood || a.quarter || a.locality || a.hamlet || a.village || a.road || '';
         setZone(zone);
+        const detectedDistrict = a.state_district || a.district || a.county || '';
+        if (detectedDistrict) skipDistrictResetRef.current = true;
         setState(a.state || '');
-        setDistrict(a.state_district || a.district || a.county || '');
+        setDistrict(detectedDistrict);
         setCity(a.city || a.town || a.village || a.municipality || '');
         console.log('[SignupScreen] GPS location filled:', res.data.display_name);
       } else {
@@ -584,19 +595,22 @@ const SignupScreen = ({ navigation }) => {
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
+      // Build address string: include city and address line
+      const fullAddress = [addressLine.trim(), city.trim()].filter(Boolean).join(', ');
+
+      // Base payload with field names the backend expects
       const payload = {
-        username: username.trim(),
-        password,
-        email: email.trim(),
-        full_name: fullName.trim(),
-        phone: phone.trim(),
         role,
-        address_line: addressLine.trim(),
-        city: city.trim(),
-        state: state.trim(),
-        district: district.trim(),
-        pincode: pincode.trim(),
-        zone: zone.trim(),
+        name:           fullName.trim(),
+        email:          email.trim(),
+        password,
+        mobile_number:  phone.trim(),   // farmer + customer use mobile_number
+        address:        fullAddress,
+        city:           city.trim(),
+        state:          state.trim(),
+        district:       district.trim(),
+        pincode:        pincode.trim(),
+        zone:           zone.trim(),
       };
 
       if (role === 'farmer') {
@@ -604,10 +618,13 @@ const SignupScreen = ({ navigation }) => {
       }
 
       if (role === 'transporter') {
-        payload.company_name = companyName.trim();
-        payload.vehicle_type = vehicleType.trim();
-        payload.aadhar_number = aadharNumber.trim();
-        payload.pan_number = panNumber.trim();
+        // Transporter model uses mobileNumber (camelCase)
+        payload.mobileNumber   = phone.trim();
+        delete payload.mobile_number;
+        payload.company_name   = companyName.trim();
+        payload.vehicle_type   = vehicleType.trim();
+        payload.aadhar_number  = aadharNumber.trim();
+        payload.pan_number     = panNumber.trim();
         payload.voter_id_number = voterIdNumber.trim();
         payload.license_number = licenseNumber.trim();
       }
@@ -626,13 +643,13 @@ const SignupScreen = ({ navigation }) => {
         toastRef.current?.show(data.message || 'Registration failed. Please try again.', 'error');
       }
     } catch (e) {
-      if (e?.response?.status === 409 || (e.message && e.message.includes('409'))) {
-        Alert.alert(
-          'Email Already Registered',
-          'This email is already registered. Please use a different email or sign in.',
-        );
+      const status   = e?.response?.status;
+      const serverMsg = e?.response?.data?.message || e.message || 'Something went wrong.';
+
+      if (status === 409 || status === 400) {
+        // Duplicate email / mobile or validation error from the server
+        Alert.alert('Registration Failed', serverMsg);
       } else {
-        const serverMsg = e?.response?.data?.message || e.message || 'Something went wrong.';
         toastRef.current?.show(serverMsg, 'error');
       }
     } finally {

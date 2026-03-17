@@ -492,8 +492,8 @@ const AdminOrders = ({ navigation }) => {
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
-        <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.headerBar}>
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
+        <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.headerBar}>
           <Text style={styles.headerTitle}>Orders</Text>
         </LinearGradient>
         <View style={{ padding: 16 }}>
@@ -512,10 +512,10 @@ const AdminOrders = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.headerBar}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.headerBar}>
         <Text style={styles.headerTitle}>Orders</Text>
         <Text style={styles.headerSub}>{orders.length} total orders</Text>
       </LinearGradient>
@@ -616,17 +616,17 @@ const AdminOrders = ({ navigation }) => {
 /* ========================================================================== */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
 
   /* Header */
   headerBar: {
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 18,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
   },
-  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 0.2 },
   headerSub: { color: '#C8E6C9', fontSize: 13, marginTop: 2 },
 
   /* Search */
@@ -636,14 +636,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 12,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 6,
     minHeight: 52,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    elevation: 3,
+    shadowColor: '#1B5E20',
+    shadowOpacity: 0.09,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
   searchIconWrap: {
@@ -665,15 +665,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 1.5,
     borderColor: '#BDBDBD',
     marginRight: 8,
     backgroundColor: '#fff',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
+    elevation: 2,
+    shadowColor: '#1B5E20',
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
   },
   filterDot: { width: 6, height: 6, borderRadius: 3, marginRight: 4 },
@@ -682,17 +682,17 @@ const styles = StyleSheet.create({
   /* Order Card */
   orderCard: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 14,
     marginBottom: 12,
-    elevation: 3,
-    shadowColor: '#000',
+    elevation: 4,
+    shadowColor: '#1B5E20',
     shadowOpacity: 0.09,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
   },
   orderCardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  orderId: { fontSize: 15, fontWeight: '700', color: '#212121' },
+  orderId: { fontSize: 15, fontWeight: '800', color: '#1A1A1A' },
   orderDate: { fontSize: 12, color: '#9E9E9E', marginTop: 1 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   statusBadgeText: { fontSize: 11, fontWeight: '700' },
@@ -700,7 +700,7 @@ const styles = StyleSheet.create({
   /* Product images */
   productImagesRow: { marginBottom: 8 },
   productThumb: { marginRight: 10, alignItems: 'center', width: 60 },
-  productThumbImg: { width: 52, height: 52, borderRadius: 10, backgroundColor: '#f5f5f5' },
+  productThumbImg: { width: 52, height: 52, borderRadius: 10, backgroundColor: '#F4F8F4' },
   productThumbPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   productThumbName: { fontSize: 10, color: '#757575', marginTop: 3, textAlign: 'center' },
   productThumbCategory: { fontSize: 9, color: '#9E9E9E', marginTop: 1, textAlign: 'center', fontStyle: 'italic' },
@@ -721,16 +721,16 @@ const styles = StyleSheet.create({
     borderTopColor: '#F0F0F0',
     paddingTop: 10,
   },
-  orderTotal: { fontSize: 17, fontWeight: '700', color: '#1B5E20' },
+  orderTotal: { fontSize: 17, fontWeight: '800', color: '#1B5E20' },
   trackBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#388E3C',
+    backgroundColor: '#2E7D32',
     paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: 8,
+    borderRadius: 10,
   },
-  trackBtnText: { color: '#fff', fontWeight: '600', fontSize: 13, marginLeft: 4 },
+  trackBtnText: { color: '#fff', fontWeight: '700', fontSize: 13, marginLeft: 4 },
 
   /* Modal */
   modalOverlay: {
@@ -753,11 +753,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#212121' },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#1A1A1A' },
   modalStatusBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, marginBottom: 12 },
   modalStatusText: { fontSize: 12, fontWeight: '700' },
   modalLabel: { fontSize: 12, color: '#9E9E9E', marginTop: 10, fontWeight: '600' },
-  modalValue: { fontSize: 14, color: '#212121', fontWeight: '500', marginTop: 2 },
+  modalValue: { fontSize: 14, color: '#1A1A1A', fontWeight: '500', marginTop: 2 },
   modalSub: { fontSize: 12, color: '#757575', marginTop: 1 },
   modalItemRow: {
     flexDirection: 'row',
@@ -766,10 +766,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F5F5F5',
   },
-  modalItemImg: { width: 44, height: 44, borderRadius: 8, backgroundColor: '#f5f5f5' },
-  modalItemName: { fontSize: 14, fontWeight: '600', color: '#212121' },
+  modalItemImg: { width: 44, height: 44, borderRadius: 8, backgroundColor: '#F4F8F4' },
+  modalItemName: { fontSize: 14, fontWeight: '700', color: '#1A1A1A' },
   modalItemQty: { fontSize: 12, color: '#757575', marginTop: 2 },
-  modalItemTotal: { fontSize: 14, fontWeight: '700', color: '#1B5E20' },
+  modalItemTotal: { fontSize: 14, fontWeight: '800', color: '#1B5E20' },
   modalTotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -777,15 +777,15 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1.5,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#E8F5E9',
   },
-  modalTotalLabel: { fontSize: 16, fontWeight: '700', color: '#212121' },
-  modalTotalValue: { fontSize: 18, fontWeight: '700', color: '#1B5E20' },
+  modalTotalLabel: { fontSize: 16, fontWeight: '800', color: '#1A1A1A' },
+  modalTotalValue: { fontSize: 18, fontWeight: '800', color: '#1B5E20' },
   modalPaymentRow: { marginTop: 8 },
 
   /* Empty */
   emptyWrap: { alignItems: 'center', paddingVertical: 60 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#424242', marginTop: 12 },
+  emptyTitle: { fontSize: 17, fontWeight: '800', color: '#424242', marginTop: 12 },
   emptySubtitle: { fontSize: 13, color: '#9E9E9E', marginTop: 4, textAlign: 'center' },
 });
 

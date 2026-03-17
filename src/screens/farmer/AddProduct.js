@@ -224,10 +224,10 @@ const AddProduct = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -528,7 +528,7 @@ const AddProduct = ({ navigation }) => {
 export default AddProduct;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 20,
   },
   backBtn: { padding: 6 },
-  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
 
   formContainer: { padding: 16, paddingBottom: 40 },
 
@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
   submitBtn: { marginTop: 24, borderRadius: 14, overflow: 'hidden' },
   submitGradient: { paddingVertical: 15, alignItems: 'center', justifyContent: 'center' },
   submitRow: { flexDirection: 'row', alignItems: 'center' },
-  submitText: { color: '#fff', fontSize: 17, fontWeight: '700', marginLeft: 8 },
+  submitText: { color: '#fff', fontSize: 17, fontWeight: '800', marginLeft: 8 },
   /* Date input */
   dateInput: {
     backgroundColor: '#fff',
@@ -661,14 +661,14 @@ const pStyles = StyleSheet.create({
   option: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
   optionIcon: { width: 50, height: 50, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   optionText: { flex: 1 },
-  optionLabel: { fontSize: 16, fontWeight: '700', color: '#212121' },
+  optionLabel: { fontSize: 16, fontWeight: '800', color: '#212121' },
   optionSub: { fontSize: 12, color: '#9E9E9E', marginTop: 2 },
-  divider: { height: 1, backgroundColor: '#F5F5F5', marginVertical: 2 },
+  divider: { height: 1, backgroundColor: '#EEF5EE', marginVertical: 2 },
   cancelBtn: {
-    marginTop: 12, backgroundColor: '#F5F5F5', borderRadius: 14,
+    marginTop: 12, backgroundColor: '#E8F5E9', borderRadius: 14,
     paddingVertical: 14, alignItems: 'center',
   },
-  cancelText: { fontSize: 15, fontWeight: '700', color: '#757575' },
+  cancelText: { fontSize: 15, fontWeight: '800', color: '#757575' },
 });
 
 /* Date picker modal styles */
@@ -677,20 +677,20 @@ const dpStyles = StyleSheet.create({
   card: {
     backgroundColor: '#fff', borderRadius: 20, padding: 20,
     width: '92%',
-    elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12,
+    elevation: 10, shadowColor: '#1B5E20', shadowOpacity: 0.15, shadowRadius: 12,
   },
-  title: { fontSize: 17, fontWeight: '700', color: '#333', marginBottom: 16, textAlign: 'center' },
+  title: { fontSize: 17, fontWeight: '800', color: '#333', marginBottom: 16, textAlign: 'center' },
   columnsRow: { flexDirection: 'row', gap: 8 },
   col: { flex: 1 },
-  colLabel: { fontSize: 12, fontWeight: '700', color: '#888', textAlign: 'center', marginBottom: 6 },
+  colLabel: { fontSize: 12, fontWeight: '800', color: '#888', textAlign: 'center', marginBottom: 6 },
   scroll: { height: 200 },
   item: { paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8, marginBottom: 2, alignItems: 'center' },
   itemActive: { backgroundColor: '#E8F5E9' },
   itemText: { fontSize: 15, color: '#555' },
-  itemTextActive: { color: '#1B5E20', fontWeight: '700' },
+  itemTextActive: { color: '#1B5E20', fontWeight: '800' },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16, gap: 12 },
-  cancelBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, backgroundColor: '#F5F5F5' },
+  cancelBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, backgroundColor: '#E8F5E9' },
   cancelText: { fontSize: 14, fontWeight: '600', color: '#666' },
   confirmBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, backgroundColor: '#4CAF50' },
-  confirmText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  confirmText: { fontSize: 14, fontWeight: '800', color: '#fff' },
 });

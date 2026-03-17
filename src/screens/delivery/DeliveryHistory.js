@@ -232,10 +232,10 @@ const DeliveryHistory = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.header}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
         <Text style={styles.headerTitle}>Delivery History</Text>
         <Text style={styles.headerSub}>{stats.total} total orders</Text>
       </LinearGradient>
@@ -313,11 +313,11 @@ const DeliveryHistory = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F8E9' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
 
   // Header
   header: { paddingHorizontal: 20, paddingVertical: 16 },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  headerTitle: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
   headerSub: { fontSize: 13, color: '#C8E6C9', marginTop: 2 },
 
   // Stats
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#F0F0F0',
   },
   statCard: {
     flex: 1,
@@ -336,25 +336,25 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     gap: 4,
   },
-  statVal: { fontSize: 14, fontWeight: 'bold', color: '#333' },
-  statLabel: { fontSize: 10, color: '#888' },
+  statVal: { fontSize: 14, fontWeight: '800', color: '#1A1A1A' },
+  statLabel: { fontSize: 10, color: '#888', fontWeight: '500' },
 
   // Chips
   chipRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, backgroundColor: '#fff' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 20,
+    backgroundColor: '#F4F8F4',
+    borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 6,
   },
-  chipActive: { backgroundColor: '#388E3C' },
-  chipText: { fontSize: 13, color: '#555', fontWeight: '500' },
+  chipActive: { backgroundColor: '#1B5E20' },
+  chipText: { fontSize: 13, color: '#666', fontWeight: '600' },
   chipTextActive: { color: '#fff', fontWeight: '700' },
   chipCount: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     borderRadius: 10,
     paddingHorizontal: 7,
     paddingVertical: 1,
@@ -367,11 +367,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 4,
   },
   cardTop: {
     flexDirection: 'row',
@@ -381,16 +381,16 @@ const styles = StyleSheet.create({
   },
   cardTopLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   typeIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  orderId: { fontSize: 14, fontWeight: '700', color: '#333' },
-  typeLabel: { fontSize: 11, color: '#888', marginTop: 1 },
+  orderId: { fontSize: 14, fontWeight: '700', color: '#1A1A1A' },
+  typeLabel: { fontSize: 11, color: '#888', marginTop: 1, fontWeight: '500' },
   badge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+  badgeText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
 
   // Addresses
   addressSection: { marginBottom: 10, gap: 6 },
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
 
   // Person
   personRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  personName: { fontSize: 13, color: '#555', flex: 1 },
+  personName: { fontSize: 13, color: '#555', flex: 1, fontWeight: '500' },
 
   // Bottom
   cardBottom: {
@@ -408,11 +408,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#f5f5f5',
+    borderTopColor: '#F0F0F0',
     paddingTop: 10,
   },
   date: { fontSize: 11, color: '#aaa' },
-  earnings: { fontSize: 16, fontWeight: 'bold', color: '#1B5E20' },
+  earnings: { fontSize: 16, fontWeight: '800', color: '#1B5E20' },
 
   // Loading
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
 
   // Empty
   emptyContainer: { alignItems: 'center', paddingVertical: 50, gap: 8 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#1A1A1A' },
   emptyMsg: { fontSize: 14, color: '#888', textAlign: 'center', paddingHorizontal: 40 },
 });
 

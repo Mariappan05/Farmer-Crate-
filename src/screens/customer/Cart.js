@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...Platform.select({
       android: { elevation: 6 },
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 6 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 6 },
     }),
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     justifyContent: 'center', alignItems: 'center',
   },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#fff' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#fff' },
   headerSub: { fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 1 },
   headerTrashBtn: {
     width: 40, height: 40, borderRadius: 20,
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   deleteBtn: { padding: 6, borderRadius: 10, backgroundColor: '#FFF3F3' },
   farmerRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   farmerName: { fontSize: 12, color: '#777', flex: 1 },
-  unitPrice: { fontSize: 14, fontWeight: '700', color: '#1B5E20', marginTop: 6 },
+  unitPrice: { fontSize: 14, fontWeight: '800', color: '#1B5E20', marginTop: 6 },
   unitLabel: { fontSize: 12, fontWeight: '400', color: '#888' },
   qtyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
   qtyControl: {
@@ -468,30 +468,30 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: '#C8E6C9', paddingVertical: 2,
   },
   qtyBtn: { paddingHorizontal: 12, paddingVertical: 6, justifyContent: 'center', alignItems: 'center' },
-  qtyText: { fontSize: 15, fontWeight: '700', color: '#222', minWidth: 28, textAlign: 'center' },
-  lineTotal: { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
+  qtyText: { fontSize: 15, fontWeight: '800', color: '#222', minWidth: 28, textAlign: 'center' },
+  lineTotal: { fontSize: 15, fontWeight: '800', color: '#1A1A1A' },
   priceCard: {
     backgroundColor: '#fff', borderRadius: 18, padding: 18, marginTop: 6, marginBottom: 8,
     ...Platform.select({
       android: { elevation: 2 },
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 },
     }),
   },
   priceCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  priceCardTitle: { fontSize: 16, fontWeight: '700', color: '#222' },
+  priceCardTitle: { fontSize: 16, fontWeight: '800', color: '#222' },
   divider: { height: 1, backgroundColor: '#F0F0F0' },
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
   priceLabel: { fontSize: 14, color: '#666' },
   priceVal: { fontSize: 14, fontWeight: '600', color: '#333' },
   freeBadge: { backgroundColor: '#E8F5E9', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 3 },
-  freeBadgeText: { fontSize: 12, fontWeight: '700', color: '#2E7D32' },
+  freeBadgeText: { fontSize: 12, fontWeight: '800', color: '#2E7D32' },
   freeHintRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: '#FFF8E1', borderRadius: 8,
     paddingHorizontal: 10, paddingVertical: 6,
   },
   freeHintText: { fontSize: 12, color: '#E65100', flex: 1 },
-  totalLabel: { fontSize: 16, fontWeight: '700', color: '#111' },
+  totalLabel: { fontSize: 16, fontWeight: '800', color: '#111' },
   totalVal: { fontSize: 20, fontWeight: '800', color: '#1B5E20' },
   savingRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
     width: 140, height: 140, borderRadius: 70,
     backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginBottom: 24,
   },
-  emptyTitle: { fontSize: 22, fontWeight: '700', color: '#222', marginBottom: 10 },
+  emptyTitle: { fontSize: 22, fontWeight: '800', color: '#222', marginBottom: 10 },
   emptySub: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 22, marginBottom: 28 },
   browseBtn: {
     backgroundColor: '#1B5E20', borderRadius: 28,
@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
       ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
     }),
   },
-  browseBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  browseBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#fff',
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 14,
     ...Platform.select({
       android: { elevation: 14 },
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 8 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 8 },
     }),
   },
   bottomLeft: { flex: 1 },
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
     }),
   },
   checkoutBtnOff: { backgroundColor: '#A5D6A7' },
-  checkoutBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  checkoutBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 });
 
 export default Cart;

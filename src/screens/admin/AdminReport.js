@@ -223,8 +223,8 @@ const AdminReport = ({ navigation }) => {
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
-        <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.headerBar}>
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
+        <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.headerBar}>
           <Text style={styles.headerTitle}>Reports</Text>
         </LinearGradient>
         <View style={styles.loaderWrap}>
@@ -240,10 +240,10 @@ const AdminReport = ({ navigation }) => {
   /* ==================================================================== */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#1B5E20', '#388E3C']} style={styles.headerBar}>
+      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.headerBar}>
         <Text style={styles.headerTitle}>Reports</Text>
         <Text style={styles.headerSub}>{MONTHS[currentMonth]} {currentYear}</Text>
       </LinearGradient>

@@ -21,7 +21,7 @@ import AdminProfile from '../screens/admin/AdminProfile';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
-const SLIDE = { animation: 'slide_from_right', gestureEnabled: true, contentStyle: { backgroundColor: '#fff' } };
+const SLIDE = { animation: 'slide_from_right', gestureEnabled: true, contentStyle: { backgroundColor: '#F4F8F4' } };
 
 const ADMIN_TABS = [
   { name: 'Dashboard',    icon: 'home',                iconOff: 'home-outline',                 label: 'Dashboard' },
@@ -31,20 +31,22 @@ const ADMIN_TABS = [
   { name: 'Users',        icon: 'people',              iconOff: 'people-outline',                label: 'Users' },
 ];
 
+// ─── Modern Pill Tab Button ──────────────────────────────────────────────────
 const AnimatedTabBtn = ({ item, onPress, isFocused }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const dotAnim = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
+  const pillAnim  = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
   useEffect(() => {
-    Animated.spring(dotAnim, { toValue: isFocused ? 1 : 0, useNativeDriver: true, tension: 80, friction: 8 }).start();
+    Animated.spring(pillAnim, { toValue: isFocused ? 1 : 0, useNativeDriver: false, tension: 120, friction: 10 }).start();
     if (isFocused) Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.85, duration: 80, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, tension: 200, friction: 7, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 0.88, duration: 70, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, tension: 220, friction: 7, useNativeDriver: true }),
     ]).start();
   }, [isFocused]);
+  const pillBg = pillAnim.interpolate({ inputRange: [0, 1], outputRange: ['rgba(232,245,233,0)', '#E8F5E9'] });
+  const pillW  = pillAnim.interpolate({ inputRange: [0, 1], outputRange: [32, 58] });
   return (
-    <TouchableOpacity onPress={onPress} style={ts.tabBtn} activeOpacity={1}>
-      {/* top indicator stripe */}
-      <Animated.View style={[ts.topDot, { transform: [{ scaleX: dotAnim }], opacity: dotAnim }]} />
+    <TouchableOpacity onPress={onPress} style={ts.tabBtn} activeOpacity={0.8}>
+      <Animated.View style={[ts.pill, { backgroundColor: pillBg, width: pillW }]} />
       <Animated.View style={[ts.iconWrap, { transform: [{ scale: scaleAnim }] }]}>
         <Ionicons name={isFocused ? item.icon : item.iconOff} size={22} color={isFocused ? '#1B5E20' : '#9E9E9E'} />
       </Animated.View>
@@ -55,9 +57,9 @@ const AnimatedTabBtn = ({ item, onPress, isFocused }) => {
 
 const AdminTabBar = ({ state, navigation }) => {
   const insets = useSafeAreaInsets();
-  const extraBottom = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 20 : 4);
+  const pb = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 16 : 4);
   return (
-    <View style={[ts.bar, { paddingBottom: extraBottom }]}>
+    <View style={[ts.bar, { paddingBottom: pb }]}>
       {state.routes.map((route, index) => (
         <AnimatedTabBtn
           key={route.key}
@@ -72,16 +74,16 @@ const AdminTabBar = ({ state, navigation }) => {
 
 const ts = StyleSheet.create({
   bar: {
-    flexDirection: 'row', backgroundColor: '#fff',
-    borderTopWidth: 1, borderTopColor: '#F0F0F0',
-    paddingTop: 6,
-    ...Platform.select({ android: { elevation: 12 }, ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 8 } }),
+    flexDirection: 'row', backgroundColor: '#FFFFFF',
+    borderTopWidth: 0, paddingTop: 8,
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    ...Platform.select({ android: { elevation: 20 }, ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.10, shadowRadius: 14 } }),
   },
-  tabBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 0 },
-  iconWrap: { width: 30, height: 26, alignItems: 'center', justifyContent: 'center' },
-  label: { fontSize: 9, color: '#9E9E9E', fontWeight: '500', marginTop: 1 },
+  tabBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, position: 'relative' },
+  pill: { position: 'absolute', top: 0, height: 38, borderRadius: 19, zIndex: 0 },
+  iconWrap: { width: 28, height: 26, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  label: { fontSize: 9, color: '#9E9E9E', fontWeight: '500', marginTop: 1, zIndex: 1 },
   labelActive: { color: '#1B5E20', fontWeight: '700' },
-  topDot: { width: '70%', height: 3, borderRadius: 0, backgroundColor: '#1B5E20', borderBottomLeftRadius: 3, borderBottomRightRadius: 3, marginBottom: 4 },
 });
 
 const AdminTabs = () => (
