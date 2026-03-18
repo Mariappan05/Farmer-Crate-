@@ -24,6 +24,7 @@ const SellingHistory = ({ navigation }) => {
   const toastRef = useRef(null);
 
   const [deliveredOrders, setDeliveredOrders] = useState([]);
+  const [allOrders, setAllOrders] = useState([]); // Add this to store all orders for debugging
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dateRange, setDateRange] = useState('All Time');
@@ -36,22 +37,107 @@ const SellingHistory = ({ navigation }) => {
 
   const fetchHistory = useCallback(async () => {
     try {
-      const data = await getFarmerOrders();
-      const all = Array.isArray(data) ? data : data?.orders || [];
+      console.log('[SellingHistory] Fetching farmer orders...');
+      
+      // Try multiple approaches to get farmer orders
+      let data = null;
+      try {
+        data = await getFarmerOrders();
+        console.log('[SellingHistory] Got data from getFarmerOrders:', data);
+      } catch (error) {
+        console.log('[SellingHistory] getFarmerOrders failed, trying direct API call:', error.message);
+        
+        // Fallback: try direct API call
+        try {
+          const response = await api.get('/farmers/orders');
+          data = response.data;
+          console.log('[SellingHistory] Got data from direct API call:', data);
+        } catch (apiError) {
+          console.log('[SellingHistory] Direct API call failed, trying completed orders endpoint:', apiError.message);
+          
+          // Another fallback: try completed orders endpoint
+          try {
+            const completedResponse = await api.get('/farmers/orders/completed');
+            data = completedResponse.data;
+            console.log('[SellingHistory] Got data from completed orders endpoint:', data);
+          } catch (completedError) {
+            console.log('[SellingHistory] All endpoints failed:', completedError.message);
+            throw new Error('Unable to fetch order history from any endpoint');
+          }
+        }
+      }
+      
+      const all = Array.isArray(data) ? data : data?.orders || data?.data || [];
+      console.log('[SellingHistory] Processed orders array:', all);
+      
+      // Store all orders for debugging
+      setAllOrders(all);
 
-      // Filter delivered — backend uses current_status (COMPLETED or DELIVERED)
+      // Filter delivered — check multiple indicators of completion
       const delivered = all.filter(
-        (o) => ['DELIVERED', 'COMPLETED'].includes((o.current_status || o.status || '').toUpperCase())
+        (o) => {
+          const status = (o.current_status || o.status || '').toUpperCase();
+          const paymentStatus = (o.payment_status || '').toLowerCase();
+          
+          // Traditional completion statuses
+          const isTraditionallyDelivered = [
+            'DELIVERED', 
+            'COMPLETED', 
+            'FULFILLED'
+          ].includes(status);
+          
+          // Check if payment is completed (indicates successful transaction)
+          const isPaymentCompleted = paymentStatus === 'completed' || paymentStatus === 'success' || paymentStatus === 'paid';
+          
+          // For now, let's include ASSIGNED orders with completed payment
+          // This seems to be how your system works based on the logs
+          const isAssignedWithPayment = status === 'ASSIGNED' && isPaymentCompleted;
+          
+          const isDelivered = isTraditionallyDelivered || isAssignedWithPayment;
+          
+          console.log('[SellingHistory] Order', o.order_id || o.id, 'completion check:', { 
+            current_status: o.current_status, 
+            status: o.status, 
+            finalStatus: status,
+            payment_status: o.payment_status,
+            paymentStatus,
+            isTraditionallyDelivered,
+            isPaymentCompleted,
+            isAssignedWithPayment,
+            isDelivered
+          });
+          return isDelivered;
+        }
       );
+      
+      console.log('[SellingHistory] Delivered orders:', delivered);
 
       delivered.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
       setDeliveredOrders(delivered);
 
       // Compute stats
       const total = delivered.reduce(
-        (sum, o) => sum + parseFloat(o.total_price || o.total_amount || o.total || 0),
+        (sum, o) => {
+          const amount = parseFloat(
+            o.farmer_amount || 
+            o.total_price || 
+            o.total_amount || 
+            o.total || 
+            0
+          );
+          console.log('[SellingHistory] Order', o.order_id || o.id, 'revenue calculation:', {
+            farmer_amount: o.farmer_amount,
+            total_price: o.total_price,
+            total_amount: o.total_amount,
+            total: o.total,
+            calculatedAmount: amount
+          });
+          return sum + amount;
+        },
         0
       );
+      
+      console.log('[SellingHistory] Total revenue calculated:', total);
       setTotalRevenue(total);
       setOrderCount(delivered.length);
       setAvgOrderValue(delivered.length > 0 ? total / delivered.length : 0);
@@ -59,6 +145,7 @@ const SellingHistory = ({ navigation }) => {
       // Monthly
       computeMonthlyData(delivered);
     } catch (e) {
+      console.error('[SellingHistory] Fetch error:', e);
       toastRef.current?.show(e?.response?.data?.message || e.message || 'Failed to load selling history', 'error');
     } finally {
       setLoading(false);
@@ -67,18 +154,32 @@ const SellingHistory = ({ navigation }) => {
   }, []);
 
   const computeMonthlyData = (orders) => {
+    console.log('[SellingHistory] Computing monthly data for', orders.length, 'orders');
     const map = {};
     orders.forEach((o) => {
       const d = new Date(o.created_at || o.date);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       const label = d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
       if (!map[key]) map[key] = { key, label, total: 0, count: 0 };
-      map[key].total += parseFloat(o.total_price || o.total_amount || o.total || 0);
+      
+      const amount = parseFloat(
+        o.farmer_amount || 
+        o.total_price || 
+        o.total_amount || 
+        o.total || 
+        0
+      );
+      
+      map[key].total += amount;
       map[key].count += 1;
+      
+      console.log('[SellingHistory] Monthly data for', key, ':', { amount, total: map[key].total, count: map[key].count });
     });
 
     const sorted = Object.values(map).sort((a, b) => a.key.localeCompare(b.key));
-    setMonthlyData(sorted.slice(-6)); // last 6 months
+    const last6Months = sorted.slice(-6);
+    console.log('[SellingHistory] Final monthly data:', last6Months);
+    setMonthlyData(last6Months); // last 6 months
   };
 
   useEffect(() => { fetchHistory(); }, []);
@@ -111,9 +212,21 @@ const SellingHistory = ({ navigation }) => {
 
   // Filtered stats
   const filteredRevenue = filteredOrders.reduce(
-    (sum, o) => sum + parseFloat(o.total_price || o.total_amount || o.total || 0),
+    (sum, o) => {
+      const amount = parseFloat(
+        o.farmer_amount || 
+        o.total_price || 
+        o.total_amount || 
+        o.total || 
+        0
+      );
+      console.log('[SellingHistory] Filtered revenue calculation for order', o.order_id || o.id, ':', amount);
+      return sum + amount;
+    },
     0
   );
+  
+  console.log('[SellingHistory] Filtered orders count:', filteredOrders.length, 'Filtered revenue:', filteredRevenue);
 
   const maxMonthly = monthlyData.length > 0 ? Math.max(...monthlyData.map((m) => m.total)) : 1;
 
@@ -127,19 +240,62 @@ const SellingHistory = ({ navigation }) => {
   };
 
   const renderOrderCard = ({ item }) => {
+    console.log('[SellingHistory] Rendering order card for:', item);
+    
     // Resolve fields from Sequelize associations or flat fields
     const orderId = item.order_id || item.id;
-    const productName = item.Product?.name || item.product?.name || (() => {
-      if (item.items_json) {
-        try { const p = JSON.parse(item.items_json); return Array.isArray(p) && p[0] ? (p[0].name || p[0].product_name || '') : ''; } catch (_) { return ''; }
+    
+    // Try to get product name from multiple sources
+    let productName = 'Product';
+    if (item.Product?.name) {
+      productName = item.Product.name;
+    } else if (item.product?.name) {
+      productName = item.product.name;
+    } else if (item.items_json) {
+      try { 
+        const items = JSON.parse(item.items_json); 
+        if (Array.isArray(items) && items[0]) {
+          productName = items[0].name || items[0].product_name || items.map(i => i.name || i.product_name).filter(Boolean).join(', ') || 'Multiple Products';
+        }
+      } catch (e) { 
+        console.log('[SellingHistory] Error parsing items_json:', e);
       }
-      return '';
-    })() || 'Product';
-    const customerName = item.customer?.name || item.customer?.full_name || item.customer_name || 'Customer';
-    const total = parseFloat(item.total_price || item.total_amount || item.total || 0);
+    }
+    
+    // Try to get customer name from multiple sources
+    const customerName = item.customer?.name || 
+                        item.customer?.full_name || 
+                        item.customer_name || 
+                        item.user?.full_name ||
+                        item.user?.name ||
+                        'Customer';
+    
+    const total = parseFloat(
+      item.farmer_amount || 
+      item.total_price || 
+      item.total_amount || 
+      item.total || 
+      0
+    );
     const farmerAmt = parseFloat(item.farmer_amount || 0);
     const qty = item.quantity || 1;
-    const pricePerUnit = parseFloat(item.Product?.current_price || 0);
+    const pricePerUnit = parseFloat(
+      item.Product?.current_price || 
+      item.product?.current_price ||
+      item.Product?.price ||
+      item.product?.price ||
+      0
+    );
+    
+    console.log('[SellingHistory] Order card data:', {
+      orderId,
+      productName,
+      customerName,
+      total,
+      farmerAmt,
+      qty,
+      pricePerUnit
+    });
 
     return (
       <View style={[styles.orderCard, { borderLeftWidth: 4, borderLeftColor: '#4CAF50' }]}>
@@ -311,6 +467,24 @@ const SellingHistory = ({ navigation }) => {
             <Ionicons name="time-outline" size={64} color="#ccc" />
             <Text style={styles.emptyText}>No completed orders yet</Text>
             <Text style={styles.emptySubtext}>Your delivered orders will appear here</Text>
+            
+            {/* Debug section - show all orders for understanding */}
+            {deliveredOrders.length === 0 && (
+              <View style={styles.debugSection}>
+                <Text style={styles.debugTitle}>Debug: All Orders ({allOrders.length})</Text>
+                {allOrders.slice(0, 3).map((order, idx) => (
+                  <View key={idx} style={styles.debugOrder}>
+                    <Text style={styles.debugText}>Order {order.order_id || order.id}</Text>
+                    <Text style={styles.debugText}>Status: {order.current_status || order.status}</Text>
+                    <Text style={styles.debugText}>Payment: {order.payment_status}</Text>
+                    <Text style={styles.debugText}>Amount: ₹{order.farmer_amount || order.total_amount || order.total || 0}</Text>
+                  </View>
+                ))}
+                {allOrders.length > 3 && (
+                  <Text style={styles.debugText}>...and {allOrders.length - 3} more orders</Text>
+                )}
+              </View>
+            )}
           </View>
         }
       />
@@ -452,4 +626,34 @@ const styles = StyleSheet.create({
   emptyContainer: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { fontSize: 16, color: '#888', marginTop: 12, fontWeight: '600' },
   emptySubtext: { fontSize: 13, color: '#bbb', marginTop: 4 },
+  
+  /* Debug Section */
+  debugSection: {
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: '#FFF3E0',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFB74D',
+    marginHorizontal: 16,
+  },
+  debugTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#E65100',
+    marginBottom: 12,
+  },
+  debugOrder: {
+    backgroundColor: '#fff',
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF9800',
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
+  },
 });

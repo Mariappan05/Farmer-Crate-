@@ -73,11 +73,26 @@ const DeliveryDashboard = ({ navigation }) => {
   // ─── Fetch data ──────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     try {
+      console.log('[DeliveryDashboard] Starting to fetch data...');
+      console.log('[DeliveryDashboard] Auth state:', authState?.user);
+      console.log('[DeliveryDashboard] User role:', authState?.user?.role);
+      console.log('[DeliveryDashboard] Delivery person ID:', authState?.user?.delivery_person_id);
+      
       const [pickupRes, dropRes, profileRes] = await Promise.allSettled([
         getDeliveryPickups(),
         getDeliveryDrops(),
         api.get('/delivery-persons/profile'),
       ]);
+
+      console.log('[DeliveryDashboard] Pickup response status:', pickupRes.status);
+      console.log('[DeliveryDashboard] Drop response status:', dropRes.status);
+      
+      if (pickupRes.status === 'rejected') {
+        console.error('[DeliveryDashboard] Pickup fetch failed:', pickupRes.reason);
+      }
+      if (dropRes.status === 'rejected') {
+        console.error('[DeliveryDashboard] Drop fetch failed:', dropRes.reason);
+      }
 
       const pickups =
         pickupRes.status === 'fulfilled'
@@ -89,6 +104,11 @@ const DeliveryDashboard = ({ navigation }) => {
           ? Array.isArray(dropRes.value) ? dropRes.value
             : dropRes.value?.data || dropRes.value?.orders || []
           : [];
+
+      console.log('[DeliveryDashboard] Pickups count:', pickups.length);
+      console.log('[DeliveryDashboard] Drops count:', drops.length);
+      console.log('[DeliveryDashboard] Pickups data:', pickups);
+      console.log('[DeliveryDashboard] Drops data:', drops);
 
       setPickupOrders(pickups);
       setDeliveryOrders(drops);
@@ -123,7 +143,8 @@ const DeliveryDashboard = ({ navigation }) => {
         ).length,
       }));
     } catch (e) {
-      console.log('Dashboard fetch error:', e.message);
+      console.error('[DeliveryDashboard] Error fetching data:', e);
+      console.error('[DeliveryDashboard] Error details:', e.response?.data || e.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -363,7 +384,9 @@ const DeliveryDashboard = ({ navigation }) => {
           </View>
 
           {/* Quick Actions */}
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
+          </View>
           <View style={styles.quickActionsRow}>
             <TouchableOpacity
               style={styles.quickAction}
@@ -443,7 +466,8 @@ const DeliveryDashboard = ({ navigation }) => {
         </Animated.ScrollView>
       )}
       {/* Toast */}
-      <ToastMessage ref={toastRef} />    </View>
+      <ToastMessage ref={toastRef} />
+    </View>
   );
 };
 
@@ -503,7 +527,7 @@ const styles = StyleSheet.create({
 
   // Section
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1B5E20', paddingLeft: 10, borderLeftWidth: 3, borderLeftColor: '#43A047' },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1B5E20' },
 
   // Order cards
   orderCard: {

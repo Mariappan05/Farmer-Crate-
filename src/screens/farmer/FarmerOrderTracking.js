@@ -8,11 +8,13 @@ import {
   ActivityIndicator,
   StatusBar,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
+import * as orderService from '../../services/orderService';
 
 const STAGES = [
   { key: 'PLACED', label: 'Order Placed', icon: 'receipt-outline', iconLib: 'Ionicons' },
@@ -40,20 +42,89 @@ const FarmerOrderTracking = ({ navigation, route }) => {
 
   const fetchOrder = useCallback(async () => {
     try {
-      const id = orderId || order?.id;
+      const id = orderId || order?.id || order?.order_id;
       if (!id) return;
-      const { data } = await api.get(`/farmers/orders/${id}`);
-      setOrder(data?.order || data);
+      
+      console.log('[FarmerOrderTracking] Fetching order:', id);
+      
+      // First try to get detailed order with tracking info
+      let orderWithDetails = null;
+      try {
+        const trackingResp = await api.get(`/farmers/orders/${id}/track`);
+        orderWithDetails = trackingResp.data?.order || trackingResp.data;
+        console.log('[FarmerOrderTracking] Got order from tracking endpoint:', JSON.stringify(orderWithDetails, null, 2));
+      } catch (trackingError) {
+        console.log('[FarmerOrderTracking] Tracking endpoint not available:', trackingError.message);
+      }
+      
+      // If tracking endpoint didn't work, get from orders list
+      if (!orderWithDetails) {
+        const { data } = await api.get(`/farmers/orders`);
+        const orders = Array.isArray(data) ? data : data?.orders || data?.data || [];
+        
+        orderWithDetails = orders.find(o => 
+          (o.order_id && o.order_id.toString() === id.toString()) || 
+          (o.id && o.id.toString() === id.toString())
+        );
+      }
+      
+      if (orderWithDetails) {
+        console.log('[FarmerOrderTracking] Found order:', JSON.stringify(orderWithDetails, null, 2));
+        
+        // Check if we already have transporter details
+        let orderWithTransporters = { ...orderWithDetails };
+        
+        // Since transporter endpoints are not available to farmers,
+        // create meaningful placeholders with the IDs we have
+        if (orderWithDetails.source_transporter_id && !orderWithDetails.source_transporter) {
+          console.log('[FarmerOrderTracking] Creating source transporter placeholder for ID:', orderWithDetails.source_transporter_id);
+          orderWithTransporters.source_transporter = {
+            transporter_id: orderWithDetails.source_transporter_id,
+            name: 'Source Transporter',
+            mobile_number: null,
+            email: null,
+            address: null,
+            note: 'Contact details will be shared when pickup is scheduled'
+          };
+        }
+        
+        if (orderWithDetails.destination_transporter_id && !orderWithDetails.destination_transporter) {
+          console.log('[FarmerOrderTracking] Creating destination transporter placeholder for ID:', orderWithDetails.destination_transporter_id);
+          orderWithTransporters.destination_transporter = {
+            transporter_id: orderWithDetails.destination_transporter_id,
+            name: 'Destination Transporter',
+            mobile_number: null,
+            email: null,
+            address: null,
+            note: 'Contact details will be shared when delivery is scheduled'
+          };
+        }
+        
+        setOrder(orderWithTransporters);
+      } else {
+        console.error('[FarmerOrderTracking] Order not found');
+      }
+      
     } catch (e) {
-      console.error('Fetch tracking error:', e);
+      console.error('[FarmerOrderTracking] Fetch tracking error:', e.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [orderId, order?.id]);
+  }, [orderId, order?.id, order?.order_id]);
 
   useEffect(() => {
-    if (!routeOrder) fetchOrder();
+    if (routeOrder) {
+      // If we have order data from route, use it but still try to fetch updated data
+      console.log('[FarmerOrderTracking] Using route order data:', JSON.stringify(routeOrder, null, 2));
+      setOrder(routeOrder);
+      setLoading(false);
+      
+      // Still fetch updated data in background
+      fetchOrder();
+    } else {
+      fetchOrder();
+    }
 
     // Auto-refresh every 40 seconds
     refreshInterval.current = setInterval(() => {
@@ -66,6 +137,38 @@ const FarmerOrderTracking = ({ navigation, route }) => {
   }, []);
 
   const onRefresh = () => { setRefreshing(true); fetchOrder(); };
+
+  // Helper functions for extracting images
+  const getProductImage = (product) => {
+    if (!product) return null;
+    if (product.image_url) return product.image_url;
+    if (product.image) return product.image;
+    if (product.images && Array.isArray(product.images) && product.images.length > 0) {
+      const primaryImage = product.images.find(img => img.is_primary === true);
+      if (primaryImage && primaryImage.image_url) return primaryImage.image_url;
+      const firstImage = product.images[0];
+      if (firstImage && firstImage.image_url) return firstImage.image_url;
+    }
+    return null;
+  };
+
+  const getCustomerImage = (customer) => {
+    if (!customer) return null;
+    if (customer.image_url) return customer.image_url;
+    if (customer.image) return customer.image;
+    if (customer.photo) return customer.photo;
+    if (customer.profile_image) return customer.profile_image;
+    return null;
+  };
+
+  const getTransporterImage = (transporter) => {
+    if (!transporter) return null;
+    if (transporter.image_url) return transporter.image_url;
+    if (transporter.image) return transporter.image;
+    if (transporter.photo) return transporter.photo;
+    if (transporter.profile_image) return transporter.profile_image;
+    return null;
+  };
 
   const getCurrentStageIndex = () => {
     if (!order) return -1;
@@ -214,8 +317,10 @@ const FarmerOrderTracking = ({ navigation, route }) => {
         {/* Order Summary Card */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
-            <View>
-              <Text style={styles.summaryOrderId}>Order #{order?.id || order?.order_id}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.summaryProductName}>
+                {order?.Product?.name || order?.product?.name || order?.product_name || 'Product Order'}
+              </Text>
               <Text style={styles.summaryDate}>{formatDate(order?.created_at || order?.date)}</Text>
             </View>
             {isCancelled ? (
@@ -266,85 +371,186 @@ const FarmerOrderTracking = ({ navigation, route }) => {
           {STAGES.map((stage, idx) => renderTimelineStage(stage, idx))}
         </View>
 
-        {/* Product Info */}
-        {products.length > 0 && (
-          <View style={styles.infoCard}>
-            <Text style={styles.cardTitle}>Products</Text>
-            {products.map((p, idx) => (
-              <View key={idx} style={[styles.productRow, idx < products.length - 1 && styles.productBorder]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.productName}>{p.product_name || p.name}</Text>
-                  <Text style={styles.productMeta}>
-                    Qty: {p.quantity || 1} • ₹{parseFloat(p.price || 0).toFixed(2)}
-                  </Text>
-                </View>
-                <Text style={styles.productTotal}>
-                  ₹{(parseFloat(p.price || 0) * (p.quantity || 1)).toFixed(2)}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Customer Info */}
+        {/* Product Info with Image */}
         <View style={styles.infoCard}>
-          <Text style={styles.cardTitle}>Customer Information</Text>
-          <View style={styles.infoRow}>
-            <Ionicons name="person-outline" size={18} color="#666" />
-            <Text style={styles.infoText}>
-              {order?.customer_name || order?.user?.full_name || 'N/A'}
-            </Text>
-          </View>
-          {order?.delivery_address && (() => {
-            const raw = order.delivery_address;
-            let addr = raw;
-            if (typeof raw === 'string') { try { addr = JSON.parse(raw); } catch (_) {} }
-            const addrText = typeof addr === 'object' && addr !== null
-              ? [addr.full_name, addr.phone ? `Ph: ${addr.phone}` : null, addr.address_line, addr.city, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ')
-              : String(addr);
-            return (
-              <View style={styles.infoRow}>
-                <Ionicons name="location-outline" size={18} color="#666" />
-                <Text style={styles.infoText}>{addrText}</Text>
+          <Text style={styles.cardTitle}>Product Details</Text>
+          <View style={styles.productDetailRow}>
+            {getProductImage(order?.Product || order?.product) ? (
+              <Image 
+                source={{ uri: getProductImage(order?.Product || order?.product) }} 
+                style={styles.productImage}
+                onError={(error) => {
+                  console.log('[FarmerOrderTracking] Product image load error:', error.nativeEvent.error);
+                }}
+              />
+            ) : (
+              <View style={styles.productImagePlaceholder}>
+                <MaterialCommunityIcons name="food-apple-outline" size={32} color="#ccc" />
               </View>
-            );
-          })()}
-          {(order?.customer_phone || order?.user?.phone) && (
-            <View style={styles.infoRow}>
-              <Ionicons name="call-outline" size={18} color="#666" />
-              <Text style={styles.infoText}>{order.customer_phone || order.user?.phone}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Transporter Info */}
-        {(order?.transporter_name || order?.transporter) && (
-          <View style={styles.infoCard}>
-            <Text style={styles.cardTitle}>Transporter</Text>
-            <View style={styles.infoRow}>
-              <MaterialCommunityIcons name="truck-outline" size={18} color="#666" />
-              <Text style={styles.infoText}>
-                {order?.transporter_name || order?.transporter?.name || 'Assigned'}
+            )}
+            <View style={styles.productDetailInfo}>
+              <Text style={styles.productDetailName}>
+                {order?.Product?.name || order?.product?.name || order?.product_name || 'Unknown Product'}
+              </Text>
+              <Text style={styles.productDetailMeta}>
+                Quantity: {order?.quantity || 1} units
+              </Text>
+              <Text style={styles.productDetailMeta}>
+                Price: ₹{parseFloat(order?.Product?.current_price || order?.product?.price || order?.unit_price || 0).toFixed(2)} per unit
+              </Text>
+              <Text style={styles.productDetailTotal}>
+                Total: ₹{parseFloat(order?.total_amount || order?.total_price || order?.total || 0).toLocaleString('en-IN')}
               </Text>
             </View>
-            {(order?.transporter_phone || order?.transporter?.phone) && (
-              <View style={styles.infoRow}>
-                <Ionicons name="call-outline" size={18} color="#666" />
-                <Text style={styles.infoText}>
-                  {order.transporter_phone || order.transporter?.phone}
+          </View>
+        </View>
+
+        {/* Source Transporter Info */}
+        {(order?.source_transporter_id) && (
+          <View style={styles.infoCard}>
+            <Text style={styles.cardTitle}>Source Transporter (Pickup)</Text>
+            <View style={styles.transporterRow}>
+              {getTransporterImage(order?.source_transporter) ? (
+                <Image 
+                  source={{ uri: getTransporterImage(order?.source_transporter) }} 
+                  style={styles.transporterImage}
+                  onError={(error) => {
+                    console.log('[FarmerOrderTracking] Source transporter image load error:', error.nativeEvent.error);
+                  }}
+                />
+              ) : (
+                <View style={styles.transporterImagePlaceholder}>
+                  <MaterialCommunityIcons name="truck-outline" size={24} color="#888" />
+                </View>
+              )}
+              <View style={styles.transporterInfo}>
+                <Text style={styles.transporterName}>
+                  {order?.source_transporter?.name || 'Source Transporter'}
                 </Text>
+                {order?.source_transporter?.mobile_number ? (
+                  <Text style={styles.transporterContact}>
+                    📞 {order.source_transporter.mobile_number}
+                  </Text>
+                ) : (
+                  <Text style={styles.transporterPending}>
+                    {order?.source_transporter?.note || 'Contact details will be shared when pickup is scheduled'}
+                  </Text>
+                )}
+                {order?.source_transporter?.email && (
+                  <Text style={styles.transporterContact}>
+                    ✉️ {order.source_transporter.email}
+                  </Text>
+                )}
+                {order?.source_transporter?.address ? (
+                  <Text style={styles.transporterAddress}>
+                    📍 {order.source_transporter.address}
+                    {order.source_transporter.district && `, ${order.source_transporter.district}`}
+                    {order.source_transporter.state && `, ${order.source_transporter.state}`}
+                  </Text>
+                ) : (
+                  <Text style={styles.transporterPending}>
+                    Address details will be shared when pickup is scheduled
+                  </Text>
+                )}
               </View>
-            )}
-            {(order?.vehicle_number || order?.transporter?.vehicle_number) && (
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons name="car-side" size={18} color="#666" />
-                <Text style={styles.infoText}>
-                  {order.vehicle_number || order.transporter?.vehicle_number}
-                </Text>
-              </View>
-            )}
+            </View>
           </View>
         )}
+
+        {/* Destination Transporter Info */}
+        {(order?.destination_transporter_id) && (
+          <View style={styles.infoCard}>
+            <Text style={styles.cardTitle}>Destination Transporter (Delivery)</Text>
+            <View style={styles.transporterRow}>
+              {getTransporterImage(order?.destination_transporter) ? (
+                <Image 
+                  source={{ uri: getTransporterImage(order?.destination_transporter) }} 
+                  style={styles.transporterImage}
+                  onError={(error) => {
+                    console.log('[FarmerOrderTracking] Destination transporter image load error:', error.nativeEvent.error);
+                  }}
+                />
+              ) : (
+                <View style={styles.transporterImagePlaceholder}>
+                  <MaterialCommunityIcons name="truck-delivery-outline" size={24} color="#888" />
+                </View>
+              )}
+              <View style={styles.transporterInfo}>
+                <Text style={styles.transporterName}>
+                  {order?.destination_transporter?.name || 'Destination Transporter'}
+                </Text>
+                {order?.destination_transporter?.mobile_number ? (
+                  <Text style={styles.transporterContact}>
+                    📞 {order.destination_transporter.mobile_number}
+                  </Text>
+                ) : (
+                  <Text style={styles.transporterPending}>
+                    {order?.destination_transporter?.note || 'Contact details will be shared when delivery is scheduled'}
+                  </Text>
+                )}
+                {order?.destination_transporter?.email && (
+                  <Text style={styles.transporterContact}>
+                    ✉️ {order.destination_transporter.email}
+                  </Text>
+                )}
+                {order?.destination_transporter?.address ? (
+                  <Text style={styles.transporterAddress}>
+                    📍 {order.destination_transporter.address}
+                    {order.destination_transporter.district && `, ${order.destination_transporter.district}`}
+                    {order.destination_transporter.state && `, ${order.destination_transporter.state}`}
+                  </Text>
+                ) : (
+                  <Text style={styles.transporterPending}>
+                    Address details will be shared when delivery is scheduled
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Customer Info with Profile Image */}
+        <View style={styles.infoCard}>
+          <Text style={styles.cardTitle}>Customer Information</Text>
+          <View style={styles.customerRow}>
+            {getCustomerImage(order?.customer) ? (
+              <Image 
+                source={{ uri: getCustomerImage(order?.customer) }} 
+                style={styles.customerImage}
+                onError={(error) => {
+                  console.log('[FarmerOrderTracking] Customer image load error:', error.nativeEvent.error);
+                }}
+              />
+            ) : (
+              <View style={styles.customerImagePlaceholder}>
+                <Ionicons name="person" size={24} color="#888" />
+              </View>
+            )}
+            <View style={styles.customerInfo}>
+              <Text style={styles.customerName}>
+                {order?.customer?.name || order?.customer_name || order?.user?.full_name || 'Customer'}
+              </Text>
+              {(order?.customer?.mobile_number || order?.customer_phone || order?.user?.phone) && (
+                <Text style={styles.customerContact}>
+                  📞 {order?.customer?.mobile_number || order?.customer_phone || order?.user?.phone}
+                </Text>
+              )}
+              {order?.delivery_address && (() => {
+                const raw = order.delivery_address;
+                let addr = raw;
+                if (typeof raw === 'string') { try { addr = JSON.parse(raw); } catch (_) {} }
+                const addrText = typeof addr === 'object' && addr !== null
+                  ? [addr.address_line, addr.city, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ')
+                  : String(addr);
+                return (
+                  <Text style={styles.customerAddress}>
+                    📍 {addrText}
+                  </Text>
+                );
+              })()}
+            </View>
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
@@ -382,7 +588,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  summaryOrderId: { fontSize: 18, fontWeight: '800', color: '#333' },
+  summaryProductName: { fontSize: 18, fontWeight: '800', color: '#333' },
   summaryDate: { fontSize: 13, color: '#999', marginTop: 2 },
   summaryTotal: { fontSize: 22, fontWeight: '800', color: '#1B5E20' },
   cancelledBadge: { backgroundColor: '#FFEBEE', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 10 },
@@ -473,9 +679,128 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   infoText: { fontSize: 14, color: '#555', flex: 1 },
 
-  productRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  productBorder: { borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  productName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  productMeta: { fontSize: 12, color: '#888', marginTop: 2 },
-  productTotal: { fontSize: 14, fontWeight: '800', color: '#1B5E20' },
+  /* Product Detail Styles */
+  productDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  productImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
+    backgroundColor: '#F5F5F5',
+  },
+  productImagePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
+    backgroundColor: '#F0F4F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  productDetailInfo: {
+    flex: 1,
+  },
+  productDetailName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 4,
+  },
+  productDetailMeta: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 4,
+  },
+  productDetailTotal: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1B5E20',
+  },
+
+  /* Transporter Styles */
+  transporterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  transporterImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#F5F5F5',
+  },
+  transporterImagePlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#F0F4F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  transporterInfo: {
+    flex: 1,
+  },
+  transporterName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  transporterContact: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 2,
+  },
+  transporterAddress: {
+    fontSize: 12,
+    color: '#888',
+    lineHeight: 16,
+  },
+  transporterPending: {
+    fontSize: 12,
+    color: '#999',
+    fontStyle: 'italic',
+  },
+
+  /* Customer Styles */
+  customerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  customerImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#F5F5F5',
+  },
+  customerImagePlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#F0F4F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customerInfo: {
+    flex: 1,
+  },
+  customerName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  customerContact: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 2,
+  },
+  customerAddress: {
+    fontSize: 12,
+    color: '#888',
+    lineHeight: 16,
+  },
 });

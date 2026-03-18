@@ -261,6 +261,7 @@ const FarmerHome = ({ navigation }) => {
     activeCount: 0,
     pendingCount: 0,
     outOfStockCount: 0,
+    expiredCount: 0,
   });
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -284,10 +285,14 @@ const FarmerHome = ({ navigation }) => {
 
   const fetchData = useCallback(async () => {
     try {
+      console.log('[FarmerHome] Fetching products and orders...');
       const [prodRes, orderRes] = await Promise.allSettled([
         api.get('/products/farmer/me'),
         getFarmerOrders(),
       ]);
+
+      console.log('[FarmerHome] Product response:', prodRes);
+      console.log('[FarmerHome] Order response:', orderRes);
 
       const prodList =
         prodRes.status === 'fulfilled'
@@ -299,51 +304,197 @@ const FarmerHome = ({ navigation }) => {
         orderRes.status === 'fulfilled'
           ? Array.isArray(orderRes.value)
             ? orderRes.value
-            : orderRes.value?.orders || []
+            : orderRes.value?.orders || orderRes.value?.data || []
           : [];
 
-      setProducts(prodList);
+      console.log('[FarmerHome] Processed products:', prodList);
+      console.log('[FarmerHome] Processed orders:', orderList);
+
+      // Don't filter out expired products for farmers - they need to see them
+      // Just mark them as expired for display purposes
+      const currentDate = new Date();
+      const productsWithExpiry = prodList.map(prod => {
+        if (prod.harvest_date) {
+          const harvestDate = new Date(prod.harvest_date);
+          const isExpired = harvestDate < currentDate;
+          if (isExpired) {
+            console.log('[FarmerHome] Product expired:', prod.name, 'harvest date:', prod.harvest_date);
+          }
+          return { ...prod, isExpired };
+        }
+        return { ...prod, isExpired: false };
+      });
+      
+      console.log('[FarmerHome] Products with expiry status:', productsWithExpiry);
+
+      setProducts(productsWithExpiry);
       setOrders(orderList);
 
-      const activeCount = prodList.filter(
-        (p) => p.status === 'active' || p.status === 'ACTIVE' || p.is_active
+      const activeCount = productsWithExpiry.filter(
+        (p) => {
+          const isActive = (p.status === 'active' || p.status === 'ACTIVE' || p.is_active === true || p.is_active === 1) && !p.isExpired;
+          console.log('[FarmerHome] Product', p.name, 'active check:', { status: p.status, is_active: p.is_active, isExpired: p.isExpired, isActive });
+          return isActive;
+        }
       ).length;
-      const pendingCount = prodList.filter(
-        (p) => p.status === 'pending' || p.status === 'PENDING'
+      
+      const pendingCount = productsWithExpiry.filter(
+        (p) => {
+          const isPending = (p.status === 'pending' || p.status === 'PENDING' || p.status === 'INACTIVE' || p.is_active === false || p.is_active === 0) && !p.isExpired;
+          console.log('[FarmerHome] Product', p.name, 'pending check:', { status: p.status, is_active: p.is_active, isExpired: p.isExpired, isPending });
+          return isPending;
+        }
       ).length;
-      const outOfStockCount = prodList.filter(
-        (p) =>
-          p.quantity === 0 ||
-          p.stock === 0 ||
-          p.status === 'out_of_stock' ||
-          p.status === 'OUT_OF_STOCK'
+      
+      const outOfStockCount = productsWithExpiry.filter(
+        (p) => {
+          const isOutOfStock = (p.quantity === 0 || p.stock === 0 || p.available_quantity === 0 || 
+                              p.status === 'out_of_stock' || p.status === 'OUT_OF_STOCK') && !p.isExpired;
+          console.log('[FarmerHome] Product', p.name, 'out of stock check:', { 
+            quantity: p.quantity, 
+            stock: p.stock, 
+            available_quantity: p.available_quantity, 
+            status: p.status, 
+            isExpired: p.isExpired,
+            isOutOfStock 
+          });
+          return isOutOfStock;
+        }
       ).length;
+      
+      const expiredCount = productsWithExpiry.filter(p => p.isExpired).length;
+
+      console.log('[FarmerHome] Product counts:', { activeCount, pendingCount, outOfStockCount, expiredCount, total: productsWithExpiry.length });
 
       const activeOrders = orderList.filter(
-        (o) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED'
+        (o) => {
+          const isActive = o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && o.status !== 'COMPLETED';
+          console.log('[FarmerHome] Order', o.id || o.order_id, 'active check:', { status: o.status, isActive });
+          return isActive;
+        }
       ).length;
-      const deliveredOrders = orderList.filter((o) => o.status === 'DELIVERED');
+      
+      const deliveredOrders = orderList.filter((o) => {
+        const isDelivered = o.status === 'DELIVERED' || o.status === 'COMPLETED' || 
+                           (o.status === 'ASSIGNED' && (o.payment_status === 'completed' || o.payment_status === 'COMPLETED'));
+        console.log('[FarmerHome] Order', o.id || o.order_id, 'delivered check:', { status: o.status, payment_status: o.payment_status, isDelivered });
+        return isDelivered;
+      });
+      
       const revenue = deliveredOrders.reduce(
-        (sum, o) => sum + parseFloat(o.total_amount || o.total || 0),
+        (sum, o) => {
+          const amount = parseFloat(
+            o.farmer_amount || 
+            o.farmer_share || 
+            o.total_amount || 
+            o.total_price || 
+            o.total || 
+            o.amount || 
+            o.price || 
+            (o.quantity && o.unit_price ? o.quantity * o.unit_price : 0) ||
+            0
+          );
+          console.log('[FarmerHome] Order revenue:', { 
+            orderId: o.id || o.order_id, 
+            farmer_amount: o.farmer_amount,
+            farmer_share: o.farmer_share,
+            total_amount: o.total_amount,
+            total_price: o.total_price,
+            total: o.total,
+            amount: o.amount,
+            price: o.price,
+            quantity: o.quantity,
+            unit_price: o.unit_price,
+            calculatedAmount: amount
+          });
+          return sum + amount;
+        },
         0
       );
 
-      const ratings = prodList
-        .map((p) => parseFloat(p.average_rating || p.rating || 0))
+      console.log('[FarmerHome] Revenue calculation:', { deliveredOrdersCount: deliveredOrders.length, totalRevenue: revenue, deliveredOrders: deliveredOrders.map(o => ({ id: o.id, status: o.status, payment_status: o.payment_status, amount: o.farmer_amount || o.farmer_share || o.total_amount })) });
+
+      // Calculate ratings from both products and orders
+      const productRatings = productsWithExpiry
+        .filter(p => !p.isExpired)
+        .map((p) => {
+          const rating = parseFloat(
+            p.average_rating || 
+            p.rating || 
+            p.product_rating || 
+            p.user_rating || 
+            p.reviews?.average_rating ||
+            p.review_rating ||
+            p.farmer_rating ||
+            0
+          );
+          console.log('[FarmerHome] Product rating for', p.name, ':', {
+            average_rating: p.average_rating,
+            rating: p.rating,
+            product_rating: p.product_rating,
+            user_rating: p.user_rating,
+            reviews_avg: p.reviews?.average_rating,
+            review_rating: p.review_rating,
+            farmer_rating: p.farmer_rating,
+            calculatedRating: rating
+          });
+          return rating;
+        })
         .filter((r) => r > 0);
+        
+      // Also check order ratings/reviews
+      const orderRatings = orderList
+        .map((o) => {
+          const rating = parseFloat(
+            o.rating || 
+            o.farmer_rating || 
+            o.product_rating || 
+            o.review?.rating ||
+            o.customer_rating ||
+            o.order_rating ||
+            0
+          );
+          console.log('[FarmerHome] Order rating for', o.id || o.order_id, ':', {
+            rating: o.rating,
+            farmer_rating: o.farmer_rating,
+            product_rating: o.product_rating,
+            review_rating: o.review?.rating,
+            customer_rating: o.customer_rating,
+            order_rating: o.order_rating,
+            calculatedRating: rating
+          });
+          return rating;
+        })
+        .filter((r) => r > 0);
+        
+      const allRatings = [...productRatings, ...orderRatings];
       const avgRating =
-        ratings.length > 0
-          ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)
+        allRatings.length > 0
+          ? parseFloat((allRatings.reduce((a, b) => a + b, 0) / allRatings.length).toFixed(1))
           : 0;
+          
+      console.log('[FarmerHome] Rating calculation:', { productRatings, orderRatings, allRatings, averageRating: avgRating });
 
       setStats({
-        totalProducts: prodList.length,
+        totalProducts: productsWithExpiry.length,
         activeOrders,
         revenue,
         rating: avgRating,
         activeCount,
         pendingCount,
         outOfStockCount,
+        expiredCount,
+      });
+      
+      console.log('[FarmerHome] Final stats:', {
+        totalProducts: productsWithExpiry.length,
+        activeOrders,
+        revenue,
+        rating: avgRating,
+        activeCount,
+        pendingCount,
+        outOfStockCount,
+        expiredCount,
       });
     } catch (e) {
       console.error('FarmerHome fetch error:', e);
@@ -482,13 +633,13 @@ const FarmerHome = ({ navigation }) => {
     },
     {
       title: 'Revenue',
-      value: `₹${stats.revenue.toLocaleString('en-IN')}`,
+      value: stats.revenue > 0 ? `₹${stats.revenue.toLocaleString('en-IN')}` : '₹0',
       icon: 'cash-outline',
       gradient: ['#FF9800', '#F57C00'],
     },
     {
       title: 'Rating',
-      value: stats.rating > 0 ? `${stats.rating} ★` : 'N/A',
+      value: stats.rating > 0 ? `${stats.rating} ★` : 'No Rating',
       icon: 'star-outline',
       gradient: ['#9C27B0', '#7B1FA2'],
     },
@@ -969,105 +1120,250 @@ const FarmerHome = ({ navigation }) => {
             </View>
           </View>
 
-          {/* Individual product cards */}
-          {products.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Ionicons name="cube-outline" size={48} color="#ccc" />
-              <Text style={styles.emptyText}>No products listed yet</Text>
-            </View>
-          ) : (
-            products.slice(0, 6).map((prod, idx) => {
-              const isActive =
-                prod.status === 'active' || prod.status === 'ACTIVE' || prod.is_active;
-              const isPending =
-                prod.status === 'pending' || prod.status === 'PENDING';
-              const isOutOfStock =
-                prod.quantity === 0 || prod.stock === 0 ||
-                prod.status === 'out_of_stock' || prod.status === 'OUT_OF_STOCK';
-              const statusColor = isOutOfStock ? '#F44336' : isPending ? '#FF9800' : '#4CAF50';
-              const statusLabel = isOutOfStock ? 'Out of Stock' : isPending ? 'Pending' : 'Active';
-              const statusBg    = isOutOfStock ? '#FFEBEE'   : isPending ? '#FFF3E0'  : '#E8F5E9';
-              const rawImg      = prod.images?.[0];
-              const imgStr      = typeof rawImg === 'string'
-                ? rawImg
-                : rawImg?.url || rawImg?.secure_url || rawImg?.uri || null;
-              const imageUri    = imgStr
-                ? optimizeImageUrl(imgStr, { width: 90, height: 90 })
-                : null;
-              const price  = parseFloat(prod.price || prod.base_price || 0);
-              const stock  = prod.quantity ?? prod.stock ?? '—';
-              const rating = parseFloat(prod.average_rating || prod.rating || 0);
+          {/* Active products */}
+          {(() => {
+            const activeProducts = products.filter(p => !p.isExpired);
+            return activeProducts.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Ionicons name="cube-outline" size={48} color="#ccc" />
+                <Text style={styles.emptyText}>No active products listed yet</Text>
+              </View>
+            ) : (
+              activeProducts.slice(0, 6).map((prod, idx) => {
+                const isActive = (prod.status === 'active' || prod.status === 'ACTIVE' || prod.is_active === true || prod.is_active === 1);
+                const isPending = (prod.status === 'pending' || prod.status === 'PENDING' || prod.status === 'INACTIVE' || prod.is_active === false || prod.is_active === 0);
+                const isOutOfStock = (prod.quantity === 0 || prod.stock === 0 || prod.available_quantity === 0 ||
+                                    prod.status === 'out_of_stock' || prod.status === 'OUT_OF_STOCK');
+                
+                const statusColor = isOutOfStock ? '#F44336' : isPending ? '#FF9800' : '#4CAF50';
+                const statusLabel = isOutOfStock ? 'Out of Stock' : isPending ? 'Pending' : 'Active';
+                const statusBg = isOutOfStock ? '#FFEBEE' : isPending ? '#FFF3E0' : '#E8F5E9';
+                
+                const rawImg = prod.images?.[0] || prod.image || prod.image_url;
+                const imgStr = typeof rawImg === 'string'
+                  ? rawImg
+                  : rawImg?.url || rawImg?.secure_url || rawImg?.uri || rawImg?.image_url || null;
+                
+                const imageUri = imgStr
+                  ? optimizeImageUrl(imgStr, { width: 90, height: 90 })
+                  : getProductImage(prod.name || prod.product_name || '');
+                
+                const price = parseFloat(
+                  prod.price || 
+                  prod.base_price || 
+                  prod.current_price || 
+                  prod.selling_price || 
+                  prod.unit_price || 
+                  0
+                );
+                const stock = prod.quantity ?? prod.stock ?? prod.available_quantity ?? '—';
+                const rating = parseFloat(
+                  prod.average_rating || 
+                  prod.rating || 
+                  prod.product_rating || 
+                  prod.user_rating || 
+                  0
+                );
 
-              return (
-                <TouchableOpacity
-                  key={prod.id || prod._id || idx}
-                  style={styles.prodCard}
-                  activeOpacity={0.75}
-                  onPress={() => navigation.navigate('EditProduct', { product: prod })}
-                >
-                  {/* Image */}
-                  <View style={styles.prodImageBox}>
-                    {imageUri ? (
-                      <Image
-                        source={{ uri: imageUri }}
-                        style={styles.prodImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={[styles.prodImage, styles.prodImagePlaceholder]}>
-                        <Ionicons name="image-outline" size={28} color="#ccc" />
-                      </View>
-                    )}
-                    {/* Status dot overlay */}
-                    <View style={[styles.prodStatusDot, { backgroundColor: statusColor }]} />
-                  </View>
-
-                  {/* Details */}
-                  <View style={styles.prodDetails}>
-                    <Text style={styles.prodName} numberOfLines={1}>
-                      {prod.name || prod.product_name || 'Product'}
-                    </Text>
-                    <Text style={styles.prodCategory} numberOfLines={1}>
-                      {prod.category || prod.category_name || ''}
-                    </Text>
-
-                    <View style={styles.prodMetaRow}>
-                      <Text style={styles.prodPrice}>₹{price.toFixed(2)}/kg</Text>
-                      <View style={[styles.prodStatusChip, { backgroundColor: statusBg }]}>
-                        <Text style={[styles.prodStatusText, { color: statusColor }]}>
-                          {statusLabel}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.prodStockRow}>
-                      <Ionicons name="cube-outline" size={12} color="#607D8B" />
-                      <Text style={styles.prodStockText}>Stock: {stock}</Text>
-                      {rating > 0 && (
-                        <Text style={styles.prodRating}>⭐ {rating.toFixed(1)}</Text>
+                return (
+                  <TouchableOpacity
+                    key={prod.id || prod._id || idx}
+                    style={styles.prodCard}
+                    activeOpacity={0.75}
+                    onPress={() => navigation.navigate('EditProduct', { product: prod })}
+                  >
+                    <View style={styles.prodImageBox}>
+                      {imageUri ? (
+                        <Image
+                          source={{ uri: imageUri }}
+                          style={styles.prodImage}
+                          resizeMode="cover"
+                          onError={(error) => {
+                            console.log('[FarmerHome] Image load error for', prod.name, ':', error.nativeEvent.error);
+                          }}
+                        />
+                      ) : (
+                        <View style={[styles.prodImage, styles.prodImagePlaceholder]}>
+                          <Ionicons name="image-outline" size={28} color="#ccc" />
+                        </View>
                       )}
+                      <View style={[styles.prodStatusDot, { backgroundColor: statusColor }]} />
                     </View>
-                  </View>
 
-                  {/* Arrow */}
-                  <Ionicons name="chevron-forward" size={18} color="#ccc" />
-                </TouchableOpacity>
-              );
-            })
-          )}
+                    <View style={styles.prodDetails}>
+                      <Text style={styles.prodName} numberOfLines={1}>
+                        {prod.name || prod.product_name || 'Product'}
+                      </Text>
+                      <Text style={styles.prodCategory} numberOfLines={1}>
+                        {prod.category || prod.category_name || ''}
+                      </Text>
 
-          {/* See all products link */}
-          {products.length > 6 && (
-            <TouchableOpacity
-              style={styles.prodSeeAllBtn}
-              onPress={() => navigation.navigate('EditProduct')}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.prodSeeAllText}>See all {products.length} products</Text>
-              <Ionicons name="arrow-forward" size={14} color="#4CAF50" />
-            </TouchableOpacity>
-          )}
+                      <View style={styles.prodMetaRow}>
+                        <Text style={styles.prodPrice}>₹{price.toFixed(2)}/kg</Text>
+                        <View style={[styles.prodStatusChip, { backgroundColor: statusBg }]}>
+                          <Text style={[styles.prodStatusText, { color: statusColor }]}>
+                            {statusLabel}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.prodStockRow}>
+                        <Ionicons name="cube-outline" size={12} color="#607D8B" />
+                        <Text style={styles.prodStockText}>Stock: {stock}</Text>
+                        {rating > 0 && (
+                          <Text style={styles.prodRating}>⭐ {rating.toFixed(1)}</Text>
+                        )}
+                      </View>
+                    </View>
+
+                    <Ionicons name="chevron-forward" size={18} color="#ccc" />
+                  </TouchableOpacity>
+                );
+              })
+            );
+          })()}
+
+          {/* See all active products link */}
+          {(() => {
+            const activeProducts = products.filter(p => !p.isExpired);
+            return activeProducts.length > 6 && (
+              <TouchableOpacity
+                style={styles.prodSeeAllBtn}
+                onPress={() => navigation.navigate('EditProduct')}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.prodSeeAllText}>See all {activeProducts.length} active products</Text>
+                <Ionicons name="arrow-forward" size={14} color="#4CAF50" />
+              </TouchableOpacity>
+            );
+          })()}
         </View>
+
+        {/* ── Expired Products ──────────────────────────────── */}
+        {(() => {
+          const expiredProducts = products.filter(p => p.isExpired);
+          return expiredProducts.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.expiredSectionTitleRow}>
+                  <Ionicons name="time-outline" size={20} color="#9C27B0" />
+                  <Text style={[styles.sectionTitle, { color: '#9C27B0' }]}>Expired Products</Text>
+                  <View style={styles.expiredBadge}>
+                    <Text style={styles.expiredBadgeText}>{expiredProducts.length}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity onPress={() => navigation.navigate('EditProduct', { filter: 'expired' })}>
+                  <Text style={[styles.seeAll, { color: '#9C27B0' }]}>Manage All</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Expired products warning */}
+              <View style={styles.expiredWarning}>
+                <Ionicons name="warning-outline" size={16} color="#FF6F00" />
+                <Text style={styles.expiredWarningText}>
+                  These products have passed their harvest date. Consider updating or removing them.
+                </Text>
+              </View>
+
+              {/* Expired product cards */}
+              {expiredProducts.slice(0, 4).map((prod, idx) => {
+                const rawImg = prod.images?.[0] || prod.image || prod.image_url;
+                const imgStr = typeof rawImg === 'string'
+                  ? rawImg
+                  : rawImg?.url || rawImg?.secure_url || rawImg?.uri || rawImg?.image_url || null;
+                
+                const imageUri = imgStr
+                  ? optimizeImageUrl(imgStr, { width: 90, height: 90 })
+                  : getProductImage(prod.name || prod.product_name || '');
+                
+                const price = parseFloat(
+                  prod.price || 
+                  prod.base_price || 
+                  prod.current_price || 
+                  prod.selling_price || 
+                  prod.unit_price || 
+                  0
+                );
+                const stock = prod.quantity ?? prod.stock ?? prod.available_quantity ?? '—';
+                
+                const harvestDate = prod.harvest_date ? new Date(prod.harvest_date).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric'
+                }) : 'Unknown';
+
+                return (
+                  <TouchableOpacity
+                    key={prod.id || prod._id || `expired-${idx}`}
+                    style={styles.expiredProdCard}
+                    activeOpacity={0.75}
+                    onPress={() => navigation.navigate('EditProduct', { product: prod })}
+                  >
+                    <View style={styles.prodImageBox}>
+                      {imageUri ? (
+                        <Image
+                          source={{ uri: imageUri }}
+                          style={[styles.prodImage, styles.prodImageExpired]}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={[styles.prodImage, styles.prodImagePlaceholder, styles.prodImageExpired]}>
+                          <Ionicons name="image-outline" size={28} color="#ccc" />
+                        </View>
+                      )}
+                      <View style={styles.expiredOverlay}>
+                        <Ionicons name="time-outline" size={14} color="#fff" />
+                        <Text style={styles.expiredText}>EXPIRED</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.prodDetails}>
+                      <Text style={styles.prodName} numberOfLines={1}>
+                        {prod.name || prod.product_name || 'Product'}
+                      </Text>
+                      <Text style={styles.expiredDate} numberOfLines={1}>
+                        Expired: {harvestDate}
+                      </Text>
+
+                      <View style={styles.prodMetaRow}>
+                        <Text style={[styles.prodPrice, { color: '#9C27B0' }]}>₹{price.toFixed(2)}/kg</Text>
+                        <View style={styles.expiredStatusChip}>
+                          <Text style={styles.expiredStatusText}>EXPIRED</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.prodStockRow}>
+                        <Ionicons name="cube-outline" size={12} color="#9C27B0" />
+                        <Text style={[styles.prodStockText, { color: '#9C27B0' }]}>Stock: {stock}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.expiredActions}>
+                      <TouchableOpacity 
+                        style={styles.expiredActionBtn}
+                        onPress={() => navigation.navigate('EditProduct', { product: prod })}
+                      >
+                        <Ionicons name="create-outline" size={16} color="#9C27B0" />
+                      </TouchableOpacity>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* See all expired products link */}
+              {expiredProducts.length > 4 && (
+                <TouchableOpacity
+                  style={styles.expiredSeeAllBtn}
+                  onPress={() => navigation.navigate('EditProduct', { filter: 'expired' })}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.expiredSeeAllText}>See all {expiredProducts.length} expired products</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#9C27B0" />
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })()}
 
         {/* Quick Actions */}
         <View style={styles.section}>
@@ -1102,13 +1398,27 @@ const FarmerHome = ({ navigation }) => {
           ) : (
             recentOrders.map((order, idx) => {
               const statusColor = STATUS_COLORS[order.status] || '#888';
+              const productName = order.product?.name || order.Product?.name || order.product_name || 'Product Order';
+              const customerName = order.customer?.name || order.customer_name || order.user?.full_name || order.user?.name || 'Customer';
+              const orderAmount = parseFloat(order.total_amount || order.total_price || order.total || 0);
+              const orderDate = order.created_at || order.date || order.order_date;
+              
+              console.log('[FarmerHome] Order data for', idx, ':', {
+                productName,
+                customerName,
+                orderAmount,
+                orderDate,
+                status: order.status,
+                originalOrder: order
+              });
+              
               return (
                 <TouchableOpacity
-                  key={order.id || idx}
+                  key={order.id || order.order_id || idx}
                   style={[styles.orderCard, { borderLeftWidth: 4, borderLeftColor: statusColor }]}
                   onPress={() =>
                     navigation.navigate('FarmerOrderTracking', {
-                      orderId: order.id,
+                      orderId: order.id || order.order_id,
                       order,
                     })
                   }
@@ -1116,7 +1426,7 @@ const FarmerHome = ({ navigation }) => {
                 >
                   <View style={styles.orderTop}>
                     <Text style={styles.orderId} numberOfLines={1}>
-                      {order.product?.name || order.product_name || order.customer_name || order.user?.full_name || 'Order'}
+                      {productName}
                     </Text>
                     <View style={[styles.statusBadge, { backgroundColor: statusColor + '18' }]}>
                       <Text style={[styles.statusBadgeText, { color: statusColor }]}>
@@ -1125,15 +1435,15 @@ const FarmerHome = ({ navigation }) => {
                     </View>
                   </View>
                   <Text style={styles.orderCustomer} numberOfLines={1}>
-                    {order.customer_name || order.user?.full_name || 'Customer'}
+                    {customerName}
                   </Text>
                   <View style={styles.orderBottom}>
                     <Text style={styles.orderAmount}>
-                      ₹{parseFloat(order.total_amount || order.total || 0).toLocaleString('en-IN')}
+                      ₹{orderAmount.toLocaleString('en-IN')}
                     </Text>
                     <Text style={styles.orderDate}>
-                      {order.created_at
-                        ? new Date(order.created_at).toLocaleDateString('en-IN', {
+                      {orderDate
+                        ? new Date(orderDate).toLocaleDateString('en-IN', {
                             day: 'numeric',
                             month: 'short',
                             year: 'numeric',
@@ -1223,6 +1533,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  prodImageExpired: {
+    opacity: 0.6,
+  },
   prodImagePlaceholder: { justifyContent: 'center', alignItems: 'center' },
   prodStatusDot: {
     position: 'absolute',
@@ -1233,6 +1546,122 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: 1.5,
     borderColor: '#fff',
+  },
+  expiredOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(156, 39, 176, 0.9)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 2,
+    gap: 2,
+  },
+  expiredText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+
+  /* Expired Products Section */
+  expiredSectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  expiredBadge: {
+    backgroundColor: '#9C27B0',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  expiredBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  expiredWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF8E1',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6F00',
+    gap: 8,
+  },
+  expiredWarningText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#E65100',
+    lineHeight: 18,
+  },
+  expiredProdCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    elevation: 2,
+    shadowColor: '#9C27B0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    borderLeftWidth: 4,
+    borderLeftColor: '#9C27B0',
+  },
+  expiredDate: {
+    fontSize: 11,
+    color: '#9C27B0',
+    marginBottom: 6,
+    fontWeight: '600',
+  },
+  expiredStatusChip: {
+    backgroundColor: '#F3E5F5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  expiredStatusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9C27B0',
+  },
+  expiredActions: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expiredActionBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3E5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  expiredSeeAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#CE93D8',
+    borderRadius: 12,
+    marginTop: 4,
+    gap: 6,
+    backgroundColor: '#F3E5F5',
+  },
+  expiredSeeAllText: {
+    fontSize: 14,
+    color: '#9C27B0',
+    fontWeight: '600',
   },
   prodDetails: { flex: 1 },
   prodName: { fontSize: 15, fontWeight: '700', color: '#212121', marginBottom: 2 },
