@@ -77,6 +77,8 @@ const DeliveryDashboard = ({ navigation }) => {
       console.log('[DeliveryDashboard] Auth state:', authState?.user);
       console.log('[DeliveryDashboard] User role:', authState?.user?.role);
       console.log('[DeliveryDashboard] Delivery person ID:', authState?.user?.delivery_person_id);
+      console.log('[DeliveryDashboard] User ID (fallback):', authState?.user?.id);
+      console.log('[DeliveryDashboard] Full token payload:', authState?.token ? JSON.parse(atob(authState.token.split('.')[1])) : 'No token');
       
       const [pickupRes, dropRes, profileRes] = await Promise.allSettled([
         getDeliveryPickups(),
