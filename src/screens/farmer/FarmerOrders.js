@@ -465,7 +465,7 @@ const FarmerOrders = ({ navigation }) => {
                 )}
               </TouchableOpacity>
             )}
-    {['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(item.status) && (
+    {['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(item.status) && (
               <TouchableOpacity
                 style={styles.trackBtn}
                 onPress={() => navigation.navigate('FarmerOrderTracking', { orderId: realId, order: item })}
@@ -690,7 +690,7 @@ const FarmerOrders = ({ navigation }) => {
                     )}
                   </TouchableOpacity>
                 )}
-                {['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(o.status) && (
+                {['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(o.status) && (
                   <TouchableOpacity
                     style={styles.detailTrackBtn}
                     onPress={() => { setDetailModal(false); navigation.navigate('FarmerOrderTracking', { orderId: realId, order: o }); }}

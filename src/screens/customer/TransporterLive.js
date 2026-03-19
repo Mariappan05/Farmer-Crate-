@@ -3,7 +3,7 @@
  * Live delivery simulation - conversion of Flutter transpoterlive.dart (880 lines)
  *
  * Features:
- *   - 6-stage delivery simulation
+ *   - Multi-stage delivery simulation
  *   - Emoji timeline with icons per stage
  *   - Progress percentage bar
  *   - ETA/estimated time display
@@ -46,21 +46,36 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
  * ------------------------------------------------------------------------ */
 
 const STAGES = [
-  { key: 'received',    label: 'Order Received',       icon: 'receipt-outline',  emoji: '\uD83D\uDCE5', color: '#FF9800', desc: 'Your order has been received and is being processed.' },
-  { key: 'assigned',    label: 'Transporter Assigned',  icon: 'person-outline',   emoji: '\uD83D\uDE9A', color: '#9C27B0', desc: 'A transporter has been assigned for your delivery.' },
-  { key: 'picked_up',   label: 'Picked Up',             icon: 'cube-outline',     emoji: '\uD83D\uDCE6', color: '#2196F3', desc: 'Your order has been picked up from the farmer.' },
-  { key: 'in_transit',   label: 'In Transit',            icon: 'navigate-outline', emoji: '\uD83D\uDE9B', color: '#3F51B5', desc: 'Your order is on its way to the delivery location.' },
-  { key: 'out_delivery', label: 'Out for Delivery',      icon: 'bicycle-outline',  emoji: '\uD83D\uDEB4', color: '#00BCD4', desc: 'Your order is out for final delivery.' },
-  { key: 'delivered',    label: 'Delivered',              icon: 'checkmark-circle', emoji: '\uD83C\uDF89', color: '#4CAF50', desc: 'Your order has been delivered successfully!' },
+  { key: 'placed',              label: 'Order Placed',         icon: 'receipt-outline',      emoji: '\uD83D\uDCE5', color: '#FF9800', desc: 'Your order has been placed successfully.' },
+  { key: 'assigned',            label: 'Transporter Assigned', icon: 'person-outline',       emoji: '\uD83D\uDE9A', color: '#9C27B0', desc: 'A transporter has been assigned.' },
+  { key: 'pickup_assigned',     label: 'Pickup Assigned',      icon: 'car-outline',          emoji: '\uD83D\uDE97', color: '#FF5722', desc: 'A pickup delivery person has been assigned.' },
+  { key: 'picked_up',           label: 'Picked Up',            icon: 'cube-outline',         emoji: '\uD83D\uDCE6', color: '#2196F3', desc: 'Your order has been picked up from the farmer.' },
+  { key: 'received',            label: 'Received at Hub',      icon: 'business-outline',     emoji: '\uD83C\uDFE2', color: '#00897B', desc: 'The order has reached the transporter hub.' },
+  { key: 'shipped',             label: 'Shipped',              icon: 'boat-outline',         emoji: '\uD83D\uDEA2', color: '#3F51B5', desc: 'The order has been shipped to destination city.' },
+  { key: 'in_transit',          label: 'In Transit',           icon: 'navigate-outline',     emoji: '\uD83D\uDE9B', color: '#3949AB', desc: 'Your order is currently in transit.' },
+  { key: 'reached_destination', label: 'Reached Destination',  icon: 'location-outline',     emoji: '\uD83D\uDCCD', color: '#673AB7', desc: 'The order reached destination city hub.' },
+  { key: 'out_for_delivery',    label: 'Out for Delivery',     icon: 'bicycle-outline',      emoji: '\uD83D\uDEB4', color: '#00BCD4', desc: 'Your order is out for final delivery.' },
+  { key: 'delivered',           label: 'Delivered',            icon: 'checkmark-circle',     emoji: '\uD83C\uDF89', color: '#4CAF50', desc: 'Your order has been delivered successfully!' },
 ];
 
 const STATUS_MAP = {
-  pending: 0, placed: 0, received: 0,
-  confirmed: 1, assigned: 1,
-  processing: 2, picked_up: 2,
-  shipped: 3, in_transit: 3,
-  out_for_delivery: 4, out_delivery: 4,
-  delivered: 5,
+  pending: 0,
+  placed: 0,
+  accepted: 0,
+  confirmed: 0,
+  assigned: 1,
+  pickup_assigned: 2,
+  pickup_in_progress: 2,
+  processing: 2,
+  picked_up: 3,
+  received: 4,
+  shipped: 5,
+  in_transit: 6,
+  reached_destination: 7,
+  out_for_delivery: 8,
+  out_delivery: 8,
+  delivered: 9,
+  completed: 9,
 };
 
 const getStageIndex = (status) => {
@@ -76,7 +91,7 @@ const formatCurrency = (a) => '\u20B9' + (parseFloat(a) || 0).toFixed(2);
 const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
 
 const getETA = (stageIndex) => {
-  const etaMinutes = [120, 90, 60, 40, 15, 0];
+  const etaMinutes = [240, 200, 170, 140, 110, 85, 60, 35, 15, 0];
   const mins = etaMinutes[stageIndex] || 0;
   if (mins === 0) return 'Delivered';
   if (mins >= 60) return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'min';
@@ -272,7 +287,7 @@ const TransporterLive = ({ navigation, route }) => {
 
   const currentIndex = getStageIndex(order?.status);
   const isCancelled = (order?.status || '').toLowerCase() === 'cancelled';
-  const isDelivered = currentIndex >= 5;
+  const isDelivered = currentIndex >= STAGES.length - 1;
   const progress = isCancelled ? 0 : Math.min(1, currentIndex / (STAGES.length - 1));
 
   const transporter = order?.transporter || initialTransporter || {};

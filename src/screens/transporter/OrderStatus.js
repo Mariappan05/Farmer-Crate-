@@ -5,7 +5,6 @@
  * Features:
  *   - GET /api/transporters/orders/active
  *   - Filter by status: All, Assigned, Shipped, In Transit
- *   - Status update buttons (ASSIGNED→SHIPPED, SHIPPED→OUT_FOR_DELIVERY)
  *   - Assign delivery person if not assigned
  *   - Order tap → OrderDetail
  *   - Pull to refresh
@@ -30,7 +29,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
 import {
   assignTransporterDeliveryPerson,
-  updateTransporterOrderStatus,
 } from '../../services/orderService';
 
 const FILTERS = ['All', 'Assigned', 'Shipped', 'In Transit'];
@@ -94,38 +92,11 @@ const OrderStatus = ({ navigation }) => {
   const filteredOrders = orders.filter((o) => {
     if (activeFilter === 'All') return true;
     const st = (o.current_status || o.status || '').toUpperCase();
-    if (activeFilter === 'Assigned') return st === 'ASSIGNED';
-    if (activeFilter === 'Shipped') return st === 'SHIPPED';
+    if (activeFilter === 'Assigned') return st === 'ASSIGNED' || st === 'PICKUP_ASSIGNED';
+    if (activeFilter === 'Shipped') return st === 'RECEIVED' || st === 'SHIPPED';
     if (activeFilter === 'In Transit') return st === 'OUT_FOR_DELIVERY' || st === 'IN_TRANSIT';
     return true;
   });
-
-  /* ── Status update ──────────────────────────────────────── */
-  const handleStatusUpdate = (order, newStatus) => {
-    const orderId = order.order_id || order.id;
-    Alert.alert(
-      'Update Status',
-      `Change order #${orderId} status to "${newStatus.replace(/_/g, ' ')}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: async () => {
-            setUpdatingId(orderId);
-            try {
-              await updateTransporterOrderStatus(orderId, newStatus);
-              Alert.alert('Success', 'Order status updated');
-              fetchOrders(true);
-            } catch (e) {
-              Alert.alert('Error', e.message || 'Failed to update status');
-            } finally {
-              setUpdatingId(null);
-            }
-          },
-        },
-      ]
-    );
-  };
 
   /* ── Assign ─────────────────────────────────────────────── */
   const handleAssign = (order) => {
@@ -234,40 +205,6 @@ const OrderStatus = ({ navigation }) => {
                 <>
                   <Ionicons name="person-add-outline" size={14} color="#fff" />
                   <Text style={styles.actionBtnText}>Assign</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-
-          {status === 'ASSIGNED' && (
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#3F51B5' }]}
-              onPress={() => handleStatusUpdate(order, 'SHIPPED')}
-              disabled={isUpdating}
-            >
-              {isUpdating ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="airplane-outline" size={14} color="#fff" />
-                  <Text style={styles.actionBtnText}>Ship</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-
-          {status === 'SHIPPED' && (
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#00BCD4' }]}
-              onPress={() => handleStatusUpdate(order, 'OUT_FOR_DELIVERY')}
-              disabled={isUpdating}
-            >
-              {isUpdating ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="bicycle-outline" size={14} color="#fff" />
-                  <Text style={styles.actionBtnText}>Out for Delivery</Text>
                 </>
               )}
             </TouchableOpacity>

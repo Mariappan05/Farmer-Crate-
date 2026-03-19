@@ -214,7 +214,7 @@ const isPickupOrder = (order) => {
 
   // Fallback when backend doesn't provide delivery_type.
   const status = (order?.current_status || order?.status || '').toUpperCase();
-  return ['ASSIGNED', 'PLACED', 'SHIPPED', 'PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS', 'PICKED_UP'].includes(status);
+  return ['ASSIGNED', 'PLACED', 'PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS', 'PICKED_UP', 'RECEIVED', 'SHIPPED', 'IN_TRANSIT'].includes(status);
 };
 
 export const getDeliveryPickups = async () => {
