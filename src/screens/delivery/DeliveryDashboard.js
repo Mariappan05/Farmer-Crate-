@@ -38,6 +38,36 @@ const STATUS_COLORS = {
   CANCELLED: '#F44336',
 };
 
+const pickFirst = (...values) => values.find((value) => !!value);
+
+const formatAddress = (rawAddress) => {
+  if (!rawAddress) return null;
+
+  let parsed = rawAddress;
+  if (typeof rawAddress === 'string') {
+    try {
+      parsed = JSON.parse(rawAddress);
+    } catch {
+      return rawAddress;
+    }
+  }
+
+  if (typeof parsed !== 'object') return String(parsed);
+
+  return [
+    parsed.full_name,
+    parsed.address_line,
+    parsed.landmark,
+    parsed.city,
+    parsed.district,
+    parsed.state,
+    parsed.pincode,
+    parsed.zone,
+  ]
+    .filter(Boolean)
+    .join(', ');
+};
+
 function getGreeting() {
   const h = new Date().getHours();
   if (h < 12) return 'Good Morning';
@@ -179,8 +209,9 @@ const DeliveryDashboard = ({ navigation }) => {
 
   // ─── Navigate to map ─────────────────────────────────────────────────
   const openNavigate = (address) => {
-    if (!address) return;
-    const query = encodeURIComponent(address);
+    const normalizedAddress = formatAddress(address);
+    if (!normalizedAddress) return;
+    const query = encodeURIComponent(normalizedAddress);
     Linking.openURL(`https://maps.google.com/maps?q=${query}`).catch(() => {});
   };
 
@@ -188,6 +219,27 @@ const DeliveryDashboard = ({ navigation }) => {
   const renderPickupCard = (order) => {
     const status = order.current_status || order.status || '';
     const color = STATUS_COLORS[status] || '#888';
+    const farmerName =
+      pickFirst(
+        order.farmer?.name,
+        order.farmer?.full_name,
+        order.pickup_farmer?.name,
+        order.farmer_name,
+        order.pickup_farmer_name,
+        'Farmer'
+      );
+    const pickupAddress = formatAddress(
+      pickFirst(
+        order.farmer?.address,
+        order.farmer?.farm_address,
+        order.farmer?.address_line,
+        order.pickup_farmer?.address,
+        order.farmer_address,
+        order.pickup_address,
+        order.farm_address,
+        null
+      )
+    );
     return (
       <TouchableOpacity
         key={order.order_id || order.id}
@@ -213,13 +265,13 @@ const DeliveryDashboard = ({ navigation }) => {
         <View style={styles.infoSection}>
           <Ionicons name="person-outline" size={16} color="#666" />
           <Text style={styles.infoText} numberOfLines={1}>
-            {order.farmer?.name || order.farmer_name || 'Farmer'}
+            {farmerName}
           </Text>
         </View>
         <View style={styles.infoSection}>
           <Ionicons name="location-outline" size={16} color="#666" />
           <Text style={styles.infoText} numberOfLines={2}>
-            {order.farmer?.address || order.pickup_address || order.farm_address || 'Pickup address'}
+            {pickupAddress || 'Pickup address'}
           </Text>
         </View>
 
@@ -240,7 +292,7 @@ const DeliveryDashboard = ({ navigation }) => {
           </Text>
           <TouchableOpacity
             style={styles.navigateBtn}
-            onPress={() => openNavigate(order.farmer?.address || order.pickup_address || order.farm_address)}
+            onPress={() => openNavigate(pickupAddress)}
           >
             <Ionicons name="navigate-outline" size={16} color="#fff" />
             <Text style={styles.navigateBtnText}>Navigate</Text>
@@ -254,6 +306,27 @@ const DeliveryDashboard = ({ navigation }) => {
   const renderDeliveryCard = (order) => {
     const status = order.current_status || order.status || '';
     const color = STATUS_COLORS[status] || '#888';
+    const customerName =
+      pickFirst(
+        order.customer?.name,
+        order.customer?.full_name,
+        order.delivery_customer?.name,
+        order.customer_name,
+        order.delivery_customer_name,
+        order.product?.name,
+        'Delivery'
+      );
+    const deliveryAddress = formatAddress(
+      pickFirst(
+        order.delivery_address,
+        order.customer?.address,
+        order.customer?.address_line,
+        order.delivery_customer?.address,
+        order.destination_address,
+        order.destination_transporter_address,
+        null
+      )
+    );
     return (
       <TouchableOpacity
         key={order.order_id || order.id}
@@ -265,7 +338,7 @@ const DeliveryDashboard = ({ navigation }) => {
           <View style={styles.orderIdRow}>
             <MaterialCommunityIcons name="truck-delivery-outline" size={18} color="#1B5E20" />
             <Text style={styles.orderId} numberOfLines={1}>
-              {order.customer?.name || order.customer_name || order.product?.name || 'Delivery'}
+              {customerName}
             </Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
@@ -278,13 +351,13 @@ const DeliveryDashboard = ({ navigation }) => {
         <View style={styles.infoSection}>
           <Ionicons name="person-outline" size={16} color="#666" />
           <Text style={styles.infoText} numberOfLines={1}>
-            {order.customer?.name || order.customer_name || 'Customer'}
+            {customerName}
           </Text>
         </View>
         <View style={styles.infoSection}>
           <Ionicons name="location-outline" size={16} color="#666" />
           <Text style={styles.infoText} numberOfLines={2}>
-            {order.delivery_address || 'Delivery address'}
+            {deliveryAddress || 'Delivery address'}
           </Text>
         </View>
 
@@ -294,7 +367,7 @@ const DeliveryDashboard = ({ navigation }) => {
           </Text>
           <TouchableOpacity
             style={styles.navigateBtn}
-            onPress={() => openNavigate(order.delivery_address)}
+            onPress={() => openNavigate(deliveryAddress)}
           >
             <Ionicons name="navigate-outline" size={16} color="#fff" />
             <Text style={styles.navigateBtnText}>Navigate</Text>

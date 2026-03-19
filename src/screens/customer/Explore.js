@@ -66,6 +66,23 @@ function getRating(product) {
   return Math.min(5, Math.max(0, parseFloat(r) || 0));
 }
 
+function isVisibleToCustomer(product) {
+  const now = new Date();
+  const status = String(product?.status || '').toUpperCase();
+  const qty = Number(product?.quantity ?? product?.stock ?? product?.available_quantity ?? 0);
+
+  if (product?.expiry_date) {
+    const expiryDate = new Date(product.expiry_date);
+    if (!Number.isNaN(expiryDate.getTime()) && expiryDate < now) return false;
+  }
+
+  if (status === 'HIDDEN' || status === 'PENDING' || status === 'INACTIVE') return false;
+  if (status === 'SOLD_OUT' || status === 'OUT_OF_STOCK') return false;
+  if (qty <= 0) return false;
+
+  return status === 'AVAILABLE' || status === 'ACTIVE' || !status;
+}
+
 // ---------------------------------------------------------------------------
 // Star Rating
 // ---------------------------------------------------------------------------
@@ -219,7 +236,8 @@ export default function Explore({ navigation }) {
     try {
       const res = await api.get('/products');
       const data = res.data?.data || res.data || [];
-      setAllProducts(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setAllProducts(list.filter(isVisibleToCustomer));
     } catch (e) {
       console.log('Explore products error:', e.message);
     } finally {
@@ -254,7 +272,7 @@ export default function Explore({ navigation }) {
       const res = await api.get('/products/search', { params: { q: query.trim() } });
       const data = res.data?.data || res.data || [];
       if (Array.isArray(data) && data.length > 0) {
-        setFilteredProducts(data);
+        setFilteredProducts(data.filter(isVisibleToCustomer));
       }
     } catch {
       // fallback to local filter already applied

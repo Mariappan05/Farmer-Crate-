@@ -45,21 +45,27 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
  * ------------------------------------------------------------------------ */
 
 const TRACKING_STAGES = [
-  { key: 'placed',           label: 'Order Placed',       icon: 'cart',                mcIcon: null,               color: '#FF9800', emoji: '\uD83D\uDED2' },
-  { key: 'confirmed',        label: 'Confirmed',          icon: 'checkmark-circle',    mcIcon: null,               color: '#2196F3', emoji: '\u2705' },
-  { key: 'assigned',         label: 'Transporter Assigned', icon: null,                mcIcon: 'truck-check',      color: '#9C27B0', emoji: '\uD83D\uDE9A' },
-  { key: 'shipped',          label: 'Shipped',            icon: 'airplane',            mcIcon: null,               color: '#3F51B5', emoji: '\uD83D\uDCE6' },
-  { key: 'out_for_delivery', label: 'Out for Delivery',   icon: 'bicycle',             mcIcon: null,               color: '#00BCD4', emoji: '\uD83D\uDEB4' },
-  { key: 'delivered',        label: 'Delivered',          icon: 'checkmark-done-circle', mcIcon: null,             color: '#4CAF50', emoji: '\uD83C\uDF89' },
+  { key: 'pending',              label: 'Order Placed',           icon: 'cart',                  mcIcon: null,                    color: '#FF9800', emoji: '\uD83D\uDED2' },
+  { key: 'confirmed',            label: 'Farmer Accepted',        icon: 'checkmark-circle',      mcIcon: null,                    color: '#2196F3', emoji: '\u2705' },
+  { key: 'assigned',             label: 'Transporters Assigned',  icon: null,                    mcIcon: 'truck-check',           color: '#9C27B0', emoji: '\uD83D\uDE9A' },
+  { key: 'pickup_assigned',      label: 'Pickup Person Assigned', icon: 'person',                mcIcon: null,                    color: '#FF5722', emoji: '\uD83D\uDC64' },
+  { key: 'picked_up',            label: 'Picked Up from Farmer',  icon: null,                    mcIcon: 'store-check-outline',   color: '#00897B', emoji: '\uD83D\uDCE6' },
+  { key: 'in_transit',           label: 'In Transit',             icon: 'airplane',              mcIcon: null,                    color: '#3F51B5', emoji: '\uD83D\uDE9A' },
+  { key: 'reached_destination',  label: 'Reached Destination',    icon: null,                    mcIcon: 'warehouse',             color: '#673AB7', emoji: '\uD83C\uDFED' },
+  { key: 'out_for_delivery',     label: 'Out for Delivery',       icon: 'bicycle',               mcIcon: null,                    color: '#00BCD4', emoji: '\uD83D\uDEB4' },
+  { key: 'delivered',            label: 'Delivered',              icon: 'checkmark-done-circle', mcIcon: null,                    color: '#4CAF50', emoji: '\uD83C\uDF89' },
 ];
 
 const STATUS_MAP = {
   pending: 0, placed: 0,
-  confirmed: 1,
-  assigned: 2, processing: 2,
-  shipped: 3,
-  out_for_delivery: 4,
-  delivered: 5,
+  confirmed: 1, accepted: 1,
+  assigned: 2,
+  pickup_assigned: 3,
+  picked_up: 4,
+  in_transit: 5, shipped: 5,
+  reached_destination: 6,
+  out_for_delivery: 7,
+  delivered: 8, completed: 8,
   cancelled: -1,
 };
 
@@ -89,6 +95,26 @@ const formatDate = (d) => {
 };
 
 const formatCurrency = (a) => '\u20B9' + (parseFloat(a) || 0).toFixed(2);
+
+const toNumber = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const computeItemTotal = (item) => {
+  const qty = toNumber(item?.quantity || 1) || 1;
+  const explicitLine = toNumber(item?.total || item?.subtotal || item?.total_amount);
+  if (explicitLine > 0) return explicitLine;
+
+  const unit = toNumber(
+    item?.price ||
+    item?.unit_price ||
+    item?.product_price ||
+    item?.product?.current_price ||
+    item?.product?.price
+  );
+  return unit * qty;
+};
 
 /* --------------------------------------------------------------------------
  * ANIMATED VEHICLE
@@ -223,8 +249,8 @@ const CustomerOrderTracking = ({ navigation, route }) => {
   const progressAnim = useRef(new Animated.Value(0)).current;
   const intervalRef = useRef(null);
 
-  const currentIndex = getStageIndex(order?.status);
-  const isCancelled = (order?.status || '').toLowerCase() === 'cancelled';
+  const currentIndex = getStageIndex(order?.current_status || order?.status);
+  const isCancelled = (order?.current_status || order?.status || '').toLowerCase() === 'cancelled';
   const progress = isCancelled ? 0 : Math.min(1, currentIndex / (TRACKING_STAGES.length - 1));
 
   /* -- Fetch ------------------------------------------------- */
@@ -233,8 +259,21 @@ const CustomerOrderTracking = ({ navigation, route }) => {
     try {
       const id = orderId || order?.order_id || order?.id;
       if (!id) return;
-      const data = await getOrderById(id);
-      const o = data?.data || data?.order || data;
+      let o = null;
+
+      // Prefer tracking endpoint because it contains enriched tracking metadata.
+      try {
+        const trackingRes = await api.get(`/orders/${id}/track`);
+        o = trackingRes?.data?.data?.order || trackingRes?.data?.order || null;
+      } catch (trackingError) {
+        console.log('Tracking endpoint fallback to order details:', trackingError?.message || trackingError);
+      }
+
+      if (!o) {
+        const data = await getOrderById(id);
+        o = data?.data || data?.order || data;
+      }
+
       if (o) setOrder(o);
       setError(null);
     } catch (e) {
@@ -266,10 +305,22 @@ const CustomerOrderTracking = ({ navigation, route }) => {
     }).start();
   }, [progress]);
 
-  const items = order?.items || order?.order_items || [];
+  const items = order?.items || order?.order_items || (order?.product ? [{ ...order.product, quantity: order?.quantity || 1 }] : []);
+  const sourceTransporter = order?.source_transporter || order?.pickup_transporter || null;
+  const destinationTransporter = order?.destination_transporter || order?.drop_transporter || null;
   const transporter = order?.transporter;
   const deliveryPerson = order?.delivery_person;
   const farmer = order?.farmer || items[0]?.farmer || items[0]?.product?.farmer;
+  const itemsTotal = items.reduce((sum, item) => sum + computeItemTotal(item), 0);
+  const orderTotal =
+    toNumber(order?.total_amount) ||
+    toNumber(order?.total_price) ||
+    toNumber(order?.grand_total) ||
+    itemsTotal;
+  const hasDistinctTransporters =
+    sourceTransporter &&
+    destinationTransporter &&
+    sourceTransporter.transporter_id !== destinationTransporter.transporter_id;
 
   /* -- Loading state ----------------------------------------- */
   if (loading && !order) {
@@ -365,8 +416,8 @@ const CustomerOrderTracking = ({ navigation, route }) => {
               </Text>
             </View>
           </View>
-          {order?.total_amount && (
-            <Text style={trackStyles.orderTotal}>Total: {formatCurrency(order.total_amount)}</Text>
+          {orderTotal > 0 && (
+            <Text style={trackStyles.orderTotal}>Total: {formatCurrency(orderTotal)}</Text>
           )}
           {order?.estimated_delivery && (
             <View style={trackStyles.etaRow}>
@@ -430,7 +481,7 @@ const CustomerOrderTracking = ({ navigation, route }) => {
                       {item.product_name || item.product?.name || item.name || 'Product'}
                     </Text>
                     <Text style={trackStyles.productMeta}>Qty: {item.quantity || 1}</Text>
-                    <Text style={trackStyles.productPrice}>{formatCurrency(item.total || item.subtotal || (item.price || 0) * (item.quantity || 1))}</Text>
+                    <Text style={trackStyles.productPrice}>{formatCurrency(computeItemTotal(item))}</Text>
                   </View>
                 </View>
               );
@@ -449,14 +500,36 @@ const CustomerOrderTracking = ({ navigation, route }) => {
           />
         )}
 
-        {/* Transporter Info */}
-        {transporter && (
+        {/* Source Transporter Info */}
+        {sourceTransporter && (
+          <InfoCard
+            mcIcon="truck-delivery-outline"
+            title="Source Transporter"
+            name={sourceTransporter.name || sourceTransporter.full_name || sourceTransporter.username}
+            details={[sourceTransporter.vehicle_type, sourceTransporter.vehicle_number].filter(Boolean).join(' \u2022 ')}
+            phone={sourceTransporter.phone || sourceTransporter.mobile_number}
+          />
+        )}
+
+        {/* Destination Transporter Info */}
+        {hasDistinctTransporters && (
+          <InfoCard
+            mcIcon="truck-check-outline"
+            title="Destination Transporter"
+            name={destinationTransporter.name || destinationTransporter.full_name || destinationTransporter.username}
+            details={[destinationTransporter.vehicle_type, destinationTransporter.vehicle_number].filter(Boolean).join(' \u2022 ')}
+            phone={destinationTransporter.phone || destinationTransporter.mobile_number}
+          />
+        )}
+
+        {/* Legacy single transporter fallback */}
+        {!sourceTransporter && !destinationTransporter && transporter && (
           <InfoCard
             mcIcon="truck-outline"
             title="Transporter"
             name={transporter.name || transporter.full_name || transporter.username}
             details={[transporter.vehicle_type, transporter.vehicle_number].filter(Boolean).join(' \u2022 ')}
-            phone={transporter.phone}
+            phone={transporter.phone || transporter.mobile_number}
           />
         )}
 

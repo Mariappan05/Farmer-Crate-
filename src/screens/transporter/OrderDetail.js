@@ -30,31 +30,55 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
-import { getOrderById } from '../../services/orderService';
+import {
+  assignTransporterDeliveryPerson,
+  getOrderById,
+  updateTransporterOrderStatus,
+} from '../../services/orderService';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 
 /* ── Constants ────────────────────────────────────────────── */
 const TIMELINE_STAGES = [
-  { key: 'PLACED', label: 'Order Placed', icon: 'cart', color: '#FF9800' },
-  { key: 'CONFIRMED', label: 'Confirmed', icon: 'checkmark-circle', color: '#2196F3' },
-  { key: 'ASSIGNED', label: 'Assigned', icon: 'people', color: '#9C27B0' },
-  { key: 'SHIPPED', label: 'Shipped', icon: 'airplane', color: '#3F51B5' },
-  { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', icon: 'bicycle', color: '#00BCD4' },
-  { key: 'DELIVERED', label: 'Delivered', icon: 'checkmark-done-circle', color: '#4CAF50' },
+  { key: 'PENDING',             label: 'Order Placed',           icon: 'cart',                  color: '#FF9800' },
+  { key: 'CONFIRMED',           label: 'Farmer Accepted',        icon: 'checkmark-circle',      color: '#2196F3' },
+  { key: 'ASSIGNED',            label: 'Transporters Assigned',  icon: 'people',                color: '#9C27B0' },
+  { key: 'PICKUP_ASSIGNED',     label: 'Pickup Person Assigned', icon: 'person',                color: '#FF5722' },
+  { key: 'PICKUP_IN_PROGRESS',  label: 'Pickup In Progress',     icon: 'bicycle',               color: '#00BCD4' },
+  { key: 'PICKED_UP',           label: 'Picked Up from Farmer',  icon: 'cube',                  color: '#00897B' },
+  { key: 'RECEIVED',            label: 'Received at Source Office', icon: 'download',            color: '#00897B' },
+  { key: 'SHIPPED',             label: 'Shipped to Destination', icon: 'airplane',              color: '#3F51B5' },
+  { key: 'IN_TRANSIT',          label: 'In Transit',             icon: 'airplane',              color: '#3F51B5' },
+  { key: 'REACHED_DESTINATION', label: 'Reached Destination',    icon: 'business',              color: '#673AB7' },
+  { key: 'OUT_FOR_DELIVERY',    label: 'Out for Delivery',       icon: 'bicycle',               color: '#00BCD4' },
+  { key: 'DELIVERED',           label: 'Delivered',              icon: 'checkmark-done-circle', color: '#4CAF50' },
 ];
 
 const STATUS_INDEX = {
-  PENDING: 0, PLACED: 0, CONFIRMED: 1, ASSIGNED: 2, PROCESSING: 2,
-  SHIPPED: 3, OUT_FOR_DELIVERY: 4, DELIVERED: 5, COMPLETED: 5, CANCELLED: -1,
+  PENDING: 0, PLACED: 0,
+  CONFIRMED: 1, ACCEPTED: 1,
+  ASSIGNED: 2,
+  PICKUP_ASSIGNED: 3,
+  PICKUP_IN_PROGRESS: 4,
+  PICKED_UP: 5,
+  RECEIVED: 6,
+  SHIPPED: 7,
+  IN_TRANSIT: 8,
+  REACHED_DESTINATION: 9,
+  OUT_FOR_DELIVERY: 10,
+  DELIVERED: 11, COMPLETED: 11,
+  CANCELLED: -1,
 };
 
 const getStatusColor = (s) => {
   const u = (s || '').toUpperCase();
   if (u === 'DELIVERED' || u === 'COMPLETED') return '#4CAF50';
-  if (u === 'SHIPPED') return '#3F51B5';
   if (u === 'OUT_FOR_DELIVERY') return '#00BCD4';
+  if (u === 'REACHED_DESTINATION') return '#673AB7';
+  if (u === 'IN_TRANSIT' || u === 'SHIPPED') return '#3F51B5';
+  if (u === 'PICKED_UP') return '#00897B';
+  if (u === 'PICKUP_ASSIGNED') return '#FF5722';
   if (u === 'ASSIGNED') return '#9C27B0';
-  if (u === 'CONFIRMED') return '#2196F3';
+  if (u === 'CONFIRMED' || u === 'ACCEPTED') return '#2196F3';
   if (u === 'CANCELLED') return '#F44336';
   return '#FF9800';
 };
@@ -67,6 +91,32 @@ const formatDate = (d) => {
 };
 
 const formatCurrency = (a) => '₹' + (parseFloat(a) || 0).toFixed(2);
+
+const formatAddress = (rawAddress) => {
+  if (!rawAddress) return null;
+
+  let parsed = rawAddress;
+  if (typeof rawAddress === 'string') {
+    try {
+      parsed = JSON.parse(rawAddress);
+    } catch {
+      parsed = rawAddress;
+    }
+  }
+
+  if (typeof parsed === 'object' && parsed !== null) {
+    return [
+      parsed.address_line,
+      parsed.city,
+      parsed.district,
+      parsed.state,
+      parsed.pincode,
+      parsed.zone,
+    ].filter(Boolean).join(', ');
+  }
+
+  return String(parsed);
+};
 
 /* ── Component ────────────────────────────────────────────── */
 const OrderDetail = ({ navigation, route }) => {
@@ -120,7 +170,7 @@ const OrderDetail = ({ navigation, route }) => {
         onPress: async () => {
           setUpdatingStatus(true);
           try {
-            await api.put(`/transporters/orders/${orderId}/status`, { status: newStatus });
+              await updateTransporterOrderStatus(orderId, newStatus);
             Alert.alert('Success', 'Status updated');
             fetchOrder(true);
           } catch (e) {
@@ -145,9 +195,12 @@ const OrderDetail = ({ navigation, route }) => {
       onPress: async () => {
         setAssigningDP(true);
         try {
-          await api.put(`/transporters/orders/${orderId}/assign`, {
-            delivery_person_id: p.id || p.delivery_person_id,
-          });
+          const assignmentType = status === 'ASSIGNED' ? 'pickup' : 'delivery';
+          await assignTransporterDeliveryPerson(
+            orderId,
+            p.id || p.delivery_person_id,
+            assignmentType
+          );
           Alert.alert('Success', `Assigned ${p.full_name || p.name}`);
           fetchOrder(true);
         } catch (e) {
@@ -332,8 +385,9 @@ const OrderDetail = ({ navigation, route }) => {
           icon="person-outline"
           iconColor="#2196F3"
           name={customer.full_name || customer.name || order.customer_name || 'N/A'}
-          phone={customer.phone || customer.mobile}
-          address={customer.address || customer.address_line || order.delivery_address}
+          phone={customer.phone || customer.mobile || customer.mobile_number}
+          address={formatAddress(customer.address || customer.address_line || order.delivery_address)}
+          extra={customer.email ? `Email: ${customer.email}` : null}
         />
 
         {/* Delivery Person Info */}
@@ -363,19 +417,50 @@ const OrderDetail = ({ navigation, route }) => {
           </View>
         )}
 
+        {/* QR Code — only shown after ASSIGNED (step 3+) */}
+        {stageIdx >= 2 && (order.qr_code || order.qr_image_url) && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Order QR Code</Text>
+            <Text style={styles.qrNote}>Only assigned transporters and destination delivery person can scan this QR</Text>
+            {order.qr_image_url ? (
+              <Image source={{ uri: order.qr_image_url }} style={styles.qrImage} resizeMode="contain" />
+            ) : (
+              <View style={styles.qrTextWrap}>
+                <MaterialCommunityIcons name="qrcode" size={40} color="#1B5E20" />
+                <Text style={styles.qrText}>{order.qr_code}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Action Buttons */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Actions</Text>
           <View style={styles.actionsWrap}>
-            {!hasDP && (
+            {/* Step 4: Source transporter assigns pickup delivery person */}
+            {status === 'ASSIGNED' && !hasDP && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#FF5722' }]}
+                onPress={handleAssign}
+                disabled={assigningDP}
+              >
+                {assigningDP ? <ActivityIndicator size="small" color="#fff" /> : (
+                  <>
+                    <Ionicons name="person-add-outline" size={18} color="#fff" />
+                    <Text style={styles.actionBtnText}>Assign Pickup Person</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Step 8: Destination transporter assigns delivery person */}
+            {status === 'REACHED_DESTINATION' && !hasDP && (
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: '#9C27B0' }]}
                 onPress={handleAssign}
                 disabled={assigningDP}
               >
-                {assigningDP ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
+                {assigningDP ? <ActivityIndicator size="small" color="#fff" /> : (
                   <>
                     <Ionicons name="person-add-outline" size={18} color="#fff" />
                     <Text style={styles.actionBtnText}>Assign Delivery Person</Text>
@@ -384,38 +469,19 @@ const OrderDetail = ({ navigation, route }) => {
               </TouchableOpacity>
             )}
 
-            {status === 'ASSIGNED' && (
+            {/* QR Scan button — available from step 3 onwards */}
+            {stageIdx >= 2 && (
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#3F51B5' }]}
-                onPress={() => handleStatusUpdate('SHIPPED')}
-                disabled={updatingStatus}
+                style={[styles.actionBtn, { backgroundColor: '#1B5E20' }]}
+                onPress={() => navigation.navigate('QRScan', { orderId })}
               >
-                {updatingStatus ? <ActivityIndicator size="small" color="#fff" /> : (
-                  <>
-                    <Ionicons name="airplane-outline" size={18} color="#fff" />
-                    <Text style={styles.actionBtnText}>Mark as Shipped</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-
-            {status === 'SHIPPED' && (
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#00BCD4' }]}
-                onPress={() => handleStatusUpdate('OUT_FOR_DELIVERY')}
-                disabled={updatingStatus}
-              >
-                {updatingStatus ? <ActivityIndicator size="small" color="#fff" /> : (
-                  <>
-                    <Ionicons name="bicycle-outline" size={18} color="#fff" />
-                    <Text style={styles.actionBtnText}>Out for Delivery</Text>
-                  </>
-                )}
+                <Ionicons name="qr-code-outline" size={18} color="#fff" />
+                <Text style={styles.actionBtnText}>Scan QR to Update Status</Text>
               </TouchableOpacity>
             )}
 
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#1B5E20' }]}
+              style={[styles.actionBtn, { backgroundColor: '#3F51B5' }]}
               onPress={() => navigation.navigate('TransporterOrderTracking', { orderId, order })}
             >
               <Ionicons name="navigate-outline" size={18} color="#fff" />
@@ -517,6 +583,7 @@ const styles = StyleSheet.create({
   callBtnText: { color: '#1B5E20', fontSize: 13, fontWeight: '600' },
 
   // QR
+  qrNote: { fontSize: 12, color: '#888', marginBottom: 10, fontStyle: 'italic' },
   qrImage: { width: 180, height: 180, alignSelf: 'center', marginVertical: 8 },
   qrTextWrap: { alignItems: 'center', gap: 8, padding: 16 },
   qrText: { fontSize: 14, color: '#333', fontFamily: 'monospace' },

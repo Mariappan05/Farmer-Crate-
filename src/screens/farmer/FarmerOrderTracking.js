@@ -17,18 +17,114 @@ import api from '../../services/api';
 import * as orderService from '../../services/orderService';
 
 const STAGES = [
-  { key: 'PLACED', label: 'Order Placed', icon: 'receipt-outline', iconLib: 'Ionicons' },
-  { key: 'CONFIRMED', label: 'Confirmed', icon: 'checkmark-circle-outline', iconLib: 'Ionicons' },
-  { key: 'ASSIGNED', label: 'Transporter Assigned', icon: 'people-outline', iconLib: 'Ionicons' },
-  { key: 'SHIPPED', label: 'Shipped', icon: 'cube-outline', iconLib: 'Ionicons' },
-  { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', icon: 'truck-delivery-outline', iconLib: 'Material' },
-  { key: 'DELIVERED', label: 'Delivered', icon: 'checkmark-done-circle-outline', iconLib: 'Ionicons' },
+  { key: 'PENDING',             label: 'Order Placed',           icon: 'receipt-outline',               iconLib: 'Ionicons' },
+  { key: 'PLACED',              label: 'Order Placed',           icon: 'receipt-outline',               iconLib: 'Ionicons' },
+  { key: 'CONFIRMED',           label: 'Farmer Accepted',        icon: 'checkmark-circle-outline',      iconLib: 'Ionicons' },
+  { key: 'ASSIGNED',            label: 'Transporters Assigned',  icon: 'truck-check-outline',           iconLib: 'Material' },
+  { key: 'PICKUP_ASSIGNED',     label: 'Pickup Person Assigned', icon: 'person-outline',                iconLib: 'Ionicons' },
+  { key: 'PICKUP_IN_PROGRESS',  label: 'Pickup In Progress',     icon: 'bike-fast',                     iconLib: 'Material' },
+  { key: 'PICKED_UP',           label: 'Picked Up from Farmer',  icon: 'store-check-outline',           iconLib: 'Material' },
+  { key: 'RECEIVED',            label: 'Received at Source Office', icon: 'package-check',               iconLib: 'Material' },
+  { key: 'SHIPPED',             label: 'Shipped to Destination', icon: 'cube-send',                     iconLib: 'Material' },
+  { key: 'IN_TRANSIT',          label: 'In Transit',             icon: 'truck-fast-outline',            iconLib: 'Material' },
+  { key: 'REACHED_DESTINATION', label: 'Reached Destination',    icon: 'warehouse',                     iconLib: 'Material' },
+  { key: 'OUT_FOR_DELIVERY',    label: 'Out for Delivery',       icon: 'truck-delivery-outline',        iconLib: 'Material' },
+  { key: 'DELIVERED',           label: 'Delivered to Customer',  icon: 'checkmark-done-circle-outline', iconLib: 'Ionicons' },
 ];
 
 const STAGE_COLORS = {
   completed: '#4CAF50',
   active: '#FF9800',
   upcoming: '#E0E0E0',
+};
+
+const normalizeOrdersArray = (payload) =>
+  Array.isArray(payload) ? payload : payload?.orders || payload?.data || [];
+
+const findOrderById = (orders, id) =>
+  orders.find((o) =>
+    (o?.order_id && String(o.order_id) === String(id)) ||
+    (o?.id && String(o.id) === String(id))
+  );
+
+const buildAvatarUrl = (name, seed) => {
+  const avatarName = encodeURIComponent(name || 'Transporter');
+  const avatarSeed = encodeURIComponent(seed || 'transporter');
+  return `https://ui-avatars.com/api/?name=${avatarName}&background=E8F5E9&color=1B5E20&rounded=true&size=128&bold=true&seed=${avatarSeed}`;
+};
+
+const formatAddressText = (rawAddress) => {
+  if (!rawAddress) return null;
+
+  if (typeof rawAddress === 'string') {
+    try {
+      const parsed = JSON.parse(rawAddress);
+      if (parsed && typeof parsed === 'object') {
+        return [
+          parsed.address_line,
+          parsed.city,
+          parsed.district,
+          parsed.state,
+          parsed.pincode,
+          parsed.zone,
+        ].filter(Boolean).join(', ');
+      }
+    } catch {
+      return rawAddress;
+    }
+    return rawAddress;
+  }
+
+  if (typeof rawAddress === 'object') {
+    return [
+      rawAddress.address_line,
+      rawAddress.city,
+      rawAddress.district,
+      rawAddress.state,
+      rawAddress.pincode,
+      rawAddress.zone,
+    ].filter(Boolean).join(', ');
+  }
+
+  return String(rawAddress);
+};
+
+const getInitials = (name) => {
+  if (!name || typeof name !== 'string') return 'TR';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'TR';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+};
+
+const buildTransporterFallback = (role, orderWithDetails) => {
+  const isSource = role === 'source';
+  const id = isSource ? orderWithDetails?.source_transporter_id : orderWithDetails?.destination_transporter_id;
+  const existing = isSource ? orderWithDetails?.source_transporter : orderWithDetails?.destination_transporter;
+  const nameFromOrder = isSource
+    ? (orderWithDetails?.source_transporter_name || orderWithDetails?.source_transporter_full_name)
+    : (orderWithDetails?.destination_transporter_name || orderWithDetails?.destination_transporter_full_name);
+  const addressFromOrder = isSource
+    ? (orderWithDetails?.source_transporter_address || orderWithDetails?.pickup_address || null)
+    : (orderWithDetails?.destination_transporter_address || orderWithDetails?.delivery_address || null);
+  const imageFromOrder = isSource
+    ? (orderWithDetails?.source_transporter_image_url || orderWithDetails?.source_transporter_profile_image)
+    : (orderWithDetails?.destination_transporter_image_url || orderWithDetails?.destination_transporter_profile_image);
+
+  const defaultName = isSource ? 'Source Transporter' : 'Destination Transporter';
+  const name = existing?.name || existing?.full_name || nameFromOrder || defaultName;
+
+  return {
+    transporter_id: existing?.transporter_id || existing?.id || id || null,
+    name,
+    mobile_number: existing?.mobile_number || existing?.mobile || existing?.phone || null,
+    email: existing?.email || null,
+    address: existing?.address || formatAddressText(addressFromOrder) || null,
+    image_url: existing?.image_url || existing?.profile_image || imageFromOrder || buildAvatarUrl(name, id || role),
+    note: isSource
+      ? 'Pickup handled by assigned source transporter'
+      : 'Delivery handled by assigned destination transporter',
+  };
 };
 
 const FarmerOrderTracking = ({ navigation, route }) => {
@@ -51,53 +147,86 @@ const FarmerOrderTracking = ({ navigation, route }) => {
       let orderWithDetails = null;
       try {
         const trackingResp = await api.get(`/farmers/orders/${id}/track`);
-        orderWithDetails = trackingResp.data?.order || trackingResp.data;
+        orderWithDetails = trackingResp?.data?.data?.order || trackingResp?.data?.order || trackingResp?.data?.data || trackingResp?.data;
         console.log('[FarmerOrderTracking] Got order from tracking endpoint:', JSON.stringify(orderWithDetails, null, 2));
       } catch (trackingError) {
         console.log('[FarmerOrderTracking] Tracking endpoint not available:', trackingError.message);
+      }
+
+      // Try generic tracking endpoint which may include enriched transporter details
+      if (!orderWithDetails) {
+        try {
+          const genericTrackResp = await api.get(`/orders/${id}/track`);
+          orderWithDetails =
+            genericTrackResp?.data?.data?.order ||
+            genericTrackResp?.data?.order ||
+            genericTrackResp?.data?.data ||
+            genericTrackResp?.data ||
+            null;
+          if (orderWithDetails) {
+            console.log('[FarmerOrderTracking] Got order from generic tracking endpoint');
+          }
+        } catch (genericTrackError) {
+          console.log('[FarmerOrderTracking] Generic tracking fallback unavailable:', genericTrackError.message);
+        }
       }
       
       // If tracking endpoint didn't work, get from orders list
       if (!orderWithDetails) {
         const { data } = await api.get(`/farmers/orders`);
-        const orders = Array.isArray(data) ? data : data?.orders || data?.data || [];
-        
-        orderWithDetails = orders.find(o => 
-          (o.order_id && o.order_id.toString() === id.toString()) || 
-          (o.id && o.id.toString() === id.toString())
-        );
+        const orders = normalizeOrdersArray(data);
+        orderWithDetails = findOrderById(orders, id);
+      }
+
+      // Final fallback: generic order endpoint
+      if (!orderWithDetails) {
+        try {
+          const data = await orderService.getOrderById(id);
+          orderWithDetails = data?.data || data?.order || data;
+          if (orderWithDetails) {
+            console.log('[FarmerOrderTracking] Found order from generic endpoint:', id);
+          }
+        } catch (genericError) {
+          console.log('[FarmerOrderTracking] Generic order fallback failed:', genericError.message);
+        }
       }
       
       if (orderWithDetails) {
         console.log('[FarmerOrderTracking] Found order:', JSON.stringify(orderWithDetails, null, 2));
+
+        // Extra enrichment: generic order endpoint may include nested transporter objects
+        // even when farmer order endpoints return only transporter IDs.
+        try {
+          const genericData = await orderService.getOrderById(id);
+          const genericOrder = genericData?.data || genericData?.order || genericData;
+          if (genericOrder && typeof genericOrder === 'object') {
+            orderWithDetails = {
+              ...genericOrder,
+              ...orderWithDetails,
+              source_transporter:
+                orderWithDetails?.source_transporter || genericOrder?.source_transporter || null,
+              destination_transporter:
+                orderWithDetails?.destination_transporter || genericOrder?.destination_transporter || null,
+            };
+            console.log('[FarmerOrderTracking] Enriched order from generic endpoint');
+          }
+        } catch (genericEnrichError) {
+          console.log('[FarmerOrderTracking] Generic enrichment unavailable:', genericEnrichError.message);
+        }
         
         // Check if we already have transporter details
         let orderWithTransporters = { ...orderWithDetails };
         
-        // Since transporter endpoints are not available to farmers,
-        // create meaningful placeholders with the IDs we have
-        if (orderWithDetails.source_transporter_id && !orderWithDetails.source_transporter) {
-          console.log('[FarmerOrderTracking] Creating source transporter placeholder for ID:', orderWithDetails.source_transporter_id);
-          orderWithTransporters.source_transporter = {
-            transporter_id: orderWithDetails.source_transporter_id,
-            name: 'Source Transporter',
-            mobile_number: null,
-            email: null,
-            address: null,
-            note: 'Contact details will be shared when pickup is scheduled'
-          };
+        // Farmer role cannot access transporter profile endpoints in this backend.
+        // Build best-effort transporter cards from order payload plus avatar fallback.
+        if (orderWithDetails.source_transporter_id || orderWithDetails.source_transporter) {
+          console.log('[FarmerOrderTracking] Building source transporter from order payload:', orderWithDetails.source_transporter_id);
+          orderWithTransporters.source_transporter = buildTransporterFallback('source', orderWithDetails);
         }
         
-        if (orderWithDetails.destination_transporter_id && !orderWithDetails.destination_transporter) {
-          console.log('[FarmerOrderTracking] Creating destination transporter placeholder for ID:', orderWithDetails.destination_transporter_id);
-          orderWithTransporters.destination_transporter = {
-            transporter_id: orderWithDetails.destination_transporter_id,
-            name: 'Destination Transporter',
-            mobile_number: null,
-            email: null,
-            address: null,
-            note: 'Contact details will be shared when delivery is scheduled'
-          };
+        if (orderWithDetails.destination_transporter_id || orderWithDetails.destination_transporter) {
+          console.log('[FarmerOrderTracking] Building destination transporter from order payload:', orderWithDetails.destination_transporter_id);
+          orderWithTransporters.destination_transporter = buildTransporterFallback('destination', orderWithDetails);
         }
         
         setOrder(orderWithTransporters);
@@ -172,15 +301,35 @@ const FarmerOrderTracking = ({ navigation, route }) => {
 
   const getCurrentStageIndex = () => {
     if (!order) return -1;
-    const status = order.status || '';
-    // PENDING maps to PLACED
-    if (status === 'PENDING') return 0;
-    const idx = STAGES.findIndex((s) => s.key === status);
-    return idx >= 0 ? idx : 0;
+    const status = (order.current_status || order.status || '').toUpperCase();
+    const STATUS_INDEX = {
+      PENDING: 0, PLACED: 0,
+      CONFIRMED: 2, ACCEPTED: 2,
+      ASSIGNED: 3,
+      PICKUP_ASSIGNED: 4,
+      PICKUP_IN_PROGRESS: 5,
+      PICKED_UP: 6,
+      RECEIVED: 7,
+      SHIPPED: 8,
+      IN_TRANSIT: 9,
+      REACHED_DESTINATION: 10,
+      OUT_FOR_DELIVERY: 11,
+      DELIVERED: 12,
+      COMPLETED: 12,
+    };
+    return STATUS_INDEX[status] ?? 0;
   };
 
   const currentStageIndex = getCurrentStageIndex();
-  const isCancelled = order?.status === 'CANCELLED';
+  const isCancelled = (order?.current_status || order?.status || '').toUpperCase() === 'CANCELLED';
+  const isPickupOrder = (() => {
+    const deliveryType = (order?.delivery_type || '').toUpperCase();
+    if (deliveryType === 'PICKUP') return true;
+    if (deliveryType === 'DELIVERY') return false;
+
+    const status = (order?.current_status || order?.status || '').toUpperCase();
+    return ['ASSIGNED', 'RECEIVED', 'PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS', 'SHIPPED', 'PICKED_UP'].includes(status);
+  })();
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -406,7 +555,7 @@ const FarmerOrderTracking = ({ navigation, route }) => {
         </View>
 
         {/* Source Transporter Info */}
-        {(order?.source_transporter_id) && (
+        {(order?.source_transporter_id || order?.source_transporter) && (
           <View style={styles.infoCard}>
             <Text style={styles.cardTitle}>Source Transporter (Pickup)</Text>
             <View style={styles.transporterRow}>
@@ -420,16 +569,18 @@ const FarmerOrderTracking = ({ navigation, route }) => {
                 />
               ) : (
                 <View style={styles.transporterImagePlaceholder}>
-                  <MaterialCommunityIcons name="truck-outline" size={24} color="#888" />
+                  <Text style={styles.transporterInitials}>
+                    {getInitials(order?.source_transporter?.name || 'Source Transporter')}
+                  </Text>
                 </View>
               )}
               <View style={styles.transporterInfo}>
                 <Text style={styles.transporterName}>
-                  {order?.source_transporter?.name || 'Source Transporter'}
+                  {order?.source_transporter?.name || order?.source_transporter?.full_name || 'Source Transporter'}
                 </Text>
-                {order?.source_transporter?.mobile_number ? (
+                {(order?.source_transporter?.mobile_number || order?.source_transporter?.mobile || order?.source_transporter?.phone) ? (
                   <Text style={styles.transporterContact}>
-                    📞 {order.source_transporter.mobile_number}
+                    📞 {order.source_transporter.mobile_number || order.source_transporter.mobile || order.source_transporter.phone}
                   </Text>
                 ) : (
                   <Text style={styles.transporterPending}>
@@ -458,7 +609,7 @@ const FarmerOrderTracking = ({ navigation, route }) => {
         )}
 
         {/* Destination Transporter Info */}
-        {(order?.destination_transporter_id) && (
+        {(order?.destination_transporter_id || order?.destination_transporter) && (
           <View style={styles.infoCard}>
             <Text style={styles.cardTitle}>Destination Transporter (Delivery)</Text>
             <View style={styles.transporterRow}>
@@ -472,16 +623,18 @@ const FarmerOrderTracking = ({ navigation, route }) => {
                 />
               ) : (
                 <View style={styles.transporterImagePlaceholder}>
-                  <MaterialCommunityIcons name="truck-delivery-outline" size={24} color="#888" />
+                  <Text style={styles.transporterInitials}>
+                    {getInitials(order?.destination_transporter?.name || 'Destination Transporter')}
+                  </Text>
                 </View>
               )}
               <View style={styles.transporterInfo}>
                 <Text style={styles.transporterName}>
-                  {order?.destination_transporter?.name || 'Destination Transporter'}
+                  {order?.destination_transporter?.name || order?.destination_transporter?.full_name || 'Destination Transporter'}
                 </Text>
-                {order?.destination_transporter?.mobile_number ? (
+                {(order?.destination_transporter?.mobile_number || order?.destination_transporter?.mobile || order?.destination_transporter?.phone) ? (
                   <Text style={styles.transporterContact}>
-                    📞 {order.destination_transporter.mobile_number}
+                    📞 {order.destination_transporter.mobile_number || order.destination_transporter.mobile || order.destination_transporter.phone}
                   </Text>
                 ) : (
                   <Text style={styles.transporterPending}>
@@ -510,47 +663,49 @@ const FarmerOrderTracking = ({ navigation, route }) => {
         )}
 
         {/* Customer Info with Profile Image */}
-        <View style={styles.infoCard}>
-          <Text style={styles.cardTitle}>Customer Information</Text>
-          <View style={styles.customerRow}>
-            {getCustomerImage(order?.customer) ? (
-              <Image 
-                source={{ uri: getCustomerImage(order?.customer) }} 
-                style={styles.customerImage}
-                onError={(error) => {
-                  console.log('[FarmerOrderTracking] Customer image load error:', error.nativeEvent.error);
-                }}
-              />
-            ) : (
-              <View style={styles.customerImagePlaceholder}>
-                <Ionicons name="person" size={24} color="#888" />
-              </View>
-            )}
-            <View style={styles.customerInfo}>
-              <Text style={styles.customerName}>
-                {order?.customer?.name || order?.customer_name || order?.user?.full_name || 'Customer'}
-              </Text>
-              {(order?.customer?.mobile_number || order?.customer_phone || order?.user?.phone) && (
-                <Text style={styles.customerContact}>
-                  📞 {order?.customer?.mobile_number || order?.customer_phone || order?.user?.phone}
-                </Text>
+        {!isPickupOrder && (
+          <View style={styles.infoCard}>
+            <Text style={styles.cardTitle}>Customer Information</Text>
+            <View style={styles.customerRow}>
+              {getCustomerImage(order?.customer) ? (
+                <Image 
+                  source={{ uri: getCustomerImage(order?.customer) }} 
+                  style={styles.customerImage}
+                  onError={(error) => {
+                    console.log('[FarmerOrderTracking] Customer image load error:', error.nativeEvent.error);
+                  }}
+                />
+              ) : (
+                <View style={styles.customerImagePlaceholder}>
+                  <Ionicons name="person" size={24} color="#888" />
+                </View>
               )}
-              {order?.delivery_address && (() => {
-                const raw = order.delivery_address;
-                let addr = raw;
-                if (typeof raw === 'string') { try { addr = JSON.parse(raw); } catch (_) {} }
-                const addrText = typeof addr === 'object' && addr !== null
-                  ? [addr.address_line, addr.city, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ')
-                  : String(addr);
-                return (
-                  <Text style={styles.customerAddress}>
-                    📍 {addrText}
+              <View style={styles.customerInfo}>
+                <Text style={styles.customerName}>
+                  {order?.customer?.name || order?.customer_name || order?.user?.full_name || 'Customer'}
+                </Text>
+                {(order?.customer?.mobile_number || order?.customer_phone || order?.user?.phone) && (
+                  <Text style={styles.customerContact}>
+                    📞 {order?.customer?.mobile_number || order?.customer_phone || order?.user?.phone}
                   </Text>
-                );
-              })()}
+                )}
+                {order?.delivery_address && (() => {
+                  const raw = order.delivery_address;
+                  let addr = raw;
+                  if (typeof raw === 'string') { try { addr = JSON.parse(raw); } catch (_) {} }
+                  const addrText = typeof addr === 'object' && addr !== null
+                    ? [addr.address_line, addr.city, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ')
+                    : String(addr);
+                  return (
+                    <Text style={styles.customerAddress}>
+                      📍 {addrText}
+                    </Text>
+                  );
+                })()}
+              </View>
             </View>
           </View>
-        </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -735,9 +890,14 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#F0F4F0',
+    backgroundColor: '#E8F5E9',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  transporterInitials: {
+    fontSize: 14,
+    color: '#1B5E20',
+    fontWeight: '700',
   },
   transporterInfo: {
     flex: 1,

@@ -351,7 +351,19 @@ export default function ProductDetails({ navigation, route }) {
       const pid = product.product_id || product.id;
       const success = await addToCart(pid, quantity);
       if (success) {
-        navigation.navigate('Payment');
+        const unitPrice = parseFloat(product.current_price || product.price || 0) || 0;
+        navigation.navigate('Payment', {
+          cartItems: [
+            {
+              product_id: pid,
+              quantity,
+              price: unitPrice,
+              name: product.name || product.product_name || 'Product',
+              image_url: product.image_url || product.image || null,
+            },
+          ],
+          totalAmount: unitPrice * quantity,
+        });
       } else {
         toastRef.current?.show('Could not proceed. Please try again.', 'error');
       }

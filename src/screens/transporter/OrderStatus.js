@@ -28,6 +28,10 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
+import {
+  assignTransporterDeliveryPerson,
+  updateTransporterOrderStatus,
+} from '../../services/orderService';
 
 const FILTERS = ['All', 'Assigned', 'Shipped', 'In Transit'];
 
@@ -109,7 +113,7 @@ const OrderStatus = ({ navigation }) => {
           onPress: async () => {
             setUpdatingId(orderId);
             try {
-              await api.put(`/transporters/orders/${orderId}/status`, { status: newStatus });
+              await updateTransporterOrderStatus(orderId, newStatus);
               Alert.alert('Success', 'Order status updated');
               fetchOrders(true);
             } catch (e) {
@@ -136,9 +140,13 @@ const OrderStatus = ({ navigation }) => {
         const orderId = order.order_id || order.id;
         setUpdatingId(orderId);
         try {
-          await api.put(`/transporters/orders/${orderId}/assign`, {
-            delivery_person_id: p.id || p.delivery_person_id,
-          });
+          const status = (order.current_status || order.status || '').toUpperCase();
+          const assignmentType = status === 'ASSIGNED' ? 'pickup' : 'delivery';
+          await assignTransporterDeliveryPerson(
+            orderId,
+            p.id || p.delivery_person_id,
+            assignmentType
+          );
           Alert.alert('Success', `Assigned ${p.full_name || p.name}`);
           fetchOrders(true);
         } catch (e) {

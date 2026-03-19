@@ -77,6 +77,23 @@ function getVariety(product) {
   return product.variety || product.sub_category || product.tag || null;
 }
 
+function isVisibleToCustomer(product) {
+  const now = new Date();
+  const status = String(product?.status || '').toUpperCase();
+  const qty = Number(product?.quantity ?? product?.stock ?? product?.available_quantity ?? 0);
+
+  if (product?.expiry_date) {
+    const expiryDate = new Date(product.expiry_date);
+    if (!Number.isNaN(expiryDate.getTime()) && expiryDate < now) return false;
+  }
+
+  if (status === 'HIDDEN' || status === 'PENDING' || status === 'INACTIVE') return false;
+  if (status === 'SOLD_OUT' || status === 'OUT_OF_STOCK') return false;
+  if (qty <= 0) return false;
+
+  return status === 'AVAILABLE' || status === 'ACTIVE' || !status;
+}
+
 // ---------------------------------------------------------------------------
 // Rating Stars
 // ---------------------------------------------------------------------------
@@ -134,7 +151,8 @@ const Categories = ({ navigation, route }) => {
         params: { category: selectedCategory },
       });
       const data = res.data?.data || res.data?.products || [];
-      setProducts(data);
+      const list = Array.isArray(data) ? data : [];
+      setProducts(list.filter(isVisibleToCustomer));
     } catch (e) {
       console.log('Categories fetch error:', e.message);
     } finally {

@@ -246,6 +246,41 @@ function getGreeting() {
   return 'Good Evening';
 }
 
+const getNormalizedStatus = (product) => String(product?.status || '').toUpperCase();
+
+const isOutOfStockProduct = (product) => {
+  const status = getNormalizedStatus(product);
+  const qty = Number(product?.quantity ?? product?.stock ?? product?.available_quantity ?? 0);
+  return qty <= 0 || status === 'OUT_OF_STOCK' || status === 'SOLD_OUT';
+};
+
+const isPendingProduct = (product) => {
+  const status = getNormalizedStatus(product);
+  return (
+    status === 'PENDING' ||
+    status === 'INACTIVE' ||
+    status === 'HIDDEN' ||
+    product?.is_active === false ||
+    product?.is_active === 0
+  );
+};
+
+const isActiveProduct = (product) => {
+  if (product?.isExpired) return false;
+  if (isOutOfStockProduct(product)) return false;
+  if (isPendingProduct(product)) return false;
+
+  const status = getNormalizedStatus(product);
+  const explicitActive =
+    status === 'ACTIVE' ||
+    status === 'AVAILABLE' ||
+    product?.is_active === true ||
+    product?.is_active === 1;
+
+  // If backend omits status, keep product visible when stock exists and not pending.
+  return explicitActive || !status;
+};
+
 const FarmerHome = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { authState } = useAuth();
@@ -310,15 +345,14 @@ const FarmerHome = ({ navigation }) => {
       console.log('[FarmerHome] Processed products:', prodList);
       console.log('[FarmerHome] Processed orders:', orderList);
 
-      // Don't filter out expired products for farmers - they need to see them
-      // Just mark them as expired for display purposes
+      // Mark expired products strictly by expiry_date.
       const currentDate = new Date();
       const productsWithExpiry = prodList.map(prod => {
-        if (prod.harvest_date) {
-          const harvestDate = new Date(prod.harvest_date);
-          const isExpired = harvestDate < currentDate;
+        if (prod.expiry_date) {
+          const expiryDate = new Date(prod.expiry_date);
+          const isExpired = expiryDate < currentDate;
           if (isExpired) {
-            console.log('[FarmerHome] Product expired:', prod.name, 'harvest date:', prod.harvest_date);
+            console.log('[FarmerHome] Product expired:', prod.name, 'expiry date:', prod.expiry_date);
           }
           return { ...prod, isExpired };
         }
@@ -330,37 +364,30 @@ const FarmerHome = ({ navigation }) => {
       setProducts(productsWithExpiry);
       setOrders(orderList);
 
-      const activeCount = productsWithExpiry.filter(
-        (p) => {
-          const isActive = (p.status === 'active' || p.status === 'ACTIVE' || p.is_active === true || p.is_active === 1) && !p.isExpired;
-          console.log('[FarmerHome] Product', p.name, 'active check:', { status: p.status, is_active: p.is_active, isExpired: p.isExpired, isActive });
-          return isActive;
-        }
-      ).length;
+      const activeCount = productsWithExpiry.filter((p) => {
+        const isActive = isActiveProduct(p);
+        console.log('[FarmerHome] Product', p.name, 'active check:', { status: p.status, is_active: p.is_active, isExpired: p.isExpired, isActive });
+        return isActive;
+      }).length;
       
-      const pendingCount = productsWithExpiry.filter(
-        (p) => {
-          const isPending = (p.status === 'pending' || p.status === 'PENDING' || p.status === 'INACTIVE' || p.is_active === false || p.is_active === 0) && !p.isExpired;
-          console.log('[FarmerHome] Product', p.name, 'pending check:', { status: p.status, is_active: p.is_active, isExpired: p.isExpired, isPending });
-          return isPending;
-        }
-      ).length;
+      const pendingCount = productsWithExpiry.filter((p) => {
+        const isPending = isPendingProduct(p) && !p.isExpired;
+        console.log('[FarmerHome] Product', p.name, 'pending check:', { status: p.status, is_active: p.is_active, isExpired: p.isExpired, isPending });
+        return isPending;
+      }).length;
       
-      const outOfStockCount = productsWithExpiry.filter(
-        (p) => {
-          const isOutOfStock = (p.quantity === 0 || p.stock === 0 || p.available_quantity === 0 || 
-                              p.status === 'out_of_stock' || p.status === 'OUT_OF_STOCK') && !p.isExpired;
-          console.log('[FarmerHome] Product', p.name, 'out of stock check:', { 
-            quantity: p.quantity, 
-            stock: p.stock, 
-            available_quantity: p.available_quantity, 
-            status: p.status, 
-            isExpired: p.isExpired,
-            isOutOfStock 
-          });
-          return isOutOfStock;
-        }
-      ).length;
+      const outOfStockCount = productsWithExpiry.filter((p) => {
+        const isOutOfStock = isOutOfStockProduct(p) && !p.isExpired;
+        console.log('[FarmerHome] Product', p.name, 'out of stock check:', { 
+          quantity: p.quantity, 
+          stock: p.stock, 
+          available_quantity: p.available_quantity, 
+          status: p.status, 
+          isExpired: p.isExpired,
+          isOutOfStock 
+        });
+        return isOutOfStock;
+      }).length;
       
       const expiredCount = productsWithExpiry.filter(p => p.isExpired).length;
 
@@ -1122,7 +1149,7 @@ const FarmerHome = ({ navigation }) => {
 
           {/* Active products */}
           {(() => {
-            const activeProducts = products.filter(p => !p.isExpired);
+            const activeProducts = products.filter(isActiveProduct);
             return activeProducts.length === 0 ? (
               <View style={styles.emptyBox}>
                 <Ionicons name="cube-outline" size={48} color="#ccc" />
@@ -1130,10 +1157,9 @@ const FarmerHome = ({ navigation }) => {
               </View>
             ) : (
               activeProducts.slice(0, 6).map((prod, idx) => {
-                const isActive = (prod.status === 'active' || prod.status === 'ACTIVE' || prod.is_active === true || prod.is_active === 1);
-                const isPending = (prod.status === 'pending' || prod.status === 'PENDING' || prod.status === 'INACTIVE' || prod.is_active === false || prod.is_active === 0);
-                const isOutOfStock = (prod.quantity === 0 || prod.stock === 0 || prod.available_quantity === 0 ||
-                                    prod.status === 'out_of_stock' || prod.status === 'OUT_OF_STOCK');
+                const isActive = isActiveProduct(prod);
+                const isPending = isPendingProduct(prod);
+                const isOutOfStock = isOutOfStockProduct(prod);
                 
                 const statusColor = isOutOfStock ? '#F44336' : isPending ? '#FF9800' : '#4CAF50';
                 const statusLabel = isOutOfStock ? 'Out of Stock' : isPending ? 'Pending' : 'Active';
@@ -1225,7 +1251,7 @@ const FarmerHome = ({ navigation }) => {
 
           {/* See all active products link */}
           {(() => {
-            const activeProducts = products.filter(p => !p.isExpired);
+            const activeProducts = products.filter(isActiveProduct);
             return activeProducts.length > 6 && (
               <TouchableOpacity
                 style={styles.prodSeeAllBtn}
@@ -1261,7 +1287,7 @@ const FarmerHome = ({ navigation }) => {
               <View style={styles.expiredWarning}>
                 <Ionicons name="warning-outline" size={16} color="#FF6F00" />
                 <Text style={styles.expiredWarningText}>
-                  These products have passed their harvest date. Consider updating or removing them.
+                  These products have passed their expiry date. Consider updating or removing them.
                 </Text>
               </View>
 
@@ -1286,7 +1312,7 @@ const FarmerHome = ({ navigation }) => {
                 );
                 const stock = prod.quantity ?? prod.stock ?? prod.available_quantity ?? '—';
                 
-                const harvestDate = prod.harvest_date ? new Date(prod.harvest_date).toLocaleDateString('en-IN', {
+                const expiredDate = prod.expiry_date ? new Date(prod.expiry_date).toLocaleDateString('en-IN', {
                   day: 'numeric',
                   month: 'short',
                   year: 'numeric'
@@ -1322,7 +1348,7 @@ const FarmerHome = ({ navigation }) => {
                         {prod.name || prod.product_name || 'Product'}
                       </Text>
                       <Text style={styles.expiredDate} numberOfLines={1}>
-                        Expired: {harvestDate}
+                        Expired: {expiredDate}
                       </Text>
 
                       <View style={styles.prodMetaRow}>

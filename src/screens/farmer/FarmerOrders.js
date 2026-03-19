@@ -20,14 +20,19 @@ import { useAuth } from '../../context/AuthContext';
 import { getFarmerOrders, acceptFarmerOrder, rejectFarmerOrder, assignTransporters } from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
 
-const STATUS_LIST = ['All', 'PENDING', 'PLACED', 'ASSIGNED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'COMPLETED', 'CANCELLED'];
+const STATUS_LIST = ['All', 'PENDING', 'PLACED', 'ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY', 'COMPLETED', 'CANCELLED'];
 
 const STATUS_COLORS = {
   PENDING: '#FF9800',
-  PLACED: '#2196F3', 
+  PLACED: '#2196F3',
   ASSIGNED: '#9C27B0',
-  SHIPPED: '#00BCD4',
-  OUT_FOR_DELIVERY: '#FF5722',
+  PICKUP_ASSIGNED: '#FF5722',
+  PICKED_UP: '#00897B',
+  RECEIVED: '#00897B',
+  SHIPPED: '#3F51B5',
+  IN_TRANSIT: '#3F51B5',
+  REACHED_DESTINATION: '#673AB7',
+  OUT_FOR_DELIVERY: '#00BCD4',
   COMPLETED: '#4CAF50',
   CANCELLED: '#F44336',
 };
@@ -47,10 +52,18 @@ const normalizeStatus = (backendStatus) => {
       return 'PLACED';
     case 'ASSIGNED':
       return 'ASSIGNED';
-    case 'SHIPPED':
-    case 'IN_TRANSIT':
-      return 'SHIPPED';
+    case 'PICKUP_ASSIGNED':
+      return 'PICKUP_ASSIGNED';
+    case 'PICKED_UP':
+      return 'PICKED_UP';
     case 'RECEIVED':
+      return 'RECEIVED';
+    case 'SHIPPED':
+      return 'SHIPPED';
+    case 'IN_TRANSIT':
+      return 'IN_TRANSIT';
+    case 'REACHED_DESTINATION':
+      return 'REACHED_DESTINATION';
     case 'OUT_FOR_DELIVERY':
       return 'OUT_FOR_DELIVERY';
     case 'COMPLETED':
@@ -230,11 +243,19 @@ const FarmerOrders = ({ navigation }) => {
       if (action === 'accept') {
         const response = await acceptFarmerOrder(orderId);
         console.log('[FarmerOrders] Accept response:', response);
+
+        // Workflow step 2: transporter assignment should happen at accept time.
+        try {
+          const assignResp = await assignTransporters(orderId);
+          console.log('[FarmerOrders] Auto-assign transporters response:', assignResp);
+        } catch (assignErr) {
+          console.log('[FarmerOrders] Auto-assign transporters failed:', assignErr.message);
+        }
         
         setOrders((prev) =>
-          prev.map((o) => ((o.order_id || o.id) === orderId ? { ...o, status: 'PLACED' } : o))
+          prev.map((o) => ((o.order_id || o.id) === orderId ? { ...o, status: 'ASSIGNED' } : o))
         );
-        toastRef.current?.show('Order accepted successfully!', 'success');
+        toastRef.current?.show('Order accepted and transporters assigned successfully!', 'success');
       } else {
         const response = await rejectFarmerOrder(orderId, 'Rejected by farmer');
         console.log('[FarmerOrders] Reject response:', response);
@@ -444,7 +465,7 @@ const FarmerOrders = ({ navigation }) => {
                 )}
               </TouchableOpacity>
             )}
-            {['ASSIGNED', 'SHIPPED', 'OUT_FOR_DELIVERY'].includes(item.status) && (
+    {['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(item.status) && (
               <TouchableOpacity
                 style={styles.trackBtn}
                 onPress={() => navigation.navigate('FarmerOrderTracking', { orderId: realId, order: item })}
@@ -669,7 +690,7 @@ const FarmerOrders = ({ navigation }) => {
                     )}
                   </TouchableOpacity>
                 )}
-                {['ASSIGNED', 'SHIPPED', 'OUT_FOR_DELIVERY'].includes(o.status) && (
+                {['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(o.status) && (
                   <TouchableOpacity
                     style={styles.detailTrackBtn}
                     onPress={() => { setDetailModal(false); navigation.navigate('FarmerOrderTracking', { orderId: realId, order: o }); }}

@@ -31,6 +31,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
+import { assignTransporterDeliveryPerson } from '../../services/orderService';
 import { useAuth } from '../../context/AuthContext';
 import ToastMessage from '../../utils/Toast';
 
@@ -130,9 +131,13 @@ const TransporterDashboard = ({ navigation }) => {
     const orderId = order.order_id || order.id;
     setAssigningOrderId(orderId);
     try {
-      await api.put(`/transporters/orders/${orderId}/assign`, {
-        delivery_person_id: person.id || person.delivery_person_id,
-      });
+      const status = (order.current_status || order.status || '').toUpperCase();
+      const assignmentType = status === 'ASSIGNED' ? 'pickup' : 'delivery';
+      await assignTransporterDeliveryPerson(
+        orderId,
+        person.id || person.delivery_person_id,
+        assignmentType
+      );
       toastRef.current?.show(`Assigned ${person.full_name || person.name} successfully!`, 'success');
       fetchDashboard(true);
     } catch (e) {

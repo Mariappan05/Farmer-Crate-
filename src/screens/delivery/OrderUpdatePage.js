@@ -120,7 +120,7 @@ const OrderUpdatePage = ({ navigation, route }) => {
 
     Alert.alert(
       'Confirm Update',
-      `Update order #${orderId} to "${selectedStatus.replace(/_/g, ' ')}"?`,
+      `Update order to "${selectedStatus.replace(/_/g, ' ')}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -200,7 +200,7 @@ const OrderUpdatePage = ({ navigation, route }) => {
             Order Updated!
           </Animated.Text>
           <Animated.Text style={[styles.successSubtext, { opacity: successAnim }]}>
-            Order #{orderId} → {selectedStatus?.replace(/_/g, ' ')}
+            Status changed to {selectedStatus?.replace(/_/g, ' ')}
           </Animated.Text>
         </View>
       </View>
@@ -216,7 +216,7 @@ const OrderUpdatePage = ({ navigation, route }) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Update Order #{orderId}</Text>
+        <Text style={styles.headerTitle}>Update Order</Text>
       </LinearGradient>
 
       <KeyboardAvoidingView

@@ -16,40 +16,163 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
-import { updateDeliveryOrderStatus } from '../../services/orderService';
 
 const STATUS_COLORS = {
   PENDING: '#FF9800',
+  PLACED: '#FF9800',
   CONFIRMED: '#2196F3',
   ASSIGNED: '#9C27B0',
+  PICKUP_ASSIGNED: '#FF5722',
+  RECEIVED: '#FF5722',
   PICKUP_IN_PROGRESS: '#00BCD4',
-  PICKED_UP: '#00897B',
   SHIPPED: '#FF5722',
-  IN_TRANSIT: '#00BCD4',
-  OUT_FOR_DELIVERY: '#FF9800',
+  PICKED_UP: '#00897B',
+  IN_TRANSIT: '#3F51B5',
+  REACHED_DESTINATION: '#673AB7',
+  RECEIVED: '#673AB7',
+  OUT_FOR_DELIVERY: '#00BCD4',
   DELIVERED: '#4CAF50',
   COMPLETED: '#4CAF50',
   CANCELLED: '#F44336',
 };
 
+// Full 9-step flow
 const STATUS_FLOW = [
   'PENDING',
+  'PLACED',
   'CONFIRMED',
   'ASSIGNED',
+  'PICKUP_ASSIGNED',
   'PICKUP_IN_PROGRESS',
   'PICKED_UP',
+  'RECEIVED',
   'SHIPPED',
+  'IN_TRANSIT',
+  'REACHED_DESTINATION',
   'OUT_FOR_DELIVERY',
   'DELIVERED',
 ];
 
-// What button label and next status based on current status
+const STATUS_NORMALIZE = {
+  COMPLETED: 'DELIVERED',
+  ACCEPTED: 'CONFIRMED',
+  PICKUP_COMPLETE: 'PICKED_UP',
+  REACHED: 'REACHED_DESTINATION',
+};
+
+const isPickupOrder = (order) => {
+  const deliveryType = (order?.delivery_type || '').toUpperCase();
+  if (deliveryType === 'PICKUP') return true;
+  if (deliveryType === 'DELIVERY') return false;
+
+  const status = (order?.current_status || order?.status || '').toUpperCase();
+  return ['ASSIGNED', 'PLACED', 'RECEIVED', 'SHIPPED', 'PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS', 'PICKED_UP', 'IN_TRANSIT'].includes(status);
+};
+
+const formatAddress = (rawAddress) => {
+  if (!rawAddress) return null;
+
+  let parsed = rawAddress;
+  if (typeof rawAddress === 'string') {
+    try {
+      parsed = JSON.parse(rawAddress);
+    } catch {
+      return rawAddress;
+    }
+  }
+
+  if (typeof parsed !== 'object') return String(parsed);
+
+  return [
+    parsed.full_name,
+    parsed.address_line,
+    parsed.landmark,
+    parsed.city,
+    parsed.district,
+    parsed.state,
+    parsed.pincode,
+    parsed.zone,
+  ]
+    .filter(Boolean)
+    .join(', ');
+};
+
+const pickFirst = (...values) => values.find((value) => !!value);
+
+const buildFarmerProfile = (order) => {
+  const farmer = order?.farmer || order?.pickup_farmer || order?.source_farmer || null;
+  const name = pickFirst(
+    farmer?.name,
+    farmer?.full_name,
+    order?.farmer_name,
+    order?.pickup_farmer_name,
+    order?.source_farmer_name,
+    order?.source_name,
+    'Farmer'
+  );
+  const phone = pickFirst(
+    farmer?.phone,
+    farmer?.mobile_number,
+    farmer?.phone_number,
+    order?.farmer_phone,
+    order?.pickup_farmer_phone,
+    order?.source_phone,
+    null
+  );
+  const address = formatAddress(
+    pickFirst(
+      farmer?.address,
+      farmer?.farm_address,
+      farmer?.address_line,
+      order?.farmer_address,
+      order?.pickup_address,
+      order?.farm_address,
+      order?.source_address,
+      order?.source_transporter_address,
+      null
+    )
+  );
+
+  return { name, phone, address };
+};
+
+const buildCustomerProfile = (order) => {
+  const customer = order?.customer || order?.delivery_customer || order?.destination_customer || null;
+  const name = pickFirst(
+    customer?.name,
+    customer?.full_name,
+    order?.customer_name,
+    order?.delivery_customer_name,
+    order?.destination_customer_name,
+    'Customer'
+  );
+  const phone = pickFirst(
+    customer?.phone,
+    customer?.mobile_number,
+    customer?.phone_number,
+    order?.customer_phone,
+    order?.delivery_customer_phone,
+    null
+  );
+  const address = formatAddress(
+    pickFirst(
+      customer?.address,
+      customer?.address_line,
+      order?.delivery_address,
+      order?.destination_address,
+      order?.destination_transporter_address,
+      null
+    )
+  );
+
+  return { name, phone, address };
+};
+
+// Only destination delivery person scans QR to confirm delivery
+// Pickup delivery person has NO action button
 const STATUS_ACTIONS = {
-  ASSIGNED: { label: 'Start Pickup', nextStatus: 'PICKUP_IN_PROGRESS', icon: 'bicycle-outline' },
-  PICKUP_IN_PROGRESS: { label: 'Confirm Pickup', nextStatus: 'SHIPPED', icon: 'checkmark-circle-outline' },
-  PICKED_UP: { label: 'Start Delivery', nextStatus: 'OUT_FOR_DELIVERY', icon: 'car-outline' },
-  SHIPPED: { label: 'Start Delivery', nextStatus: 'OUT_FOR_DELIVERY', icon: 'car-outline' },
-  OUT_FOR_DELIVERY: { label: 'Confirm Delivery', nextStatus: 'DELIVERED', icon: 'checkmark-done-circle-outline' },
+  REACHED_DESTINATION: { label: 'Scan QR to Start Delivery', icon: 'qr-code-outline' },
+  OUT_FOR_DELIVERY: { label: 'Scan QR to Confirm Delivery', icon: 'qr-code-outline' },
 };
 
 const OrderDetails = ({ navigation, route }) => {
@@ -58,7 +181,6 @@ const OrderDetails = ({ navigation, route }) => {
   const [order, setOrder] = useState(initialOrder || null);
   const [loading, setLoading] = useState(!initialOrder);
   const [refreshing, setRefreshing] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
 
   const orderId = paramOrderId || initialOrder?.order_id || initialOrder?.id;
 
@@ -94,51 +216,13 @@ const OrderDetails = ({ navigation, route }) => {
     fetchOrder();
   };
 
-  // ─── Status update ────────────────────────────────────────────────────
-  const currentStatus = order?.current_status || order?.status || '';
+  // ─── Status (QR-only for destination delivery person) ────────────────
+  const rawStatus = (order?.current_status || order?.status || '').toUpperCase();
+  const currentStatus = STATUS_NORMALIZE[rawStatus] || rawStatus;
   const action = STATUS_ACTIONS[currentStatus];
 
-  const handleStatusUpdate = () => {
-    if (!action) return;
-    Alert.alert(
-      action.label,
-      `Are you sure you want to mark this order as "${action.nextStatus.replace(/_/g, ' ')}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: async () => {
-            setIsUpdating(true);
-            try {
-              await updateDeliveryOrderStatus(orderId, action.nextStatus);
-              setOrder((prev) => ({ ...prev, current_status: action.nextStatus }));
-              Alert.alert('Success!', `Order status updated to ${action.nextStatus.replace(/_/g, ' ')}`);
-            } catch (e) {
-              // Fallback
-              try {
-                await api.put(`/orders/${orderId}/status`, { status: action.nextStatus });
-                setOrder((prev) => ({ ...prev, current_status: action.nextStatus }));
-                Alert.alert('Success!', `Order status updated to ${action.nextStatus.replace(/_/g, ' ')}`);
-              } catch {
-                Alert.alert('Error', e.message || 'Failed to update status');
-              }
-            } finally {
-              setIsUpdating(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  // Navigate to update page with photo proof
-  const handleManualUpdate = () => {
-    navigation.navigate('OrderUpdate', {
-      order,
-      orderId: orderId,
-      action: action?.nextStatus || null,
-    });
-  };
+  // Navigate to QR scanner tab for delivery confirmation
+  const handleQRScan = () => navigation.navigate('Scanner');
 
   // ─── Phone & Map actions ──────────────────────────────────────────────
   const callPerson = (phone) => {
@@ -231,6 +315,9 @@ const OrderDetails = ({ navigation, route }) => {
   }
 
   const statusColor = STATUS_COLORS[currentStatus] || '#888';
+  const farmerProfile = buildFarmerProfile(order);
+  const customerProfile = buildCustomerProfile(order);
+  const pickupOnlyOrder = isPickupOrder(order);
 
   // Order items
   const items = order?.items || order?.order_items || [];
@@ -245,7 +332,7 @@ const OrderDetails = ({ navigation, route }) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Order #{orderId}</Text>
+        <Text style={styles.headerTitle}>Order Details</Text>
         <TouchableOpacity onPress={onRefresh}>
           <Ionicons name="refresh-outline" size={22} color="#fff" />
         </TouchableOpacity>
@@ -276,33 +363,33 @@ const OrderDetails = ({ navigation, route }) => {
             <Text style={styles.cardTitle}>Pickup From</Text>
           </View>
           <Text style={styles.personName}>
-            {order?.farmer?.name || order?.farmer?.full_name || order?.farmer_name || 'Farmer'}
+            {farmerProfile.name}
           </Text>
           <View style={styles.infoRow}>
             <Ionicons name="location-outline" size={16} color="#888" />
             <Text style={styles.infoText}>
-              {order?.farmer?.address || order?.farmer?.farm_address || order?.pickup_address || order?.farm_address || 'Address not available'}
+              {farmerProfile.address || 'Address not available'}
             </Text>
           </View>
-          {(order?.farmer?.phone || order?.farmer?.mobile_number || order?.farmer_phone) && (
+          {farmerProfile.phone && (
             <View style={styles.infoRow}>
               <Ionicons name="call-outline" size={16} color="#888" />
               <Text style={styles.infoText}>
-                {order?.farmer?.phone || order?.farmer?.mobile_number || order?.farmer_phone}
+                {farmerProfile.phone}
               </Text>
             </View>
           )}
           <View style={styles.actionBtnRow}>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: '#E3F2FD' }]}
-              onPress={() => openMap(order?.farmer?.address || order?.pickup_address || order?.farm_address)}
+              onPress={() => openMap(farmerProfile.address)}
             >
               <Ionicons name="navigate-outline" size={18} color="#2196F3" />
               <Text style={[styles.actionBtnText, { color: '#2196F3' }]}>Directions</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: '#E8F5E9' }]}
-              onPress={() => callPerson(order?.farmer?.phone || order?.farmer?.mobile_number || order?.farmer_phone)}
+              onPress={() => callPerson(farmerProfile.phone)}
             >
               <Ionicons name="call-outline" size={18} color="#4CAF50" />
               <Text style={[styles.actionBtnText, { color: '#4CAF50' }]}>Call Farmer</Text>
@@ -311,45 +398,47 @@ const OrderDetails = ({ navigation, route }) => {
         </View>
 
         {/* Delivery Info (Customer) */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="person-outline" size={20} color="#1B5E20" />
-            <Text style={styles.cardTitle}>Deliver To</Text>
-          </View>
-          <Text style={styles.personName}>
-            {order?.customer?.name || order?.customer?.full_name || order?.customer_name || 'Customer'}
-          </Text>
-          <View style={styles.infoRow}>
-            <Ionicons name="location-outline" size={16} color="#888" />
-            <Text style={styles.infoText}>
-              {order?.delivery_address || order?.customer?.address || 'Address not available'}
+        {!pickupOnlyOrder && (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="person-outline" size={20} color="#1B5E20" />
+              <Text style={styles.cardTitle}>Deliver To</Text>
+            </View>
+            <Text style={styles.personName}>
+              {customerProfile.name}
             </Text>
-          </View>
-          {(order?.customer?.phone || order?.customer?.mobile_number || order?.customer_phone) && (
             <View style={styles.infoRow}>
-              <Ionicons name="call-outline" size={16} color="#888" />
+              <Ionicons name="location-outline" size={16} color="#888" />
               <Text style={styles.infoText}>
-                {order?.customer?.phone || order?.customer?.mobile_number || order?.customer_phone}
+                {customerProfile.address || 'Address not available'}
               </Text>
             </View>
-          )}
-          <View style={styles.actionBtnRow}>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#E3F2FD' }]}
-              onPress={() => openMap(order?.delivery_address || order?.customer?.address)}
-            >
-              <Ionicons name="navigate-outline" size={18} color="#2196F3" />
-              <Text style={[styles.actionBtnText, { color: '#2196F3' }]}>Directions</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#FFF3E0' }]}
-              onPress={() => callPerson(order?.customer?.phone || order?.customer?.mobile_number || order?.customer_phone)}
-            >
-              <Ionicons name="call-outline" size={18} color="#FF9800" />
-              <Text style={[styles.actionBtnText, { color: '#FF9800' }]}>Call Customer</Text>
-            </TouchableOpacity>
+            {customerProfile.phone && (
+              <View style={styles.infoRow}>
+                <Ionicons name="call-outline" size={16} color="#888" />
+                <Text style={styles.infoText}>
+                  {customerProfile.phone}
+                </Text>
+              </View>
+            )}
+            <View style={styles.actionBtnRow}>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#E3F2FD' }]}
+                onPress={() => openMap(customerProfile.address)}
+              >
+                <Ionicons name="navigate-outline" size={18} color="#2196F3" />
+                <Text style={[styles.actionBtnText, { color: '#2196F3' }]}>Directions</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#FFF3E0' }]}
+                onPress={() => callPerson(customerProfile.phone)}
+              >
+                <Ionicons name="call-outline" size={18} color="#FF9800" />
+                <Text style={[styles.actionBtnText, { color: '#FF9800' }]}>Call Customer</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Order Items / Products */}
         <View style={styles.card}>
@@ -435,13 +524,12 @@ const OrderDetails = ({ navigation, route }) => {
           {renderTimeline()}
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionsContainer}>
-          {action && currentStatus !== 'DELIVERED' && currentStatus !== 'CANCELLED' && (
+        {/* Action — QR scan only for destination delivery person */}
+        {action && currentStatus !== 'DELIVERED' && currentStatus !== 'CANCELLED' && (
+          <View style={styles.actionsContainer}>
             <TouchableOpacity
-              style={[styles.primaryActionBtn, isUpdating && { opacity: 0.6 }]}
-              onPress={handleStatusUpdate}
-              disabled={isUpdating}
+              style={styles.primaryActionBtn}
+              onPress={handleQRScan}
               activeOpacity={0.7}
             >
               <LinearGradient
@@ -450,27 +538,12 @@ const OrderDetails = ({ navigation, route }) => {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                {isUpdating ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name={action.icon} size={22} color="#fff" />
-                    <Text style={styles.primaryActionText}>{action.label}</Text>
-                  </>
-                )}
+                <Ionicons name={action.icon} size={22} color="#fff" />
+                <Text style={styles.primaryActionText}>{action.label}</Text>
               </LinearGradient>
             </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={styles.secondaryActionBtn}
-            onPress={handleManualUpdate}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="create-outline" size={20} color="#FF9800" />
-            <Text style={styles.secondaryActionText}>Update with Photo Proof</Text>
-          </TouchableOpacity>
-        </View>
+          </View>
+        )}
       </ScrollView>
     </View>
   );

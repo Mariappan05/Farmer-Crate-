@@ -129,6 +129,23 @@ function getProductPrice(product) {
   return price;
 }
 
+function isVisibleToCustomer(product) {
+  const now = new Date();
+  const status = String(product?.status || '').toUpperCase();
+  const qty = Number(product?.quantity ?? product?.stock ?? product?.available_quantity ?? 0);
+
+  if (product?.expiry_date) {
+    const expiryDate = new Date(product.expiry_date);
+    if (!Number.isNaN(expiryDate.getTime()) && expiryDate < now) return false;
+  }
+
+  if (status === 'HIDDEN' || status === 'PENDING' || status === 'INACTIVE') return false;
+  if (status === 'SOLD_OUT' || status === 'OUT_OF_STOCK') return false;
+  if (qty <= 0) return false;
+
+  return status === 'AVAILABLE' || status === 'ACTIVE' || !status;
+}
+
 // ---------------------------------------------------------------------------
 // Shimmer placeholder component
 // ---------------------------------------------------------------------------
@@ -268,21 +285,21 @@ export default function CustomerHome({ navigation }) {
       
       console.log('[CustomerHome] Raw products:', productList);
       
-      // Filter out products that have passed their harvest date
-      const currentDate = new Date();
-      const activeProducts = productList.filter(prod => {
-        if (prod.harvest_date) {
-          const harvestDate = new Date(prod.harvest_date);
-          const isExpired = harvestDate < currentDate;
-          if (isExpired) {
-            console.log('[CustomerHome] Excluding expired product:', prod.name, 'harvest date:', prod.harvest_date);
-          }
-          return !isExpired;
+      const activeProducts = productList.filter((prod) => {
+        const visible = isVisibleToCustomer(prod);
+        if (!visible) {
+          console.log('[CustomerHome] Excluding non-visible product:', prod.name, {
+            status: prod.status,
+            quantity: prod.quantity,
+            stock: prod.stock,
+            available_quantity: prod.available_quantity,
+            expiry_date: prod.expiry_date,
+          });
         }
-        return true; // Include products without harvest date
+        return visible;
       });
       
-      console.log('[CustomerHome] Active products after harvest date filter:', activeProducts);
+      console.log('[CustomerHome] Active products after visibility filter:', activeProducts);
       setProducts(activeProducts);
     } catch (e) {
       console.log('Products error:', e.message);
@@ -298,15 +315,7 @@ export default function CustomerHome({ navigation }) {
       const data = res.data?.data || res.data || [];
       const trendingList = Array.isArray(data) ? data : [];
       
-      // Filter out expired products from trending as well
-      const currentDate = new Date();
-      const activeTrending = trendingList.filter(prod => {
-        if (prod.harvest_date) {
-          const harvestDate = new Date(prod.harvest_date);
-          return harvestDate >= currentDate;
-        }
-        return true;
-      });
+      const activeTrending = trendingList.filter(isVisibleToCustomer);
       
       console.log('[CustomerHome] Active trending products:', activeTrending);
       setTrending(activeTrending);
@@ -318,15 +327,7 @@ export default function CustomerHome({ navigation }) {
         const data = res.data?.data || res.data || [];
         const productList = Array.isArray(data) ? data : [];
         
-        // Filter expired products and sort by views
-        const currentDate = new Date();
-        const activeProducts = productList.filter(prod => {
-          if (prod.harvest_date) {
-            const harvestDate = new Date(prod.harvest_date);
-            return harvestDate >= currentDate;
-          }
-          return true;
-        });
+        const activeProducts = productList.filter(isVisibleToCustomer);
         
         const sorted = [...activeProducts].sort(
           (a, b) => (b.views || 0) - (a.views || 0),
