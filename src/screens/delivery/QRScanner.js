@@ -16,6 +16,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import { getOrderById } from '../../services/orderService';
+import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
+import { useAuth } from '../../context/AuthContext';
 
 const SCAN_BOX_SIZE = 250;
 const CORNER = 28;

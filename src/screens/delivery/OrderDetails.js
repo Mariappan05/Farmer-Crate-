@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import { updateDeliveryOrderStatus } from '../../services/orderService';
+import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
 
 const STATUS_COLORS = {
   PENDING: '#FF9800',
