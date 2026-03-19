@@ -76,6 +76,23 @@ const getRating = (product) => {
 const getFarmerName = (product) =>
   product.farmer_name || product.user?.full_name || product.user?.name || 'Local Farmer';
 
+const isVisibleToCustomer = (product) => {
+  const now = new Date();
+  const status = String(product?.status || '').toUpperCase();
+  const qty = Number(product?.quantity ?? product?.stock ?? product?.available_quantity ?? 0);
+
+  if (product?.expiry_date) {
+    const expiryDate = new Date(product.expiry_date);
+    if (!Number.isNaN(expiryDate.getTime()) && expiryDate < now) return false;
+  }
+
+  if (status === 'HIDDEN' || status === 'PENDING' || status === 'INACTIVE') return false;
+  if (status === 'SOLD_OUT' || status === 'OUT_OF_STOCK') return false;
+  if (qty <= 0) return false;
+
+  return status === 'AVAILABLE' || status === 'ACTIVE' || !status;
+};
+
 /* --------------------------------------------------------------------------
  * SHIMMER
  * ------------------------------------------------------------------------ */
@@ -253,11 +270,12 @@ const TrendingPage = ({ navigation }) => {
         api.get('/products/trending').catch(() => null),
         api.get('/products').catch(() => null),
       ]);
-      const trending = trendRes?.data?.data || trendRes?.data?.products;
+      const trendingRaw = trendRes?.data?.data || trendRes?.data?.products;
+      const trending = Array.isArray(trendingRaw) ? trendingRaw.filter(isVisibleToCustomer) : [];
       if (trending && trending.length > 0) {
         setProducts(trending);
       } else {
-        const all = allRes?.data?.data || allRes?.data?.products || [];
+        const all = (allRes?.data?.data || allRes?.data?.products || []).filter(isVisibleToCustomer);
         // Sort by views/rating as fallback
         all.sort((a, b) => ((b.view_count || b.views || 0) + (b.average_rating || 0) * 10) - ((a.view_count || a.views || 0) + (a.average_rating || 0) * 10));
         setProducts(all.slice(0, 20));

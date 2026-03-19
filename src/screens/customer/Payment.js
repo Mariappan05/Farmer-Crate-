@@ -265,12 +265,21 @@ const tiStyles = StyleSheet.create({
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const Payment = ({ navigation, route }) => {
-  const { cartItems = [], totalAmount = 0 } = route.params || {};
+  const { cartItems: routeCartItems = [], totalAmount = 0 } = route.params || {};
   const insets = useSafeAreaInsets();
   const { authState } = useAuth();
-  const { clearCart } = useCart();
+  const { clearCart, cartItems: contextCartItems, fetchCart } = useCart();
   const qrRef = useRef(null);
   const toastRef = useRef(null);
+
+  const effectiveCartItems = (Array.isArray(routeCartItems) && routeCartItems.length > 0)
+    ? routeCartItems
+    : (Array.isArray(contextCartItems) ? contextCartItems : []);
+
+  const computedSubtotal = effectiveCartItems.reduce(
+    (sum, item) => sum + ((item.price || item.current_price || 0) * (item.quantity || 1)),
+    0
+  );
 
   // ── Address form state ──
   const [fullName, setFullName] = useState('');
@@ -297,7 +306,7 @@ const Payment = ({ navigation, route }) => {
   const [showQR, setShowQR] = useState(false);
 
   // ── Pricing ──
-  const pricing = calculatePricing(totalAmount);
+  const pricing = calculatePricing(totalAmount > 0 ? totalAmount : computedSubtotal);
 
   // ── Animations ──
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -329,6 +338,12 @@ const Payment = ({ navigation, route }) => {
   useEffect(() => {
     Location.requestForegroundPermissionsAsync().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if ((!Array.isArray(routeCartItems) || routeCartItems.length === 0) && (!contextCartItems || contextCartItems.length === 0)) {
+      fetchCart?.();
+    }
+  }, [routeCartItems, contextCartItems, fetchCart]);
 
   // ── Reset district when state changes ──
   const availableDistricts = DISTRICTS_BY_STATE[state] || [];
@@ -410,6 +425,7 @@ const Payment = ({ navigation, route }) => {
 
   // ── Validation ──
   const validateForm = () => {
+    if (!effectiveCartItems.length) { Alert.alert('Validation', 'Your cart is empty. Please add items before placing order.'); return false; }
     if (!fullName.trim()) { Alert.alert('Validation', 'Please enter your full name.'); return false; }
     if (!phone.trim() || phone.trim().length < 10) { Alert.alert('Validation', 'Please enter a valid 10-digit phone number.'); return false; }
     if (!addressLine.trim()) { Alert.alert('Validation', 'Please enter your delivery address.'); return false; }
@@ -423,7 +439,7 @@ const Payment = ({ navigation, route }) => {
 
   // ── Build shared delivery address & pricing ──
   const buildOrderPayload = (qrString = '', qrImageUrl = '') => ({
-    items: cartItems.map((item) => ({
+    items: effectiveCartItems.map((item) => ({
       product_id: item.product_id || item.id,
       quantity: item.quantity || 1,
       price: item.price || item.current_price || 0,
@@ -494,7 +510,7 @@ const Payment = ({ navigation, route }) => {
         currency: paymentDetails.currency || 'INR',
         order_id: paymentDetails.razorpay_order_id,
         name: 'Farmer Crate',
-        description: `Order - ${cartItems.length} item(s)`,
+        description: `Order - ${effectiveCartItems.length} item(s)`,
         prefill: { contact: phone.trim(), email: authState?.user?.email || '' },
         theme: { color: '#2E7D32' },
       };
@@ -588,7 +604,7 @@ const Payment = ({ navigation, route }) => {
 
       // 3. Build order payload
       const orderPayload = {
-        items: cartItems.map((item) => ({
+        items: effectiveCartItems.map((item) => ({
           product_id: item.product_id || item.id,
           quantity: item.quantity || 1,
           price: item.price || item.current_price || 0,
@@ -669,7 +685,7 @@ const Payment = ({ navigation, route }) => {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Checkout</Text>
-          <Text style={styles.headerSubtitle}>{cartItems.length} item{cartItems.length !== 1 ? 's' : ''} in your order</Text>
+          <Text style={styles.headerSubtitle}>{effectiveCartItems.length} item{effectiveCartItems.length !== 1 ? 's' : ''} in your order</Text>
         </View>
         <Ionicons name="shield-checkmark" size={22} color="#A5D6A7" />
       </View>
@@ -692,7 +708,7 @@ const Payment = ({ navigation, route }) => {
                 <Ionicons name="receipt-outline" size={20} color="#1B5E20" />
                 <Text style={styles.cardTitle}>Order Summary</Text>
               </View>
-              {cartItems.map((item, i) => (
+              {effectiveCartItems.map((item, i) => (
                 <View key={i} style={styles.summaryRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.summaryItemName} numberOfLines={1}>
@@ -967,7 +983,7 @@ const Payment = ({ navigation, route }) => {
                 qr_code: qrCode,
                 total: pricing.total,
                 payment: paymentMethod,
-                items: cartItems.length,
+                items: effectiveCartItems.length,
               })}
               size={200}
               color="#1B5E20"

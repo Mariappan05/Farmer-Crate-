@@ -31,30 +31,51 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
+import { getOrderById } from '../../services/orderService';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 
 /* ── Constants ────────────────────────────────────────────── */
 const TIMELINE_STAGES = [
-  { key: 'PLACED', label: 'Order Placed', icon: 'cart', color: '#FF9800' },
-  { key: 'CONFIRMED', label: 'Confirmed', icon: 'checkmark-circle', color: '#2196F3' },
-  { key: 'ASSIGNED', label: 'Assigned', icon: 'people', color: '#9C27B0' },
-  { key: 'SHIPPED', label: 'Shipped', icon: 'airplane', color: '#3F51B5' },
-  { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', icon: 'bicycle', color: '#00BCD4' },
-  { key: 'DELIVERED', label: 'Delivered', icon: 'checkmark-done-circle', color: '#4CAF50' },
+  { key: 'PENDING',             label: 'Order Placed',           icon: 'cart',                  color: '#FF9800' },
+  { key: 'CONFIRMED',           label: 'Farmer Accepted',        icon: 'checkmark-circle',      color: '#2196F3' },
+  { key: 'ASSIGNED',            label: 'Transporters Assigned',  icon: 'people',                color: '#9C27B0' },
+  { key: 'PICKUP_ASSIGNED',     label: 'Pickup Person Assigned', icon: 'person',                color: '#FF5722' },
+  { key: 'PICKUP_IN_PROGRESS',  label: 'Pickup In Progress',     icon: 'bicycle',               color: '#00BCD4' },
+  { key: 'PICKED_UP',           label: 'Picked Up from Farmer',  icon: 'cube',                  color: '#00897B' },
+  { key: 'RECEIVED',            label: 'Received at Source Office', icon: 'download',            color: '#00897B' },
+  { key: 'SHIPPED',             label: 'Shipped to Destination', icon: 'airplane',              color: '#3F51B5' },
+  { key: 'IN_TRANSIT',          label: 'In Transit',             icon: 'airplane',              color: '#3F51B5' },
+  { key: 'REACHED_DESTINATION', label: 'Reached Destination',    icon: 'business',              color: '#673AB7' },
+  { key: 'OUT_FOR_DELIVERY',    label: 'Out for Delivery',       icon: 'bicycle',               color: '#00BCD4' },
+  { key: 'DELIVERED',           label: 'Delivered',              icon: 'checkmark-done-circle', color: '#4CAF50' },
 ];
 
 const STATUS_INDEX = {
-  PENDING: 0, PLACED: 0, CONFIRMED: 1, ASSIGNED: 2, PROCESSING: 2,
-  SHIPPED: 3, OUT_FOR_DELIVERY: 4, DELIVERED: 5, COMPLETED: 5, CANCELLED: -1,
+  PENDING: 0, PLACED: 0,
+  CONFIRMED: 1, ACCEPTED: 1,
+  ASSIGNED: 2,
+  PICKUP_ASSIGNED: 3,
+  PICKUP_IN_PROGRESS: 4,
+  PICKED_UP: 5,
+  RECEIVED: 6,
+  SHIPPED: 7,
+  IN_TRANSIT: 8,
+  REACHED_DESTINATION: 9,
+  OUT_FOR_DELIVERY: 10,
+  DELIVERED: 11, COMPLETED: 11,
+  CANCELLED: -1,
 };
 
 const getStatusColor = (s) => {
   const u = (s || '').toUpperCase();
   if (u === 'DELIVERED' || u === 'COMPLETED') return '#4CAF50';
-  if (u === 'SHIPPED') return '#3F51B5';
   if (u === 'OUT_FOR_DELIVERY') return '#00BCD4';
+  if (u === 'REACHED_DESTINATION') return '#673AB7';
+  if (u === 'IN_TRANSIT' || u === 'SHIPPED') return '#3F51B5';
+  if (u === 'PICKED_UP') return '#00897B';
+  if (u === 'PICKUP_ASSIGNED') return '#FF5722';
   if (u === 'ASSIGNED') return '#9C27B0';
-  if (u === 'CONFIRMED') return '#2196F3';
+  if (u === 'CONFIRMED' || u === 'ACCEPTED') return '#2196F3';
   if (u === 'CANCELLED') return '#F44336';
   return '#FF9800';
 };
@@ -67,89 +88,6 @@ const formatDate = (d) => {
 };
 
 const formatCurrency = (a) => '₹' + (parseFloat(a) || 0).toFixed(2);
-
-const pickFirst = (...values) => {
-  for (const v of values) {
-    if (v === 0) return v;
-    if (typeof v === 'string') {
-      const t = v.trim();
-      if (t) return t;
-    } else if (v !== undefined && v !== null && v !== '') {
-      return v;
-    }
-  }
-  return '';
-};
-
-const toReadableText = (value) => {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return '';
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        const parsedText = toReadableText(parsed);
-        return parsedText || trimmed;
-      } catch {
-        return trimmed;
-      }
-    }
-    return trimmed;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  if (Array.isArray(value)) {
-    return value.map(toReadableText).filter(Boolean).join(', ');
-  }
-  if (typeof value === 'object') {
-    const picked = pickFirst(
-      value.full_name,
-      value.name,
-      value.username,
-      value.farm_name,
-      value.company_name,
-      value.address,
-      value.address_line,
-      [value.street, value.city, value.district, value.state, value.pincode].filter(Boolean).join(', ')
-    );
-    return picked ? toReadableText(picked) : '';
-  }
-  return '';
-};
-
-const normalizeParty = (entity, fallbackName, fallbackAddress, fallbackPhone) => {
-  const nestedUser = entity?.user || {};
-  const d = { ...nestedUser, ...(entity || {}) };
-
-  return {
-    name: toReadableText(pickFirst(d.full_name, d.name, d.username, fallbackName)),
-    phone: toReadableText(pickFirst(d.phone, d.mobile, d.mobile_number, d.phone_number, fallbackPhone)),
-    address: toReadableText(
-      pickFirst(
-        d.address,
-        d.address_line,
-        d.location,
-        d.city,
-        [d.street, d.city, d.district, d.state, d.pincode].filter(Boolean),
-        fallbackAddress
-      )
-    ),
-  };
-};
-
-const getPartyImage = (entity) => {
-  const nestedUser = entity?.user || {};
-  return pickFirst(
-    entity?.image,
-    entity?.image_url,
-    entity?.profile_image,
-    entity?.avatar,
-    nestedUser?.image,
-    nestedUser?.image_url,
-    nestedUser?.profile_image,
-    nestedUser?.avatar
-  ) || null;
-};
 
 /* ── Component ────────────────────────────────────────────── */
 const OrderDetail = ({ navigation, route }) => {
@@ -256,88 +194,54 @@ const OrderDetail = ({ navigation, route }) => {
     fetchOrder();
   }, [fetchOrder]);
 
-  const getNextStatusByScan = () => {
-    const current = status;
-    const role = (order?.transporter_role || '').toUpperCase();
-    if (role === 'PICKUP_SHIPPING' && current === 'ASSIGNED') return 'SHIPPED';
-    if (role === 'DELIVERY' && current === 'SHIPPED') return 'RECEIVED';
-    return null;
+  /* ── Status update ──────────────────────────────────────── */
+  const handleStatusUpdate = (newStatus) => {
+    Alert.alert('Update Status', `Change to "${newStatus.replace(/_/g, ' ')}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Confirm',
+        onPress: async () => {
+          setUpdatingStatus(true);
+          try {
+            await api.put(`/transporters/orders/${orderId}/status`, { status: newStatus });
+            Alert.alert('Success', 'Status updated');
+            fetchOrder(true);
+          } catch (e) {
+            Alert.alert('Error', e.message || 'Failed to update');
+          } finally {
+            setUpdatingStatus(false);
+          }
+        },
+      },
+    ]);
   };
 
   /* ── Assign ─────────────────────────────────────────────── */
-  const handleAssign = async () => {
-    setAssigningDP(true);
-    try {
-      const personsRes = await api.get('/transporters/delivery-persons');
-      const persons = personsRes.data?.data || personsRes.data?.delivery_persons || personsRes.data || [];
-      const personsList = Array.isArray(persons) ? persons : [];
-      
-      console.log('[OrderDetail] Fetched delivery persons:', personsList);
-      
-      if (personsList.length === 0) {
-        setShowNoPersonsModal(true);
-        return;
-      }
-      
-      setDeliveryPersons(personsList);
-      setShowAssignModal(true);
-    } catch (err) {
-      console.error('[OrderDetail] Error fetching delivery persons:', err);
-      Alert.alert('Error', 'Failed to fetch delivery persons. Please try again.');
-    } finally {
-      setAssigningDP(false);
+  const handleAssign = () => {
+    const available = deliveryPersons.filter((p) => p.is_available !== false);
+    if (available.length === 0) {
+      Alert.alert('No Available Persons', 'Add delivery persons first.');
+      return;
     }
-  };
-
-  const assignDeliveryPerson = async (person) => {
-    setAssigningDP(true);
-    setShowAssignModal(false);
-    try {
-      const deliveryPersonId = person.delivery_person_id || person.id;
-      console.log('[OrderDetail] Assigning person:', deliveryPersonId, 'to order:', orderId);
-      
-      const payload = { 
-        order_id: orderId,
-        delivery_person_id: deliveryPersonId,
-        permanent_vehicle_id: person.permanent_vehicle_id || null
-      };
-      
-      console.log('[OrderDetail] Calling POST /transporters/manual-receive-order');
-      const response = await api.post('/transporters/manual-receive-order', payload);
-      
-      console.log('[OrderDetail] Assignment successful:', response.data);
-      Alert.alert('Success', `Assigned ${person.name || person.full_name}`);
-      await fetchOrder(true);
-    } catch (e) {
-      console.error('[OrderDetail] Assignment error:', e);
-      console.error('[OrderDetail] Error response:', e.response?.data);
-      
-      const errorMessage = e.response?.data?.message || e.message;
-      
-      if (errorMessage.includes('already assigned')) {
-        Alert.alert(
-          'Already Assigned',
-          'This order is already assigned to a delivery person. You cannot reassign it.'
-        );
-      } else if (errorMessage.includes('not assigned to this transporter')) {
-        Alert.alert(
-          'Permission Denied',
-          'This order is not assigned to your company. Please contact support.'
-        );
-      } else if (errorMessage.includes('maximum capacity')) {
-        Alert.alert(
-          'Capacity Full',
-          errorMessage
-        );
-      } else {
-        Alert.alert(
-          'Assignment Failed',
-          errorMessage || 'Failed to assign delivery person. Please try again.'
-        );
-      }
-    } finally {
-      setAssigningDP(false);
-    }
+    const options = available.map((p) => ({
+      text: p.full_name || p.name || 'Person',
+      onPress: async () => {
+        setAssigningDP(true);
+        try {
+          await api.put(`/transporters/orders/${orderId}/assign`, {
+            delivery_person_id: p.id || p.delivery_person_id,
+          });
+          Alert.alert('Success', `Assigned ${p.full_name || p.name}`);
+          fetchOrder(true);
+        } catch (e) {
+          Alert.alert('Error', e.message);
+        } finally {
+          setAssigningDP(false);
+        }
+      },
+    }));
+    options.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Assign Delivery Person', 'Choose:', options);
   };
 
   /* ── Product image ──────────────────────────────────────── */
@@ -579,43 +483,14 @@ const OrderDetail = ({ navigation, route }) => {
         </View>
 
         {/* Customer Info */}
-        {(customer.name || customer.address || customer.phone) && (
-          <View style={styles.card}>
-            <View style={styles.infoHeader}>
-              <View style={[styles.infoIconWrap, { backgroundColor: '#2196F315' }]}>
-                <Ionicons name="location" size={20} color="#2196F3" />
-              </View>
-              <Text style={styles.cardTitle}>Customer Details</Text>
-            </View>
-            <View style={styles.profileCard}>
-              {customer.image ? (
-                <Image source={{ uri: optimizeImageUrl(customer.image, { width: 80, height: 80 }) }} style={styles.profileAvatarImg} />
-              ) : (
-                <View style={styles.profileAvatar}>
-                  <Ionicons name="person" size={32} color="#2196F3" />
-                </View>
-              )}
-              <View style={styles.profileInfo}>
-                <Text style={styles.profileName}>{customer.name || 'N/A'}</Text>
-                {customer.address && (
-                  <View style={styles.profileDetailRow}>
-                    <Ionicons name="location" size={16} color="#2196F3" />
-                    <Text style={styles.profileDetailText}>{customer.address}</Text>
-                  </View>
-                )}
-                {customer.phone && (
-                  <TouchableOpacity
-                    style={[styles.callBtn, { backgroundColor: '#2196F315' }]}
-                    onPress={() => Linking.openURL(`tel:${customer.phone}`)}
-                  >
-                    <Ionicons name="call" size={16} color="#2196F3" />
-                    <Text style={[styles.callBtnText, { color: '#2196F3' }]}>Call Customer</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          </View>
-        )}
+        <InfoCard
+          title="Customer"
+          icon="person-outline"
+          iconColor="#2196F3"
+          name={customer.full_name || customer.name || order.customer_name || 'N/A'}
+          phone={customer.phone || customer.mobile}
+          address={customer.address || customer.address_line || order.delivery_address}
+        />
 
         {/* Delivery Person Info */}
         {hasDP && (
@@ -677,96 +552,76 @@ const OrderDetail = ({ navigation, route }) => {
           </View>
         )}
 
+        {/* QR Code — only shown after ASSIGNED (step 3+) */}
+        {stageIdx >= 2 && (order.qr_code || order.qr_image_url) && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Order QR Code</Text>
+            <Text style={styles.qrNote}>Only assigned transporters and destination delivery person can scan this QR</Text>
+            {order.qr_image_url ? (
+              <Image source={{ uri: order.qr_image_url }} style={styles.qrImage} resizeMode="contain" />
+            ) : (
+              <View style={styles.qrTextWrap}>
+                <MaterialCommunityIcons name="qrcode" size={40} color="#1B5E20" />
+                <Text style={styles.qrText}>{order.qr_code}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Action Buttons */}
-        <View style={styles.actionsGrid}>
-          {!hasDP ? (
-            // Show all 4 buttons when no delivery person assigned
-            <>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Actions</Text>
+          <View style={styles.actionsWrap}>
+            {!hasDP && (
               <TouchableOpacity
-                style={[styles.actionCard, { backgroundColor: '#9C27B0' }]}
+                style={[styles.actionBtn, { backgroundColor: '#9C27B0' }]}
                 onPress={handleAssign}
                 disabled={assigningDP}
               >
-                {assigningDP ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
+                {assigningDP ? <ActivityIndicator size="small" color="#fff" /> : (
                   <>
-                    <View style={styles.actionIconWrap}>
-                      <Ionicons name="person-add" size={28} color="#fff" />
-                    </View>
-                    <Text style={styles.actionCardText}>Assign Delivery Person</Text>
+                    <Ionicons name="person-add-outline" size={18} color="#fff" />
+                    <Text style={styles.actionBtnText}>Assign Delivery Person</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {status === 'ASSIGNED' && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#3F51B5' }]}
+                onPress={() => handleStatusUpdate('SHIPPED')}
+                disabled={updatingStatus}
+              >
+                {updatingStatus ? <ActivityIndicator size="small" color="#fff" /> : (
+                  <>
+                    <Ionicons name="airplane-outline" size={18} color="#fff" />
+                    <Text style={styles.actionBtnText}>Mark as Shipped</Text>
                   </>
                 )}
               </TouchableOpacity>
 
+            {status === 'SHIPPED' && (
               <TouchableOpacity
-                style={[styles.actionCard, { backgroundColor: '#00BCD4' }]}
-                onPress={() => navigation.navigate('QRScan', {
-                  orderId,
-                  order,
-                  updateStatusOnScan: true,
-                  expectedOrderId: orderId,
-                })}
+                style={[styles.actionBtn, { backgroundColor: '#00BCD4' }]}
+                onPress={() => handleStatusUpdate('OUT_FOR_DELIVERY')}
+                disabled={updatingStatus}
               >
-                <View style={styles.actionIconWrap}>
-                  <Ionicons name="qr-code" size={28} color="#fff" />
-                </View>
-                <Text style={styles.actionCardText}>Scan QR Code</Text>
+                {updatingStatus ? <ActivityIndicator size="small" color="#fff" /> : (
+                  <>
+                    <Ionicons name="bicycle-outline" size={18} color="#fff" />
+                    <Text style={styles.actionBtnText}>Out for Delivery</Text>
+                  </>
+                )}
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.actionCard, { backgroundColor: '#1B5E20' }]}
-                onPress={() => navigation.navigate('TransporterOrderTracking', { orderId, order })}
-              >
-                <View style={styles.actionIconWrap}>
-                  <Ionicons name="navigate" size={28} color="#fff" />
-                </View>
-                <Text style={styles.actionCardText}>Track Order</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionCard, { backgroundColor: '#FF9800' }]}
-                onPress={() => navigation.navigate('BillPreview', { orderId, order })}
-              >
-                <View style={styles.actionIconWrap}>
-                  <Ionicons name="receipt" size={28} color="#fff" />
-                </View>
-                <Text style={styles.actionCardText}>View Bill</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            // Show only 3 actions when delivery person is assigned (no assign button)
-            <View style={styles.actionList}>
-              <TouchableOpacity
-                style={[styles.actionRowBtn, { backgroundColor: '#00BCD4' }]}
-                onPress={() => navigation.navigate('QRScan', {
-                  orderId,
-                  order,
-                  updateStatusOnScan: true,
-                  expectedOrderId: orderId,
-                })}
-              >
-                <View style={styles.actionRowContent}>
-                  <View style={styles.actionRowIconWrap}>
-                    <Ionicons name="qr-code" size={22} color="#fff" />
-                  </View>
-                  <Text style={styles.actionRowText}>Scan QR Code</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#fff" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionRowBtn, { backgroundColor: '#1B5E20' }]}
-                onPress={() => navigation.navigate('TransporterOrderTracking', { orderId, order })}
-              >
-                <View style={styles.actionRowContent}>
-                  <View style={styles.actionRowIconWrap}>
-                    <Ionicons name="navigate" size={22} color="#fff" />
-                  </View>
-                  <Text style={styles.actionRowText}>Track Order</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#fff" />
-              </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#1B5E20' }]}
+              onPress={() => navigation.navigate('TransporterOrderTracking', { orderId, order })}
+            >
+              <Ionicons name="navigate-outline" size={18} color="#fff" />
+              <Text style={styles.actionBtnText}>Track Order</Text>
+            </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.actionRowBtn, { backgroundColor: '#FF9800' }]}
@@ -960,6 +815,7 @@ const styles = StyleSheet.create({
   profileDetailText: { fontSize: 14, color: '#666', flex: 1 },
 
   // QR
+  qrNote: { fontSize: 12, color: '#888', marginBottom: 10, fontStyle: 'italic' },
   qrImage: { width: 180, height: 180, alignSelf: 'center', marginVertical: 8 },
   qrTextWrap: { alignItems: 'center', gap: 8, padding: 16 },
   qrText: { fontSize: 14, color: '#333', fontFamily: 'monospace' },

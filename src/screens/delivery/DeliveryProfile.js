@@ -154,8 +154,8 @@ const DeliveryProfile = ({ navigation }) => {
 
   // ─── Compute stats ───────────────────────────────────────────────────
   const totalDeliveries = profile?.total_deliveries || profile?.deliveries_count || 0;
-  const rating = profile?.rating || profile?.average_rating || 0;
-  const onTimePercent = profile?.on_time_percentage || profile?.on_time_rate || 0;
+  const rating = parseFloat(profile?.rating || profile?.average_rating || 0) || 0;
+  const onTimePercent = parseFloat(profile?.on_time_percentage || profile?.on_time_rate || 0) || 0;
 
   // ─── Menu items ───────────────────────────────────────────────────────
   const menuItems = [

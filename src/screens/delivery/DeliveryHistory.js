@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
   // Stats
   statsRow: {
     flexDirection: 'row',
-    backgroundColor: Colors.card,
+    backgroundColor: '#fff',
     paddingHorizontal: 12,
     paddingVertical: 14,
     gap: 6,
@@ -339,26 +339,28 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 6,
-    gap: 4,
+    paddingVertical: 8,
+    gap: 6,
+    minHeight: 70,
+    justifyContent: 'center',
   },
-  statVal: { fontSize: Font.base, fontWeight: Font.weightExtraBold, color: Colors.textPrimary },
-  statLabel: { fontSize: 10, color: Colors.textMuted, fontWeight: Font.weightMedium },
+  statVal: { fontSize: 14, fontWeight: '800', color: '#1A1A1A' },
+  statLabel: { fontSize: 10, color: '#888', fontWeight: '500' },
 
   // Chips
-  chipRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, backgroundColor: Colors.card },
+  chipRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, backgroundColor: '#fff' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primaryXSoft,
+    backgroundColor: '#F4F8F4',
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 6,
   },
-  chipActive: { backgroundColor: Colors.primary },
-  chipText: { fontSize: Font.sm, color: Colors.textSecondary, fontWeight: Font.weightSemiBold },
-  chipTextActive: { color: Colors.textOnDark, fontWeight: Font.weightBold },
+  chipActive: { backgroundColor: '#1B5E20' },
+  chipText: { fontSize: 13, color: '#666', fontWeight: '600' },
+  chipTextActive: { color: '#fff', fontWeight: '700' },
   chipCount: {
     backgroundColor: 'rgba(255,255,255,0.25)',
     borderRadius: 10,

@@ -49,28 +49,101 @@ const CATEGORIES = [
 // ---------------------------------------------------------------------------
 function getProductImage(product) {
   if (!product) return null;
+  
+  console.log('[CustomerHome] Getting image for product:', product.name, 'Image data:', {
+    images: product.images,
+    image: product.image,
+    image_url: product.image_url
+  });
+  
   const imgs = product.images;
   if (Array.isArray(imgs) && imgs.length > 0) {
     const primary = imgs.find((i) => i && i.is_primary) || imgs[0];
     if (typeof primary === 'string') return primary;
-    return primary?.image_url || primary?.url || null;
+    const imageUrl = primary?.image_url || primary?.url || primary?.secure_url || primary?.uri || null;
+    console.log('[CustomerHome] Found array image:', imageUrl);
+    return imageUrl;
   }
-  if (typeof imgs === 'string' && imgs.length > 0) return imgs;
-  return product.image_url || null;
+  if (typeof imgs === 'string' && imgs.length > 0) {
+    console.log('[CustomerHome] Found string image:', imgs);
+    return imgs;
+  }
+  
+  const fallbackImage = product.image_url || product.image || null;
+  console.log('[CustomerHome] Using fallback image:', fallbackImage);
+  return fallbackImage;
 }
 
 function getFarmerName(product) {
-  return (
-    product.farmer_name ||
+  const farmerName = product.farmer_name ||
     product.user?.full_name ||
     product.user?.name ||
-    'Local Farmer'
-  );
+    product.farmer?.name ||
+    product.farmer?.full_name ||
+    'Local Farmer';
+  
+  console.log('[CustomerHome] Farmer name for', product.name, ':', farmerName);
+  return farmerName;
 }
 
 function getRating(product) {
-  const r = product.average_rating || product.rating || 0;
-  return Math.min(5, Math.max(0, parseFloat(r) || 0));
+  const rating = parseFloat(
+    product.average_rating || 
+    product.rating || 
+    product.product_rating || 
+    product.user_rating || 
+    0
+  );
+  const finalRating = Math.min(5, Math.max(0, rating));
+  
+  console.log('[CustomerHome] Rating for', product.name, ':', {
+    average_rating: product.average_rating,
+    rating: product.rating,
+    product_rating: product.product_rating,
+    user_rating: product.user_rating,
+    finalRating
+  });
+  
+  return finalRating;
+}
+
+function getProductPrice(product) {
+  const price = parseFloat(
+    product.current_price || 
+    product.price || 
+    product.base_price || 
+    product.selling_price || 
+    product.unit_price || 
+    0
+  );
+  
+  console.log('[CustomerHome] Price for', product.name, ':', {
+    current_price: product.current_price,
+    price: product.price,
+    base_price: product.base_price,
+    selling_price: product.selling_price,
+    unit_price: product.unit_price,
+    finalPrice: price
+  });
+  
+  return price;
+}
+
+function isVisibleToCustomer(product) {
+  const now = new Date();
+  const status = String(product?.status || '').toUpperCase();
+  const qty = Number(product?.quantity ?? product?.stock ?? product?.available_quantity ?? 0);
+
+  if (product?.expiry_date) {
+    const expiryDate = new Date(product.expiry_date);
+    if (!Number.isNaN(expiryDate.getTime()) && expiryDate < now) return false;
+  }
+
+  if (status === 'HIDDEN' || status === 'PENDING' || status === 'INACTIVE') return false;
+  if (status === 'SOLD_OUT' || status === 'OUT_OF_STOCK') return false;
+  if (qty <= 0) return false;
+
+  return status === 'AVAILABLE' || status === 'ACTIVE' || !status;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,9 +276,31 @@ export default function CustomerHome({ navigation }) {
 
   const fetchProducts = async () => {
     try {
+      console.log('[CustomerHome] Fetching products...');
       const res = await api.get('/products');
+      console.log('[CustomerHome] Products response:', res.data);
+      
       const data = res.data?.data || res.data || [];
-      setProducts(Array.isArray(data) ? data : []);
+      const productList = Array.isArray(data) ? data : [];
+      
+      console.log('[CustomerHome] Raw products:', productList);
+      
+      const activeProducts = productList.filter((prod) => {
+        const visible = isVisibleToCustomer(prod);
+        if (!visible) {
+          console.log('[CustomerHome] Excluding non-visible product:', prod.name, {
+            status: prod.status,
+            quantity: prod.quantity,
+            stock: prod.stock,
+            available_quantity: prod.available_quantity,
+            expiry_date: prod.expiry_date,
+          });
+        }
+        return visible;
+      });
+      
+      console.log('[CustomerHome] Active products after visibility filter:', activeProducts);
+      setProducts(activeProducts);
     } catch (e) {
       console.log('Products error:', e.message);
     }
@@ -213,19 +308,35 @@ export default function CustomerHome({ navigation }) {
 
   const fetchTrending = async () => {
     try {
+      console.log('[CustomerHome] Fetching trending products...');
       const res = await api.get('/products/trending');
+      console.log('[CustomerHome] Trending response:', res.data);
+      
       const data = res.data?.data || res.data || [];
-      setTrending(Array.isArray(data) ? data : []);
+      const trendingList = Array.isArray(data) ? data : [];
+      
+      const activeTrending = trendingList.filter(isVisibleToCustomer);
+      
+      console.log('[CustomerHome] Active trending products:', activeTrending);
+      setTrending(activeTrending);
     } catch {
       // fallback: use top-viewed from products
       try {
+        console.log('[CustomerHome] Trending fallback - using top viewed products');
         const res = await api.get('/products');
         const data = res.data?.data || res.data || [];
-        const sorted = [...(Array.isArray(data) ? data : [])].sort(
+        const productList = Array.isArray(data) ? data : [];
+        
+        const activeProducts = productList.filter(isVisibleToCustomer);
+        
+        const sorted = [...activeProducts].sort(
           (a, b) => (b.views || 0) - (a.views || 0),
         );
+        console.log('[CustomerHome] Fallback trending products:', sorted.slice(0, 10));
         setTrending(sorted.slice(0, 10));
-      } catch (_) {}
+      } catch (_) {
+        console.log('[CustomerHome] Trending fallback failed');
+      }
     }
   };
 
@@ -298,13 +409,30 @@ export default function CustomerHome({ navigation }) {
   }, [profile, authState]);
 
   const featuredProducts = useMemo(() => {
-    const inStock = products.filter((p) => (p.quantity || 0) > 0);
+    console.log('[CustomerHome] Calculating featured products from:', products.length, 'products');
+    
+    const inStock = products.filter((p) => {
+      const stock = p.quantity || p.stock || p.available_quantity || 0;
+      const isInStock = stock > 0;
+      console.log('[CustomerHome] Stock check for', p.name, ':', { 
+        quantity: p.quantity, 
+        stock: p.stock, 
+        available_quantity: p.available_quantity, 
+        isInStock 
+      });
+      return isInStock;
+    });
+    
+    console.log('[CustomerHome] In-stock products:', inStock.length);
+    
     // Get customer's district from profile
     const customerDistrict = (
       profile?.district ||
       profile?.user?.district ||
       ''
     ).trim().toLowerCase();
+    
+    console.log('[CustomerHome] Customer district:', customerDistrict);
 
     if (!customerDistrict) return inStock;
 
@@ -319,8 +447,16 @@ export default function CustomerHome({ navigation }) {
     ).trim().toLowerCase();
 
     // Sort: same-district products first, then everything else
-    const sameDistrict  = inStock.filter((p) => getProductDistrict(p) === customerDistrict);
+    const sameDistrict  = inStock.filter((p) => {
+      const prodDistrict = getProductDistrict(p);
+      const isSame = prodDistrict === customerDistrict;
+      console.log('[CustomerHome] District check for', p.name, ':', { prodDistrict, customerDistrict, isSame });
+      return isSame;
+    });
     const otherDistrict = inStock.filter((p) => getProductDistrict(p) !== customerDistrict);
+    
+    console.log('[CustomerHome] Same district products:', sameDistrict.length, 'Other district:', otherDistrict.length);
+    
     return [...sameDistrict, ...otherDistrict];
   }, [products, profile]);
 
@@ -357,6 +493,19 @@ export default function CustomerHome({ navigation }) {
     const imgUrl = getProductImage(item);
     const optimized = imgUrl ? optimizeImageUrl(imgUrl, { width: 300, height: 300 }) : null;
     const pid = item.product_id || item.id;
+    const price = getProductPrice(item);
+    const rating = getRating(item);
+    const farmerName = getFarmerName(item);
+    
+    console.log('[CustomerHome] Rendering top buy card:', {
+      name: item.name,
+      pid,
+      price,
+      rating,
+      farmerName,
+      imgUrl,
+      optimized
+    });
 
     return (
       <TouchableOpacity
@@ -366,7 +515,14 @@ export default function CustomerHome({ navigation }) {
         onPress={() => navigateToProduct(item)}
       >
         {optimized ? (
-          <Image source={{ uri: optimized }} style={styles.topBuyImage} resizeMode="cover" />
+          <Image 
+            source={{ uri: optimized }} 
+            style={styles.topBuyImage} 
+            resizeMode="cover"
+            onError={(error) => {
+              console.log('[CustomerHome] Top buy image load error for', item.name, ':', error.nativeEvent.error);
+            }}
+          />
         ) : (
           <View style={[styles.topBuyImage, styles.noImage]}>
             <Ionicons name="leaf-outline" size={36} color="#66BB6A" />
@@ -389,11 +545,11 @@ export default function CustomerHome({ navigation }) {
             {item.name}
           </Text>
           <Text style={styles.topBuyFarmer} numberOfLines={1}>
-            {getFarmerName(item)}
+            {farmerName}
           </Text>
           <View style={styles.topBuyBottom}>
-            <Text style={styles.topBuyPrice}>₹{item.current_price || item.price || 0}</Text>
-            <StarRating rating={getRating(item)} size={10} />
+            <Text style={styles.topBuyPrice}>₹{price}</Text>
+            <StarRating rating={rating} size={10} />
           </View>
         </View>
       </TouchableOpacity>
@@ -404,8 +560,21 @@ export default function CustomerHome({ navigation }) {
     const imgUrl = getProductImage(item);
     const optimized = imgUrl ? optimizeImageUrl(imgUrl, { width: 400, height: 400 }) : null;
     const pid = item.product_id || item.id;
-    const price = item.current_price || item.price || 0;
+    const price = getProductPrice(item);
     const unit = item.unit || 'kg';
+    const rating = getRating(item);
+    const farmerName = getFarmerName(item);
+    
+    console.log('[CustomerHome] Rendering product card:', {
+      name: item.name,
+      pid,
+      price,
+      unit,
+      rating,
+      farmerName,
+      imgUrl,
+      optimized
+    });
 
     return (
       <TouchableOpacity
@@ -416,7 +585,14 @@ export default function CustomerHome({ navigation }) {
         {/* Image */}
         <View style={styles.productImageWrapper}>
           {optimized ? (
-            <Image source={{ uri: optimized }} style={styles.productImage} resizeMode="cover" />
+            <Image 
+              source={{ uri: optimized }} 
+              style={styles.productImage} 
+              resizeMode="cover"
+              onError={(error) => {
+                console.log('[CustomerHome] Product image load error for', item.name, ':', error.nativeEvent.error);
+              }}
+            />
           ) : (
             <View style={[styles.productImage, styles.noImage]}>
               <Ionicons name="leaf-outline" size={32} color="#66BB6A" />
@@ -444,9 +620,9 @@ export default function CustomerHome({ navigation }) {
             {item.name}
           </Text>
           <Text style={styles.productFarmer} numberOfLines={1}>
-            {getFarmerName(item)}
+            {farmerName}
           </Text>
-          <StarRating rating={getRating(item)} size={11} />
+          <StarRating rating={rating} size={11} />
           <View style={styles.productBottom}>
             <Text style={styles.productPrice}>
               ₹{price}

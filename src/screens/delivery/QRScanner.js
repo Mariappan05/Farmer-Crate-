@@ -1,39 +1,84 @@
-import { Ionicons } from '@expo/vector-icons';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useRef, useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    Vibration,
-    View,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Vibration,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
-import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
+import { getOrderById } from '../../services/orderService';
 
-// Valid statuses for QR scanning
-const VALID_PICKUP_STATUSES = ['ASSIGNED', 'CONFIRMED'];
-const VALID_DELIVERY_STATUSES = ['SHIPPED', 'PICKED_UP', 'OUT_FOR_DELIVERY'];
+const SCAN_BOX_SIZE = 250;
+const CORNER = 28;
+const BORDER_W = 4;
+
+// Destination delivery person advances final-mile statuses via QR scans.
+const DELIVERY_TRANSITIONS = {
+  REACHED_DESTINATION: 'OUT_FOR_DELIVERY',
+  OUT_FOR_DELIVERY: 'DELIVERED',
+};
+
+const pickFirst = (...values) => values.find((value) => !!value);
+
+const normalizeToken = (value) =>
+  String(value || '')
+    .trim()
+    .replace(/^['"]|['"]$/g, '')
+    .replace(/\s+/g, '')
+    .toLowerCase();
+
+const parseQRPayload = (qrData) => {
+  if (!qrData) return { orderId: null, qrCode: null };
+
+  let orderId = null;
+  let qrCode = null;
+
+  try {
+    const parsed = JSON.parse(qrData);
+    orderId = pickFirst(parsed.order_id, parsed.orderId, parsed.id, null);
+    qrCode = pickFirst(parsed.qr_code, parsed.qrCode, parsed.code, null);
+  } catch {
+    const orderIdMatch =
+      qrData.match(/order_id[:\s"]*(\d+)/i) ||
+      qrData.match(/order[:\s"]*(\d+)/i) ||
+      qrData.match(/id[:\s"]*(\d+)/i) ||
+      qrData.match(/^(\d+)$/);
+    if (orderIdMatch) orderId = parseInt(orderIdMatch[1], 10);
+
+    const qrCodeMatch = qrData.match(/qr[_\s-]?code[:\s"]*([A-Za-z0-9\-_.]+)/i);
+    if (qrCodeMatch) qrCode = qrCodeMatch[1];
+  }
+
+  if (!orderId && !qrCode && typeof qrData === 'string' && qrData.trim()) {
+    qrCode = qrData.trim();
+  }
+
+  return { orderId, qrCode };
+};
 
 const QRScanner = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { authState } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const [isProcessing, setIsProcessing] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
-  const [showManualEntry, setShowManualEntry] = useState(false);
-  const [manualOrderId, setManualOrderId] = useState('');
+  const [showManual, setShowManual] = useState(false);
+  const [manualId, setManualId] = useState('');
   const lastScanRef = useRef(null);
 
-  // ─── Process scanned QR data ─────────────────────────────────────────
+  const myDeliveryPersonId =
+    authState?.user?.delivery_person_id || authState?.user?.id;
+
   const processQR = async (qrData) => {
     if (isProcessing || scanned) return;
     const now = Date.now();
@@ -44,31 +89,21 @@ const QRScanner = ({ navigation }) => {
     Vibration.vibrate(200);
 
     try {
-      // Parse order_id from QR (supports JSON, key:value, and plain number)
-      let orderId = null;
-      try {
-        const parsed = JSON.parse(qrData);
-        orderId = parsed.order_id || parsed.orderId || parsed.id;
-      } catch {
-        const match = qrData.match(/order_id[:\s"]*(\d+)/i) || qrData.match(/^(\d+)$/);
-        if (match) orderId = parseInt(match[1]);
-      }
+      const { orderId, qrCode } = parseQRPayload(qrData);
 
-      if (!orderId) {
-        Alert.alert(
-          'Invalid QR Code',
-          'The scanned QR code does not contain a valid order ID.',
-          [
-            { text: 'Rescan', onPress: resetScanner },
-            { text: 'Enter Manually', onPress: () => { resetScanner(); setShowManualEntry(true); } },
-          ]
-        );
+      if (!orderId && !qrCode) {
+        Alert.alert('Invalid QR', 'Could not read this QR. Please rescan or enter manually.', [
+          { text: 'Rescan', onPress: resetScanner },
+          {
+            text: 'Enter Manually',
+            onPress: () => { resetScanner(); setShowManual(true); },
+          },
+        ]);
         return;
       }
-
-      await fetchAndValidateOrder(orderId);
+      await validateAndUpdate({ orderId, qrCode });
     } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to process QR code', [
+      Alert.alert('Error', e.message || 'Failed to process QR', [
         { text: 'Retry', onPress: resetScanner },
       ]);
     } finally {
@@ -76,117 +111,225 @@ const QRScanner = ({ navigation }) => {
     }
   };
 
-  // ─── Fetch and validate order ─────────────────────────────────────────
-  const fetchAndValidateOrder = async (orderId) => {
-    try {
-      // Fetch order details
-      let order = null;
+  const fetchOrderByQR = async (qrCode) => {
+    const encoded = encodeURIComponent(qrCode);
+    const endpoints = [
+      `/orders/track-by-qr/${encoded}`,
+      `/orders/qr/${encoded}`,
+      `/orders/by-qr/${encoded}`,
+      `/orders?qr_code=${encoded}`,
+    ];
+
+    for (const endpoint of endpoints) {
       try {
-        const res = await api.get(`/orders/${orderId}`);
-        order = res.data?.data || res.data;
+        const res = await api.get(endpoint);
+        const payload = res.data?.data || res.data;
+        const maybeOrder = payload?.order || payload?.data || payload;
+        const order = Array.isArray(maybeOrder) ? maybeOrder[0] : maybeOrder;
+        if (order) return order;
       } catch {
-        // Try delivery-specific endpoint
-        const res2 = await api.get('/delivery-persons/orders');
-        const allOrders = res2.data?.data || res2.data?.orders || [];
-        order = allOrders.find((o) => o.order_id === orderId || o.id === orderId);
+        // Try next endpoint shape.
+      }
+    }
+
+    return null;
+  };
+
+  const fetchOrderFromDeliveryOrders = async ({ orderId, qrCode }) => {
+    try {
+      const res = await api.get('/delivery-persons/orders');
+      const payload = res.data?.data || res.data;
+      const orders = Array.isArray(payload)
+        ? payload
+        : payload?.orders || payload?.data || [];
+
+      if (!Array.isArray(orders) || orders.length === 0) return null;
+
+      const byId = orderId
+        ? orders.find(
+            (o) =>
+              String(o?.order_id || '') === String(orderId) ||
+              String(o?.id || '') === String(orderId)
+          )
+        : null;
+      if (byId) return byId;
+
+      if (!qrCode) return null;
+
+      const wanted = normalizeToken(qrCode);
+      return (
+        orders.find((o) => {
+          const candidates = [
+            o?.qr_code,
+            o?.qrCode,
+            o?.qr,
+            o?.order_qr,
+            o?.order_qr_code,
+            o?.metadata?.qr_code,
+            o?.tracking?.qr_code,
+          ];
+          return candidates.some((candidate) => normalizeToken(candidate) === wanted);
+        }) || null
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  const validateAndUpdate = async ({ orderId, qrCode }) => {
+    try {
+      let order = null;
+      if (orderId) {
+        try {
+          const res = await api.get(`/orders/${orderId}`);
+          order = res.data?.data || res.data;
+        } catch {
+          // Some roles cannot access /orders/:id directly.
+        }
+      } else if (qrCode) {
+        order = await fetchOrderByQR(qrCode);
       }
 
       if (!order) {
-        Alert.alert('Order Not Found', `Order #${orderId} was not found or is not assigned to you.`, [
-          { text: 'Rescan', onPress: resetScanner },
-        ]);
-        return;
+        order = await fetchOrderFromDeliveryOrders({ orderId, qrCode });
       }
 
-      const status = order.current_status || order.status || '';
-
-      // Validate status for pickup
-      if (VALID_PICKUP_STATUSES.includes(status)) {
-        navigateToOrder(order, 'pickup');
-        return;
+      if (!order && orderId) {
+        // If QR payload provided both values, try QR route as final fallback.
+        order = qrCode ? await fetchOrderByQR(qrCode) : null;
       }
 
-      // Validate status for delivery
-      if (VALID_DELIVERY_STATUSES.includes(status)) {
-        navigateToOrder(order, 'delivery');
-        return;
-      }
+      const resolvedOrderId = order?.order_id || order?.id || orderId;
 
-      // Already delivered or cancelled
-      if (status === 'DELIVERED' || status === 'COMPLETED') {
-        Alert.alert('Already Delivered', `Order #${orderId} has already been delivered.`, [
-          { text: 'View Details', onPress: () => navigation.navigate('OrderDetails', { orderId, order }) },
-          { text: 'Scan Another', onPress: resetScanner },
-        ]);
-        return;
-      }
-
-      if (status === 'CANCELLED') {
-        Alert.alert('Order Cancelled', `Order #${orderId} has been cancelled.`, [
+      if (!resolvedOrderId) {
+        Alert.alert('Not Found', 'Order was resolved but has no valid ID for update.', [
           { text: 'OK', onPress: resetScanner },
         ]);
         return;
       }
 
-      // Status doesn't match expected
+      if (!order) {
+        Alert.alert('Not Found', 'Order was not found for this QR.', [
+          { text: 'OK', onPress: resetScanner },
+        ]);
+        return;
+      }
+
+      const status = (order.current_status || order.status || '').toUpperCase();
+
+      // Condition 2: pickup delivery person cannot scan QR
+      // pickup_delivery_person_id = assigned by source transporter for pickup
+      // delivery_person_id = assigned by destination transporter for final delivery
+      const pickupDPId = order.pickup_delivery_person_id;
+      const destDPId =
+        order.delivery_person_id ||
+        order.delivery_person?.id ||
+        order.delivery_person?.delivery_person_id;
+
+      const isPickupPerson =
+        pickupDPId && String(pickupDPId) === String(myDeliveryPersonId);
+      const isDestPerson =
+        destDPId && String(destDPId) === String(myDeliveryPersonId);
+
+      // Condition 2: pickup delivery person blocked from QR
+      if (isPickupPerson && !isDestPerson) {
+        Alert.alert(
+          'QR Not Available',
+          'QR scanning is only available for the delivery person assigned by the destination transporter. Pickup persons do not use QR.',
+          [{ text: 'OK', onPress: resetScanner }]
+        );
+        return;
+      }
+
+      // Condition 3: only assigned destination delivery person can scan
+      if (!isDestPerson) {
+        Alert.alert(
+          'Access Denied',
+          'You are not the assigned delivery person for this order.',
+          [{ text: 'OK', onPress: resetScanner }]
+        );
+        return;
+      }
+
+      // Check valid transition
+      const nextStatus = DELIVERY_TRANSITIONS[status];
+      if (!nextStatus) {
+        const allowed = Object.keys(DELIVERY_TRANSITIONS)
+          .map((s) => s.replace(/_/g, ' '))
+          .join(', ');
+        Alert.alert(
+          'Cannot Update',
+          `Current status is "${status.replace(/_/g, ' ')}". QR scan is valid only for: ${allowed}.`,
+          [{ text: 'OK', onPress: resetScanner }]
+        );
+        return;
+      }
+
       Alert.alert(
-        'Status Mismatch',
-        `Order #${orderId} is currently "${status.replace(/_/g, ' ')}". Expected ASSIGNED for pickup or SHIPPED for delivery.`,
+        '🚚 Delivery Confirmation',
+        `Confirm status update?\nNew status: ${nextStatus.replace(/_/g, ' ')}`,
         [
-          { text: 'View Details', onPress: () => navigation.navigate('OrderDetails', { orderId, order }) },
-          { text: 'Scan Another', onPress: resetScanner },
+          { text: 'Cancel', style: 'cancel', onPress: resetScanner },
+          {
+            text: 'Confirm Delivered',
+            onPress: async () => {
+              try {
+                await updateOrderStatusByQR(resolvedOrderId, nextStatus, 'delivery_person');
+                Alert.alert(
+                  '✅ Order Delivered!',
+                  'Order has been marked as DELIVERED.',
+                  [
+                    {
+                      text: 'View Details',
+                      onPress: () =>
+                        navigation.navigate('OrderDetails', { orderId: resolvedOrderId, order }),
+                    },
+                    { text: 'Scan Another', onPress: resetScanner },
+                  ]
+                );
+              } catch (e) {
+                Alert.alert('Update Failed', e.message || 'Could not update status', [
+                  { text: 'OK', onPress: resetScanner },
+                ]);
+              }
+            },
+          },
         ]
       );
     } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to fetch order details', [
+      Alert.alert('Error', e.message || 'Failed to fetch order', [
         { text: 'Retry', onPress: resetScanner },
       ]);
     }
   };
 
-  // ─── Navigate to order details ────────────────────────────────────────
-  const navigateToOrder = (order, type) => {
-    const orderId = order.order_id || order.id;
-    Alert.alert(
-      `Order #${orderId} Found`,
-      `Type: ${type === 'pickup' ? 'Pickup' : 'Delivery'}\nStatus: ${(order.current_status || order.status || '').replace(/_/g, ' ')}`,
-      [
-        { text: 'View Details', onPress: () => navigation.navigate('OrderDetails', { orderId, order }) },
-        { text: 'Scan Another', onPress: resetScanner },
-      ]
-    );
-  };
-
-  // ─── Manual order entry ───────────────────────────────────────────────
-  const handleManualEntry = async () => {
-    const id = parseInt(manualOrderId.trim());
-    if (!id || isNaN(id)) {
-      Alert.alert('Invalid ID', 'Please enter a valid numeric order ID.');
-      return;
-    }
-    setShowManualEntry(false);
-    setIsProcessing(true);
-    setScanned(true);
-    try {
-      await fetchAndValidateOrder(id);
-    } finally {
-      setIsProcessing(false);
-      setManualOrderId('');
-    }
-  };
-
-  // ─── Reset scanner ───────────────────────────────────────────────────
   const resetScanner = () => {
     setScanned(false);
     setIsProcessing(false);
+    lastScanRef.current = null;
   };
 
-  // ─── Loading / Permission states ──────────────────────────────────────
+  const handleManualSubmit = async () => {
+    const id = parseInt(manualId.trim());
+    if (!id || isNaN(id)) {
+      Alert.alert('Invalid', 'Enter a valid order number');
+      return;
+    }
+    setShowManual(false);
+    setIsProcessing(true);
+    setScanned(true);
+    try {
+      await validateAndUpdate({ orderId: id, qrCode: null });
+    } finally {
+      setIsProcessing(false);
+      setManualId('');
+    }
+  };
+
   if (!permission) {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Requesting camera access...</Text>
       </View>
     );
   }
@@ -201,7 +344,7 @@ const QRScanner = ({ navigation }) => {
           </View>
           <Text style={styles.permTitle}>Camera Permission Required</Text>
           <Text style={styles.permText}>
-            To scan QR codes for order verification, please grant camera access.
+            To scan QR codes for delivery confirmation, please grant camera access.
           </Text>
           <TouchableOpacity style={styles.permBtn} onPress={requestPermission}>
             <Ionicons name="camera-outline" size={20} color="#fff" />
@@ -209,23 +352,20 @@ const QRScanner = ({ navigation }) => {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.manualEntryLink}
-            onPress={() => setShowManualEntry(true)}
+            onPress={() => setShowManual(true)}
           >
             <Ionicons name="keypad-outline" size={18} color="#388E3C" />
             <Text style={styles.manualEntryLinkText}>Enter Order ID Manually</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Manual Entry Modal */}
-        {renderManualEntryModal()}
+        {renderManualModal()}
       </View>
     );
   }
 
-  // ─── Manual Entry Modal ───────────────────────────────────────────────
-  function renderManualEntryModal() {
+  function renderManualModal() {
     return (
-      <Modal visible={showManualEntry} transparent animationType="slide">
+      <Modal visible={showManual} transparent animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
@@ -233,7 +373,7 @@ const QRScanner = ({ navigation }) => {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Enter Order ID</Text>
-              <TouchableOpacity onPress={() => setShowManualEntry(false)}>
+              <TouchableOpacity onPress={() => setShowManual(false)}>
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
@@ -244,17 +384,17 @@ const QRScanner = ({ navigation }) => {
               style={styles.manualInput}
               placeholder="e.g. 12345"
               placeholderTextColor="#bbb"
-              value={manualOrderId}
-              onChangeText={setManualOrderId}
+              value={manualId}
+              onChangeText={setManualId}
               keyboardType="numeric"
               autoFocus
               returnKeyType="go"
-              onSubmitEditing={handleManualEntry}
+              onSubmitEditing={handleManualSubmit}
             />
             <TouchableOpacity
-              style={[styles.manualSubmitBtn, !manualOrderId.trim() && { opacity: 0.5 }]}
-              onPress={handleManualEntry}
-              disabled={!manualOrderId.trim()}
+              style={[styles.manualSubmitBtn, !manualId.trim() && { opacity: 0.5 }]}
+              onPress={handleManualSubmit}
+              disabled={!manualId.trim()}
             >
               <Ionicons name="search-outline" size={20} color="#fff" />
               <Text style={styles.manualSubmitText}>Find Order</Text>
@@ -265,17 +405,15 @@ const QRScanner = ({ navigation }) => {
     );
   }
 
-  // ─── Main scanner view ────────────────────────────────────────────────
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>QR Scanner</Text>
+        <Text style={styles.headerTitle}>Delivery QR Scanner</Text>
         <View style={styles.headerActions}>
           {scanned && (
             <TouchableOpacity onPress={resetScanner} style={styles.headerActionBtn}>
@@ -285,21 +423,18 @@ const QRScanner = ({ navigation }) => {
         </View>
       </View>
 
-      {/* Camera */}
       <View style={{ flex: 1 }}>
         <CameraView
           style={StyleSheet.absoluteFillObject}
           barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-          onBarcodeScanned={({ data }) => !scanned && !isProcessing && processQR(data)}
+          onBarcodeScanned={({ data }) =>
+            !scanned && !isProcessing && processQR(data)
+          }
           enableTorch={torchOn}
         />
 
-        {/* Overlay */}
         <View style={styles.overlay}>
-          {/* Top dark area */}
           <View style={styles.overlayTop} />
-
-          {/* Middle row with scan box */}
           <View style={styles.overlayMiddle}>
             <View style={styles.overlaySide} />
             <View style={styles.scanBox}>
@@ -307,33 +442,30 @@ const QRScanner = ({ navigation }) => {
               <View style={[styles.corner, styles.topRight]} />
               <View style={[styles.corner, styles.bottomLeft]} />
               <View style={[styles.corner, styles.bottomRight]} />
-
-              {/* Scan line animation placeholder */}
-              {!scanned && !isProcessing && (
-                <View style={styles.scanLine} />
-              )}
+              {!scanned && !isProcessing && <View style={styles.scanLine} />}
             </View>
             <View style={styles.overlaySide} />
           </View>
-
-          {/* Bottom dark area */}
           <View style={styles.overlayBottom}>
             {isProcessing ? (
               <View style={styles.processingBox}>
                 <ActivityIndicator color="#fff" size="large" />
-                <Text style={styles.processingText}>Processing QR code...</Text>
+                <Text style={styles.processingText}>Verifying delivery...</Text>
               </View>
             ) : (
-              <Text style={styles.scanInstructions}>
-                Position the QR code within the frame to scan
-              </Text>
+              <>
+                <Text style={styles.scanInstructions}>
+                  Scan QR to confirm delivery to customer
+                </Text>
+                <Text style={styles.scanNote}>
+                  Only destination delivery persons can use this scanner
+                </Text>
+              </>
             )}
           </View>
         </View>
 
-        {/* Bottom controls */}
         <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 20 }]}>
-          {/* Torch toggle */}
           <TouchableOpacity
             style={[styles.controlBtn, torchOn && styles.controlBtnActive]}
             onPress={() => setTorchOn(!torchOn)}
@@ -347,11 +479,9 @@ const QRScanner = ({ navigation }) => {
               {torchOn ? 'Flash On' : 'Flash Off'}
             </Text>
           </TouchableOpacity>
-
-          {/* Manual entry */}
           <TouchableOpacity
             style={styles.controlBtn}
-            onPress={() => setShowManualEntry(true)}
+            onPress={() => setShowManual(true)}
           >
             <Ionicons name="keypad-outline" size={24} color="#fff" />
             <Text style={styles.controlBtnText}>Enter ID</Text>
@@ -359,22 +489,16 @@ const QRScanner = ({ navigation }) => {
         </View>
       </View>
 
-      {/* Manual Entry Modal */}
-      {renderManualEntryModal()}
+      {renderManualModal()}
     </View>
   );
 };
 
-const CORNER = 28;
-const BORDER_W = 4;
-const SCAN_BOX_SIZE = 250;
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   centerContent: { justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: Colors.textOnDark, marginTop: 12, fontSize: Font.base },
+  loadingText: { color: '#fff', marginTop: 12, fontSize: 14 },
 
-  // Header
   header: {
     backgroundColor: 'rgba(16,58,18,0.74)',
     paddingHorizontal: Spacing.base,
@@ -398,7 +522,6 @@ const styles = StyleSheet.create({
   headerActionBtn: { padding: 6 },
   rescanText: { color: Colors.primaryGlow, fontWeight: Font.weightBold, fontSize: Font.md },
 
-  // Overlay
   overlay: { ...StyleSheet.absoluteFillObject },
   overlayTop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.58)' },
   overlayMiddle: { flexDirection: 'row' },
@@ -407,20 +530,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.58)',
     alignItems: 'center',
-    paddingTop: 30,
+    paddingTop: 24,
+    gap: 8,
   },
 
   // Scan box
-  scanBox: {
-    width: SCAN_BOX_SIZE,
-    height: SCAN_BOX_SIZE,
-    position: 'relative',
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  corner: { position: 'absolute', width: CORNER, height: CORNER, borderColor: Colors.primaryLight },
+  scanBox: { width: SCAN_BOX_SIZE, height: SCAN_BOX_SIZE, position: 'relative' },
+  corner: { position: 'absolute', width: CORNER, height: CORNER, borderColor: '#4CAF50' },
   topLeft: { top: 0, left: 0, borderTopWidth: BORDER_W, borderLeftWidth: BORDER_W, borderTopLeftRadius: 6 },
   topRight: { top: 0, right: 0, borderTopWidth: BORDER_W, borderRightWidth: BORDER_W, borderTopRightRadius: 6 },
   bottomLeft: { bottom: 0, left: 0, borderBottomWidth: BORDER_W, borderLeftWidth: BORDER_W, borderBottomLeftRadius: 6 },
@@ -431,16 +547,15 @@ const styles = StyleSheet.create({
     left: 10,
     right: 10,
     height: 2,
-    backgroundColor: Colors.primaryLight,
+    backgroundColor: '#4CAF50',
     opacity: 0.8,
   },
 
-  // Processing
   processingBox: { alignItems: 'center', gap: 12 },
-  processingText: { color: Colors.textOnDark, fontSize: Font.md, fontWeight: Font.weightSemiBold },
+  processingText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   scanInstructions: {
-    color: '#E0E0E0',
-    fontSize: Font.base,
+    color: '#ccc',
+    fontSize: 14,
     textAlign: 'center',
     paddingHorizontal: 40,
     lineHeight: 20,
@@ -455,9 +570,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-evenly',
     paddingTop: 16,
-    backgroundColor: 'rgba(8,28,10,0.75)',
-    borderTopWidth: 1,
-    borderTopColor: Colors.glassBorder,
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   controlBtn: {
     alignItems: 'center',
@@ -472,19 +585,18 @@ const styles = StyleSheet.create({
   controlBtnActive: { opacity: 1 },
   controlBtnText: { color: Colors.textOnDark, fontSize: Font.sm, fontWeight: Font.weightMedium },
 
-  // Permission
   permissionContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F1F8E9',
   },
   permIconContainer: {
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: Colors.primaryXSoft,
+    backgroundColor: '#E8F5E9',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
@@ -495,13 +607,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: Colors.primaryMid,
-    borderRadius: Radius.lg,
+    backgroundColor: '#388E3C',
+    borderRadius: 14,
     paddingHorizontal: 28,
     paddingVertical: 14,
-    ...shadowStyle('sm'),
   },
-  permBtnText: { color: Colors.textOnDark, fontWeight: Font.weightBold, fontSize: Font.lg },
+  permBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   manualEntryLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -509,7 +620,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     padding: 10,
   },
-  manualEntryLinkText: { color: Colors.primaryMid, fontSize: Font.md, fontWeight: Font.weightSemiBold },
+  manualEntryLinkText: { color: '#388E3C', fontSize: 15, fontWeight: '600' },
 
   // Modal
   modalOverlay: {
@@ -518,12 +629,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContent: {
-    backgroundColor: Colors.card,
-    borderTopLeftRadius: Radius.xxl,
-    borderTopRightRadius: Radius.xxl,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 24,
     paddingBottom: 40,
-    ...shadowStyle('lg'),
   },
   modalHeader: {
     flexDirection: 'row',
@@ -531,18 +641,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  modalTitle: { fontSize: Font.xxl, fontWeight: Font.weightBold, color: Colors.textPrimary },
-  modalSubtext: { fontSize: Font.base, color: Colors.textMuted, marginBottom: 20, lineHeight: 20 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
+  modalSubtext: { fontSize: 14, color: '#888', marginBottom: 20, lineHeight: 20 },
   manualInput: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.lg,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: Font.xl,
-    fontWeight: Font.weightSemiBold,
+    fontSize: 18,
+    fontWeight: '600',
     borderWidth: 1.5,
-    borderColor: Colors.border,
-    color: Colors.textPrimary,
+    borderColor: '#e0e0e0',
+    color: '#333',
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -551,10 +661,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: Colors.primaryMid,
-    borderRadius: Radius.lg,
+    backgroundColor: '#388E3C',
+    borderRadius: 14,
     paddingVertical: 16,
-    ...shadowStyle('sm'),
   },
   manualSubmitText: { color: Colors.textOnDark, fontSize: Font.lg, fontWeight: Font.weightBold },
 });

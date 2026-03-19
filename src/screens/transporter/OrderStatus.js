@@ -31,7 +31,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
-import { optimizeImageUrl } from '../../services/cloudinaryService';
 
 const TABS = ['Source (Pickup)', 'Destination (Delivery)'];
 
@@ -194,7 +193,7 @@ const OrderStatus = ({ navigation }) => {
           onPress: async () => {
             setUpdatingId(orderId);
             try {
-              await api.put('/orders/status', { order_id: orderId, status: newStatus });
+              await api.put(`/transporters/orders/${orderId}/status`, { status: newStatus });
               Alert.alert('Success', 'Order status updated');
               fetchOrders(true);
             } catch (e) {
@@ -208,8 +207,34 @@ const OrderStatus = ({ navigation }) => {
     );
   };
 
-  /* ── Display orders for active tab ─────────────────────── */
-  const orders = activeTab === 0 ? sourceOrders : destinationOrders;
+  /* ── Assign ─────────────────────────────────────────────── */
+  const handleAssign = (order) => {
+    const available = deliveryPersons.filter((p) => p.is_available !== false && p.availability !== false);
+    if (available.length === 0) {
+      Alert.alert('No Available Persons', 'No delivery persons available.');
+      return;
+    }
+    const options = available.map((p) => ({
+      text: p.full_name || p.name || 'Person',
+      onPress: async () => {
+        const orderId = order.order_id || order.id;
+        setUpdatingId(orderId);
+        try {
+          await api.put(`/transporters/orders/${orderId}/assign`, {
+            delivery_person_id: p.id || p.delivery_person_id,
+          });
+          Alert.alert('Success', `Assigned ${p.full_name || p.name}`);
+          fetchOrders(true);
+        } catch (e) {
+          Alert.alert('Error', e.message || 'Failed to assign');
+        } finally {
+          setUpdatingId(null);
+        }
+      },
+    }));
+    options.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Assign Delivery Person', 'Choose:', options);
+  };
 
   /* ── Render order card ──────────────────────────────────── */
   const renderOrder = (order) => {

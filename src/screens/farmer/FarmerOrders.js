@@ -17,26 +17,104 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { acceptFarmerOrder, getFarmerOrders, rejectFarmerOrder } from '../../services/orderService';
+import { getFarmerOrders, acceptFarmerOrder, rejectFarmerOrder } from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
 
-const STATUS_LIST = ['All', 'PLACED', 'PENDING', 'CONFIRMED', 'ASSIGNED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'];
+const STATUS_LIST = ['All', 'PENDING', 'PLACED', 'ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY', 'COMPLETED', 'CANCELLED'];
 
 const STATUS_COLORS = {
-  PLACED: '#FF9800',
   PENDING: '#FF9800',
-  CONFIRMED: '#2196F3',
+  PLACED: '#2196F3',
   ASSIGNED: '#9C27B0',
-  SHIPPED: '#00BCD4',
-  OUT_FOR_DELIVERY: '#FF5722',
-  DELIVERED: '#4CAF50',
+  PICKUP_ASSIGNED: '#FF5722',
+  PICKED_UP: '#00897B',
+  RECEIVED: '#00897B',
+  SHIPPED: '#3F51B5',
+  IN_TRANSIT: '#3F51B5',
+  REACHED_DESTINATION: '#673AB7',
+  OUT_FOR_DELIVERY: '#00BCD4',
+  COMPLETED: '#4CAF50',
   CANCELLED: '#F44336',
 };
 
-// Map backend mixed-case status to uppercase canonical key
-const normalizeStatus = (s) => {
-  if (!s) return 'PLACED';
-  return s.toUpperCase().replace(/ /g, '_');
+// Map backend status to frontend display status
+const normalizeStatus = (backendStatus) => {
+  if (!backendStatus) return 'PENDING';
+  const status = backendStatus.toString().toUpperCase();
+  
+  // Map backend statuses to frontend statuses
+  switch (status) {
+    case 'PENDING':
+      return 'PENDING';
+    case 'PLACED':
+    case 'ACCEPTED':
+    case 'CONFIRMED':
+      return 'PLACED';
+    case 'ASSIGNED':
+      return 'ASSIGNED';
+    case 'PICKUP_ASSIGNED':
+      return 'PICKUP_ASSIGNED';
+    case 'PICKED_UP':
+      return 'PICKED_UP';
+    case 'RECEIVED':
+      return 'RECEIVED';
+    case 'SHIPPED':
+      return 'SHIPPED';
+    case 'IN_TRANSIT':
+      return 'IN_TRANSIT';
+    case 'REACHED_DESTINATION':
+      return 'REACHED_DESTINATION';
+    case 'OUT_FOR_DELIVERY':
+      return 'OUT_FOR_DELIVERY';
+    case 'COMPLETED':
+    case 'DELIVERED':
+      return 'COMPLETED';
+    case 'CANCELLED':
+    case 'REJECTED':
+      return 'CANCELLED';
+    default:
+      return 'PENDING';
+  }
+};
+
+// Extract customer image from backend response
+const getCustomerImage = (customer) => {
+  if (!customer) return null;
+  
+  // Check for direct image properties
+  if (customer.image_url) return customer.image_url;
+  if (customer.image) return customer.image;
+  if (customer.photo) return customer.photo;
+  if (customer.profile_image) return customer.profile_image;
+  
+  return null;
+};
+
+// Extract product image from backend response
+const getProductImage = (product) => {
+  if (!product) return null;
+  
+  // Check for direct image properties
+  if (product.image_url) return product.image_url;
+  if (product.image) return product.image;
+  if (product.photo) return product.photo;
+  
+  // Check for images array
+  if (product.images && Array.isArray(product.images) && product.images.length > 0) {
+    // Find primary image first
+    const primaryImage = product.images.find(img => img.is_primary === true);
+    if (primaryImage && primaryImage.image_url) {
+      return primaryImage.image_url;
+    }
+    
+    // Fallback to first image
+    const firstImage = product.images[0];
+    if (firstImage && firstImage.image_url) {
+      return firstImage.image_url;
+    }
+  }
+  
+  return null;
 };
 
 const FarmerOrders = ({ navigation }) => {
@@ -52,20 +130,63 @@ const FarmerOrders = ({ navigation }) => {
   const [actionLoading, setActionLoading] = useState(null);
   const toastRef = React.useRef(null);
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (statusFilter = 'All') => {
     try {
-      const data = await getFarmerOrders();
+      console.log('[FarmerOrders] Fetching orders for status:', statusFilter);
+      
+      let data;
+      if (statusFilter === 'All') {
+        data = await getFarmerOrders('all');
+      } else {
+        // Map frontend status to backend status for API call
+        let backendStatus = statusFilter.toLowerCase();
+        if (statusFilter === 'PLACED') backendStatus = 'accepted';
+        if (statusFilter === 'CANCELLED') backendStatus = 'rejected';
+        if (statusFilter === 'COMPLETED') backendStatus = 'completed';
+        if (statusFilter === 'PENDING') backendStatus = 'pending';
+        
+        data = await getFarmerOrdersByStatus(backendStatus);
+      }
+      
       const raw = Array.isArray(data) ? data : data?.orders || data?.data || [];
-      // Normalize: backend sends current_status (mixed case), map to uppercase
-      const list = raw.map(o => ({
-        ...o,
-        status: normalizeStatus(o.current_status || o.status),
-      }));
-      setOrders(list.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date)));
-      console.log('[FarmerOrders] Fetched', list.length, 'orders. Sample:', JSON.stringify(list[0]));
+      console.log('[FarmerOrders] Raw data received:', raw.length, 'orders');
+      
+      if (raw.length > 0) {
+        console.log('[FarmerOrders] Sample order structure:', JSON.stringify(raw[0], null, 2));
+      }
+      
+      // Process and normalize orders
+      const processedOrders = raw.map(order => {
+        const product = order.Product || order.product || {};
+        const customer = order.customer || {};
+        
+        console.log('[FarmerOrders] Processing order:', order.order_id, {
+          current_status: order.current_status,
+          product_name: product.name,
+          product_images: product.images?.length || 0,
+          customer_name: customer.name
+        });
+        
+        return {
+          ...order,
+          status: normalizeStatus(order.current_status || order.status),
+          product_image: getProductImage(product),
+          product_name: product.name || product.product_name || 'Unknown Product',
+          customer_name: customer.name || customer.full_name || 'Unknown Customer'
+        };
+      });
+      
+      setOrders(processedOrders.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date)));
+      console.log('[FarmerOrders] Processed', processedOrders.length, 'orders successfully');
+      
     } catch (e) {
       const msg = e?.response?.data?.message || e.message || 'Failed to load orders';
-      console.error('[FarmerOrders] fetchOrders error:', msg, '\nStatus:', e?.response?.status, '\nDetails:', JSON.stringify(e?.response?.data));
+      console.error('[FarmerOrders] fetchOrders error:', msg);
+      console.error('[FarmerOrders] Error details:', {
+        status: e?.response?.status,
+        data: e?.response?.data,
+        message: e.message
+      });
       toastRef.current?.show(msg, 'error');
     } finally {
       setLoading(false);
@@ -73,33 +194,86 @@ const FarmerOrders = ({ navigation }) => {
     }
   }, []);
 
-  useEffect(() => { fetchOrders(); }, []);
+  useEffect(() => { 
+    fetchOrders(activeFilter); 
+  }, [activeFilter]);
 
-  const onRefresh = () => { setRefreshing(true); fetchOrders(); };
+  const onRefresh = () => { 
+    setRefreshing(true); 
+    fetchOrders(activeFilter); 
+  };
 
   const filteredOrders =
     activeFilter === 'All'
       ? orders
       : orders.filter((o) => (o.status || o.current_status || '').toUpperCase() === activeFilter.toUpperCase());
 
+  const handleAssignTransporters = async (orderId) => {
+    setActionLoading(orderId);
+    try {
+      console.log('[FarmerOrders] Assigning transporters for order:', orderId);
+      
+      const response = await assignTransporters(orderId);
+      console.log('[FarmerOrders] Assign transporters response:', response);
+      
+      setOrders((prev) =>
+        prev.map((o) => ((o.order_id || o.id) === orderId ? { ...o, status: 'ASSIGNED' } : o))
+      );
+      toastRef.current?.show('Transporters assigned successfully!', 'success');
+      
+      // Refresh orders after action
+      setTimeout(() => {
+        fetchOrders(activeFilter);
+      }, 1000);
+      
+    } catch (e) {
+      const msg = e?.response?.data?.message || e.message || 'Failed to assign transporters';
+      console.error('[FarmerOrders] Assign transporters error:', msg);
+      toastRef.current?.show(msg, 'error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleAction = async (orderId, action) => {
     setActionLoading(orderId);
     try {
+      console.log('[FarmerOrders] Handling action:', action, 'for order:', orderId);
+      
       if (action === 'accept') {
-        await acceptFarmerOrder(orderId);
+        const response = await acceptFarmerOrder(orderId);
+        console.log('[FarmerOrders] Accept response:', response);
+
+        // Workflow step 2: transporter assignment should happen at accept time.
+        try {
+          const assignResp = await assignTransporters(orderId);
+          console.log('[FarmerOrders] Auto-assign transporters response:', assignResp);
+        } catch (assignErr) {
+          console.log('[FarmerOrders] Auto-assign transporters failed:', assignErr.message);
+        }
+        
         setOrders((prev) =>
-          prev.map((o) => ((o.order_id || o.id) === orderId ? { ...o, status: 'CONFIRMED' } : o))
+          prev.map((o) => ((o.order_id || o.id) === orderId ? { ...o, status: 'ASSIGNED' } : o))
         );
-        toastRef.current?.show('Order accepted successfully!', 'success');
+        toastRef.current?.show('Order accepted and transporters assigned successfully!', 'success');
       } else {
-        await rejectFarmerOrder(orderId);
+        const response = await rejectFarmerOrder(orderId, 'Rejected by farmer');
+        console.log('[FarmerOrders] Reject response:', response);
+        
         setOrders((prev) =>
           prev.map((o) => ((o.order_id || o.id) === orderId ? { ...o, status: 'CANCELLED' } : o))
         );
-        toastRef.current?.show('Order rejected.', 'success');
+        toastRef.current?.show('Order rejected successfully.', 'success');
       }
+      
+      // Refresh orders after action
+      setTimeout(() => {
+        fetchOrders(activeFilter);
+      }, 1000);
+      
     } catch (e) {
       const msg = e?.response?.data?.message || e.message || 'Failed to update order';
+      console.error('[FarmerOrders] Action error:', msg);
       toastRef.current?.show(msg, 'error');
     } finally {
       setActionLoading(null);
@@ -125,16 +299,28 @@ const FarmerOrders = ({ navigation }) => {
   const renderOrderCard = ({ item }) => {
     const realId = item.order_id || item.id;
     const statusColor = STATUS_COLORS[item.status] || '#888';
-    const isActionable = ['PLACED', 'PENDING'].includes(item.status);
+    const isActionable = ['PENDING'].includes(item.status); // Only PENDING orders are actionable
 
     // API returns per-item records with a Product association
     const product = item.Product || item.product || {};
-    const imgUri = product.image_url || product.image || product.photo || null;
-    const productName = product.name || product.product_name || item.product_name || 'Product';
+    const customer = item.customer || {};
+    const imgUri = getProductImage(product);
+    const customerImageUri = getCustomerImage(customer);
+    const productName = product.name || product.product_name || item.product_name || 'Unknown Product';
     const unitPrice = parseFloat(product.current_price || product.price || item.unit_price || item.price_per_unit || 0);
     const qty = parseInt(item.quantity || 1);
     const total = parseFloat(item.total_price || item.total_amount || item.total || 0);
-    const customerName = item.customer?.name || item.customer?.full_name || item.customer_name || 'Customer';
+    const customerName = item.customer?.name || item.customer?.full_name || item.customer_name || 'Unknown Customer';
+
+    console.log('[FarmerOrders] Rendering order card:', {
+      orderId: realId,
+      status: item.status,
+      productName,
+      imgUri,
+      customerName,
+      customerImageUri,
+      isActionable
+    });
 
     return (
       <TouchableOpacity
@@ -145,7 +331,7 @@ const FarmerOrders = ({ navigation }) => {
         {/* ── Header ── */}
         <View style={styles.cardHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.orderId}>Order #{realId}</Text>
+            <Text style={styles.productTitle}>{productName}</Text>
             <Text style={styles.orderDate}>{formatDate(item.created_at || item.date)}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
@@ -155,17 +341,41 @@ const FarmerOrders = ({ navigation }) => {
           </View>
         </View>
 
-        {/* ── Customer ── */}
+        {/* ── Customer with Profile Photo ── */}
         <View style={styles.customerRow}>
-          <Ionicons name="person-circle-outline" size={17} color="#888" />
-          <Text style={styles.customerName} numberOfLines={1}>{customerName}</Text>
+          {customerImageUri ? (
+            <Image 
+              source={{ uri: customerImageUri }} 
+              style={styles.customerPhoto}
+              onError={(error) => {
+                console.log('[FarmerOrders] Customer image load error:', error.nativeEvent.error);
+              }}
+            />
+          ) : (
+            <View style={styles.customerPhotoPlaceholder}>
+              <Ionicons name="person" size={16} color="#888" />
+            </View>
+          )}
+          <View style={styles.customerInfo}>
+            <Text style={styles.customerName} numberOfLines={1}>{customerName}</Text>
+            <Text style={styles.customerLocation}>Qty: {qty} items</Text>
+          </View>
         </View>
 
         {/* ── Product (single item record) ── */}
         <View style={styles.productsSection}>
           <View style={styles.productRow}>
             {imgUri ? (
-              <Image source={{ uri: imgUri }} style={styles.productThumb} />
+              <Image 
+                source={{ uri: imgUri }} 
+                style={styles.productThumb}
+                onError={(error) => {
+                  console.log('[FarmerOrders] Image load error:', error.nativeEvent.error, 'for URL:', imgUri);
+                }}
+                onLoad={() => {
+                  console.log('[FarmerOrders] Image loaded successfully:', imgUri);
+                }}
+              />
             ) : (
               <View style={styles.productThumbPlaceholder}>
                 <MaterialCommunityIcons name="food-apple-outline" size={26} color="#aaa" />
@@ -189,16 +399,24 @@ const FarmerOrders = ({ navigation }) => {
           <Text style={styles.totalAmount}>₹{total.toLocaleString('en-IN')}</Text>
         </View>
 
-        {/* ── Action Required: Accept / Reject ── */}
+        {/* ── Action Required: Accept / Reject (Only for PENDING orders) ── */}
         {isActionable && (
           <View style={styles.actionsRow}>
             <TouchableOpacity
               style={[styles.actionBtn, styles.rejectBtn]}
               onPress={() =>
-                Alert.alert('Reject Order', 'Are you sure you want to reject this order?', [
-                  { text: 'No', style: 'cancel' },
-                  { text: 'Yes, Reject', style: 'destructive', onPress: () => handleAction(realId, 'reject') },
-                ])
+                Alert.alert(
+                  'Reject Order', 
+                  `Are you sure you want to reject this ${productName} order from ${customerName}?`, 
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { 
+                      text: 'Reject', 
+                      style: 'destructive', 
+                      onPress: () => handleAction(realId, 'reject') 
+                    },
+                  ]
+                )
               }
               disabled={actionLoading === realId}
             >
@@ -228,15 +446,48 @@ const FarmerOrders = ({ navigation }) => {
           </View>
         )}
 
-        {/* ── Track for confirmed+ orders ── */}
+        {/* ── Status-based actions ── */}
         {!isActionable && item.status !== 'CANCELLED' && (
-          <TouchableOpacity
-            style={styles.trackBtn}
-            onPress={() => navigation.navigate('FarmerOrderTracking', { orderId: realId, order: item })}
-          >
-            <MaterialCommunityIcons name="truck-outline" size={16} color="#1B5E20" />
-            <Text style={styles.trackText}>Track Order</Text>
-          </TouchableOpacity>
+          <View style={styles.statusActionsRow}>
+            {item.status === 'PLACED' && (
+              <TouchableOpacity
+                style={styles.assignTransporterBtn}
+                onPress={() => handleAssignTransporters(realId)}
+                disabled={actionLoading === realId}
+              >
+                {actionLoading === realId ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="truck-plus" size={16} color="#fff" />
+                    <Text style={styles.assignTransporterText}>Assign Transporters</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+    {['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(item.status) && (
+              <TouchableOpacity
+                style={styles.trackBtn}
+                onPress={() => navigation.navigate('FarmerOrderTracking', { orderId: realId, order: item })}
+              >
+                <MaterialCommunityIcons name="truck-outline" size={16} color="#1B5E20" />
+                <Text style={styles.trackText}>Track Order</Text>
+              </TouchableOpacity>
+            )}
+            {item.status === 'COMPLETED' && (
+              <View style={styles.statusInfoRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
+                <Text style={[styles.statusInfoText, { color: '#4CAF50' }]}>Order Completed Successfully</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {item.status === 'CANCELLED' && (
+          <View style={styles.statusInfoRow}>
+            <Ionicons name="close-circle" size={16} color="#F44336" />
+            <Text style={[styles.statusInfoText, { color: '#F44336' }]}>Order Cancelled</Text>
+          </View>
         )}
       </TouchableOpacity>
     );
@@ -251,13 +502,13 @@ const FarmerOrders = ({ navigation }) => {
     const isActionable = ['PLACED', 'PENDING'].includes(o.status);
 
     const product = o.Product || o.product || {};
-    const imgUri = product.image_url || product.image || product.photo || null;
-    const productName = product.name || product.product_name || o.product_name || 'Product';
+    const imgUri = getProductImage(product);
+    const productName = product.name || product.product_name || o.product_name || 'Unknown Product';
     const unitPrice = parseFloat(product.current_price || product.price || o.unit_price || o.price_per_unit || 0);
     const qty = parseInt(o.quantity || 1);
     const total = parseFloat(o.total_price || o.total_amount || o.total || 0);
-    const customerName = o.customer?.name || o.customer?.full_name || o.customer_name || 'N/A';
-    const deliveryAddr = o.delivery_address || o.Order?.delivery_address || o.order?.delivery_address || null;
+    const customerName = o.customer?.name || o.customer?.full_name || o.customer_name || 'Unknown Customer';
+    const deliveryAddr = o.delivery_address || o.Order?.delivery_address || o.order?.delivery_address || 'Not provided';
 
     return (
       <Modal visible={detailModal} transparent animationType="slide" onRequestClose={() => setDetailModal(false)}>
@@ -265,7 +516,7 @@ const FarmerOrders = ({ navigation }) => {
           <View style={styles.detailCard}>
             {/* Header */}
             <View style={styles.detailHeader}>
-              <Text style={styles.detailTitle}>Order #{realId}</Text>
+              <Text style={styles.detailTitle}>{productName}</Text>
               <TouchableOpacity onPress={() => setDetailModal(false)} style={styles.closeBtn}>
                 <Ionicons name="close" size={22} color="#333" />
               </TouchableOpacity>
@@ -279,24 +530,17 @@ const FarmerOrders = ({ navigation }) => {
                 </Text>
               </View>
 
-              <Text style={styles.detailLabel}>Customer</Text>
-              <Text style={styles.detailValue}>{customerName}</Text>
-
-              <Text style={styles.detailLabel}>Order Date</Text>
-              <Text style={styles.detailValue}>{formatDate(o.created_at || o.date)}</Text>
-
-              {deliveryAddr ? (
-                <>
-                  <Text style={styles.detailLabel}>Delivery Address</Text>
-                  <Text style={styles.detailValue}>{deliveryAddr}</Text>
-                </>
-              ) : null}
-
-              {/* Product row */}
-              <Text style={[styles.detailLabel, { marginBottom: 10, marginTop: 16 }]}>Product</Text>
+              {/* Product Section First */}
+              <Text style={[styles.detailLabel, { marginTop: 8, marginBottom: 10 }]}>Product Details</Text>
               <View style={styles.detailProductRow}>
                 {imgUri ? (
-                  <Image source={{ uri: imgUri }} style={styles.detailProductImg} />
+                  <Image 
+                    source={{ uri: imgUri }} 
+                    style={styles.detailProductImg}
+                    onError={(error) => {
+                      console.log('[FarmerOrders] Detail image load error:', error.nativeEvent.error);
+                    }}
+                  />
                 ) : (
                   <View style={[styles.detailProductImg, styles.detailProductImgPlaceholder]}>
                     <MaterialCommunityIcons name="food-apple-outline" size={28} color="#ccc" />
@@ -313,6 +557,72 @@ const FarmerOrders = ({ navigation }) => {
                 )}
               </View>
 
+              {/* Customer Section */}
+              <Text style={styles.detailLabel}>Customer</Text>
+              <View style={styles.detailCustomerRow}>
+                {getCustomerImage(o.customer) ? (
+                  <Image 
+                    source={{ uri: getCustomerImage(o.customer) }} 
+                    style={styles.detailCustomerPhoto}
+                    onError={(error) => {
+                      console.log('[FarmerOrders] Detail customer image load error:', error.nativeEvent.error);
+                    }}
+                  />
+                ) : (
+                  <View style={styles.detailCustomerPhotoPlaceholder}>
+                    <Ionicons name="person" size={20} color="#888" />
+                  </View>
+                )}
+                <View style={styles.detailCustomerInfo}>
+                  <Text style={styles.detailCustomerName}>{customerName}</Text>
+                  <Text style={styles.detailCustomerContact}>{o.customer?.mobile_number || 'No contact'}</Text>
+                </View>
+              </View>
+
+              {/* Delivery Address */}
+              {deliveryAddr && deliveryAddr !== 'Not provided' && (
+                <>
+                  <Text style={styles.detailLabel}>Delivery Address</Text>
+                  <View style={styles.addressContainer}>
+                    <Ionicons name="location-outline" size={16} color="#666" />
+                    <Text style={styles.detailAddressValue}>
+                      {(() => {
+                        // Handle JSON string addresses
+                        let addr = deliveryAddr;
+                        if (typeof addr === 'string') {
+                          try {
+                            addr = JSON.parse(addr);
+                          } catch (e) {
+                            // If parsing fails, use the string as is
+                            return addr;
+                          }
+                        }
+                        
+                        // If it's an object, format it nicely
+                        if (typeof addr === 'object' && addr !== null) {
+                          const parts = [];
+                          if (addr.full_name) parts.push(addr.full_name);
+                          if (addr.address_line) parts.push(addr.address_line);
+                          if (addr.address) parts.push(addr.address);
+                          if (addr.city) parts.push(addr.city);
+                          if (addr.district) parts.push(addr.district);
+                          if (addr.state) parts.push(addr.state);
+                          if (addr.pincode) parts.push(addr.pincode);
+                          if (addr.phone) parts.push(`Ph: ${addr.phone}`);
+                          return parts.filter(Boolean).join(', ') || 'Address not available';
+                        }
+                        
+                        return String(addr);
+                      })()
+                    }
+                    </Text>
+                  </View>
+                </>
+              )}
+
+              <Text style={styles.detailLabel}>Order Date</Text>
+              <Text style={styles.detailValue}>{formatDate(o.created_at || o.date)}</Text>
+
               {/* Total */}
               <View style={styles.detailTotalRow}>
                 <Text style={styles.detailTotalLabel}>Total Amount</Text>
@@ -320,16 +630,24 @@ const FarmerOrders = ({ navigation }) => {
               </View>
             </ScrollView>
 
-            {/* Accept / Reject inside modal */}
+            {/* Accept / Reject inside modal (Only for PENDING orders) */}
             {isActionable && (
               <View style={[styles.actionsRow, { marginTop: 14 }]}>
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.rejectBtn]}
                   onPress={() =>
-                    Alert.alert('Reject Order', 'Reject this order?', [
-                      { text: 'No', style: 'cancel' },
-                      { text: 'Reject', style: 'destructive', onPress: () => { handleAction(realId, 'reject'); setDetailModal(false); } },
-                    ])
+                    Alert.alert(
+                      'Reject Order', 
+                      `Reject this ${productName} order from ${customerName}?`, 
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { 
+                          text: 'Reject', 
+                          style: 'destructive', 
+                          onPress: () => { handleAction(realId, 'reject'); setDetailModal(false); } 
+                        },
+                      ]
+                    )
                   }
                   disabled={actionLoading === realId}
                 >
@@ -353,14 +671,48 @@ const FarmerOrders = ({ navigation }) => {
               </View>
             )}
 
-            {!isActionable && o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && (
-              <TouchableOpacity
-                style={styles.detailTrackBtn}
-                onPress={() => { setDetailModal(false); navigation.navigate('FarmerOrderTracking', { orderId: realId, order: o }); }}
-              >
-                <MaterialCommunityIcons name="truck-outline" size={18} color="#fff" />
-                <Text style={styles.detailTrackText}>Track Order</Text>
-              </TouchableOpacity>
+            {/* Status-based actions in modal */}
+            {!isActionable && o.status !== 'CANCELLED' && (
+              <View style={styles.detailStatusActions}>
+                {o.status === 'PLACED' && (
+                  <TouchableOpacity
+                    style={styles.detailAssignBtn}
+                    onPress={() => { handleAssignTransporters(realId); setDetailModal(false); }}
+                    disabled={actionLoading === realId}
+                  >
+                    {actionLoading === realId ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons name="truck-plus" size={18} color="#fff" />
+                        <Text style={styles.detailAssignText}>Assign Transporters</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+                {['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(o.status) && (
+                  <TouchableOpacity
+                    style={styles.detailTrackBtn}
+                    onPress={() => { setDetailModal(false); navigation.navigate('FarmerOrderTracking', { orderId: realId, order: o }); }}
+                  >
+                    <MaterialCommunityIcons name="truck-outline" size={18} color="#fff" />
+                    <Text style={styles.detailTrackText}>Track Order</Text>
+                  </TouchableOpacity>
+                )}
+                {o.status === 'COMPLETED' && (
+                  <View style={styles.detailStatusInfo}>
+                    <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+                    <Text style={[styles.detailStatusText, { color: '#4CAF50' }]}>Order Completed Successfully</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {o.status === 'CANCELLED' && (
+              <View style={styles.detailStatusInfo}>
+                <Ionicons name="close-circle" size={18} color="#F44336" />
+                <Text style={[styles.detailStatusText, { color: '#F44336' }]}>Order Cancelled</Text>
+              </View>
             )}
           </View>
         </View>
@@ -390,7 +742,10 @@ const FarmerOrders = ({ navigation }) => {
               <TouchableOpacity
                 key={status}
                 style={[styles.filterChip, isActive && styles.filterChipActive]}
-                onPress={() => setActiveFilter(status)}
+                onPress={() => {
+                  console.log('[FarmerOrders] Filter changed to:', status);
+                  setActiveFilter(status);
+                }}
               >
                 <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
                   {status === 'All' ? 'All' : status.replace(/_/g, ' ')}
@@ -415,8 +770,14 @@ const FarmerOrders = ({ navigation }) => {
         <View style={styles.center}>
           <Ionicons name="receipt-outline" size={64} color="#ccc" />
           <Text style={styles.emptyText}>
-            {activeFilter === 'All' ? 'No orders yet' : `No ${activeFilter.toLowerCase()} orders`}
+            {activeFilter === 'All' ? 'No orders yet' : `No ${activeFilter.toLowerCase().replace(/_/g, ' ')} orders`}
           </Text>
+          <TouchableOpacity 
+            style={styles.refreshButton}
+            onPress={() => fetchOrders(activeFilter)}
+          >
+            <Text style={styles.refreshButtonText}>Refresh</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -444,6 +805,18 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 12, color: '#666', fontSize: 14 },
   emptyText: { marginTop: 12, fontSize: 15, color: '#999' },
+  refreshButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+  },
+  refreshButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 
   header: {
     paddingBottom: 14,
@@ -501,13 +874,29 @@ const styles = StyleSheet.create({
     borderColor: '#E6EFE6',
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  orderId: { fontSize: 15, fontWeight: '800', color: '#1A1A1A', letterSpacing: 0.1 },
+  productTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A1A', letterSpacing: 0.1 },
   orderDate: { fontSize: 12, color: '#999', marginTop: 3 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
   statusText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
 
-  customerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 6 },
-  customerName: { fontSize: 14, color: '#555', fontWeight: '500' },
+  customerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 10 },
+  customerPhoto: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 18, 
+    backgroundColor: '#F5F5F5' 
+  },
+  customerPhotoPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F0F4F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customerInfo: { flex: 1 },
+  customerName: { fontSize: 14, color: '#333', fontWeight: '600' },
+  customerLocation: { fontSize: 12, color: '#888', marginTop: 2 },
 
   /* Product rows in card */
   productsSection: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#EDF3ED', paddingTop: 12, gap: 10 },
@@ -554,6 +943,31 @@ const styles = StyleSheet.create({
   },
   trackText: { color: '#1B5E20', fontWeight: '700', fontSize: 13 },
 
+  statusActionsRow: { marginTop: 12 },
+  statusInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    gap: 6,
+  },
+  assignTransporterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingVertical: 10,
+    backgroundColor: '#2E7D32',
+    borderRadius: 10,
+    gap: 6,
+    elevation: 2,
+  },
+  assignTransporterText: { 
+    color: '#fff', 
+    fontWeight: '700', 
+    fontSize: 13 
+  },
+
   /* Detail Modal */
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
   detailCard: { backgroundColor: '#fff', width: '92%', borderRadius: 20, padding: 20, maxHeight: '88%' },
@@ -591,6 +1005,53 @@ const styles = StyleSheet.create({
   },
   detailTotalLabel: { fontSize: 15, fontWeight: '700', color: '#333' },
   detailTotalValue: { fontSize: 22, fontWeight: '800', color: '#1B5E20' },
+  
+  detailCustomerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 12,
+  },
+  detailCustomerPhoto: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
+  },
+  detailCustomerPhotoPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F0F4F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailCustomerInfo: {
+    flex: 1,
+  },
+  detailCustomerName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+  },
+  detailCustomerContact: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 2,
+  },
+  addressContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 4,
+    gap: 8,
+  },
+  detailAddressValue: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+    lineHeight: 20,
+  },
+  
   detailTrackBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -603,4 +1064,35 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   detailTrackText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  
+  detailStatusActions: { marginTop: 14 },
+  detailStatusInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 8,
+  },
+  detailStatusText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  
+  detailAssignBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    paddingVertical: 13,
+    backgroundColor: '#2E7D32',
+    borderRadius: 14,
+    gap: 8,
+    elevation: 3,
+  },
+  detailAssignText: { 
+    color: '#fff', 
+    fontWeight: '800', 
+    fontSize: 15 
+  },
 });

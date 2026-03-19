@@ -31,6 +31,8 @@ import {
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import ToastMessage from '../../utils/Toast';
@@ -155,31 +157,12 @@ const TransporterDashboard = ({ navigation }) => {
     if (!order || !canConfirmAssign()) return;
 
     const orderId = order.order_id || order.id;
-    setAssigning(true);
-
+    setAssigningOrderId(orderId);
     try {
-      if (assignModal.isSource) {
-        // Step 1: assign vehicle
-        await api.post('/transporters/assign-vehicle', {
-          order_id: orderId,
-          vehicle_id: selectedVehicleId,
-          vehicle_type: selectedVehicleType,
-        });
-        // Step 2: assign delivery person
-        await api.post('/transporters/assign-order', {
-          order_id: orderId,
-          delivery_person_id: selectedPersonId,
-        });
-        toastRef.current?.show('Vehicle and delivery person assigned!', 'success');
-      } else {
-        // Destination: only assign delivery person
-        await api.post('/transporters/assign-order', {
-          order_id: orderId,
-          delivery_person_id: selectedPersonId,
-        });
-        toastRef.current?.show('Delivery person assigned!', 'success');
-      }
-      setAssignModal({ visible: false, order: null, isSource: false });
+      await api.put(`/transporters/orders/${orderId}/assign`, {
+        delivery_person_id: person.id || person.delivery_person_id,
+      });
+      toastRef.current?.show(`Assigned ${person.full_name || person.name} successfully!`, 'success');
       fetchDashboard(true);
     } catch (e) {
       toastRef.current?.show(e.message || 'Assignment failed', 'error');
