@@ -1,22 +1,22 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
-  StatusBar,
-  Dimensions,
-} from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    RefreshControl,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../context/CartContext';
+import api from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 import ToastMessage from '../../utils/Toast';
 
@@ -365,7 +365,7 @@ export default function Wishlist({ navigation }) {
 // Styles
 // ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F8E9' },
+  container: { flex: 1, backgroundColor: '#EDF6EE' },
 
   /* Header */
   header: { paddingHorizontal: 16, paddingVertical: 14 },
@@ -399,10 +399,12 @@ const styles = StyleSheet.create({
   /* Wishlist Card */
   wishCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 12,
     flexDirection: 'row',
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E4EEE5',
     elevation: 2,
     shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
@@ -487,7 +489,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#fff',
+    backgroundColor: '#F9FCF9',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,

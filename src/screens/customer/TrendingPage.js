@@ -11,28 +11,27 @@
  *   - Add to Cart button
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  RefreshControl,
-  ActivityIndicator,
-  Animated,
-  StatusBar,
-  Dimensions,
-  Platform,
-  Alert,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    Alert,
+    Animated,
+    Dimensions,
+    FlatList,
+    Image,
+    Platform,
+    RefreshControl,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useCart } from '../../context/CartContext';
 import api from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
-import { useCart } from '../../context/CartContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -403,7 +402,7 @@ const TrendingPage = ({ navigation }) => {
  * ------------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  container: { flex: 1, backgroundColor: '#EDF6EE' },
 
   headerBar: {
     backgroundColor: '#1B5E20',
@@ -412,6 +411,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.2)',
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
 
@@ -472,6 +473,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E4EEE5',
     ...Platform.select({
       ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
       android: { elevation: 2 },

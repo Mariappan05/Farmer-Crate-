@@ -1,19 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  StatusBar,
-  RefreshControl,
-  ScrollView,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    FlatList,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFarmerOrders } from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
 
@@ -536,6 +535,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 5,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   summarySmallValue: { fontSize: 18, fontWeight: '800', marginTop: 4 },
   summarySmallLabel: { fontSize: 11, color: '#888', marginTop: 2, fontWeight: '500' },
@@ -552,6 +553,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 7,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   chartTitle: { fontSize: 17, fontWeight: '800', color: '#1A1A1A', marginBottom: 16 },
   chartContainer: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end' },
@@ -576,6 +579,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.07,
     shadowRadius: 3,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   filterChipActive: { backgroundColor: '#1B5E20' },
   filterChipText: { fontSize: 13, color: '#666', fontWeight: '600' },
@@ -596,6 +601,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.09,
     shadowRadius: 7,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   orderId: { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },

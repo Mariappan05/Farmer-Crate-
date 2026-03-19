@@ -1,27 +1,21 @@
-/**
- * QRScanner.js — Delivery Person QR Scanner
- *
- * Rules:
- *  - QR scan available ONLY for DESTINATION delivery person (not pickup person)
- *  - Pickup delivery person has NO QR scan access
- *  - Only the assigned delivery person for this order can scan
- *  - Different delivery person scanning → blocked
- *  - Destination delivery person scans:
- *      OUT_FOR_DELIVERY → DELIVERED (customer received package)
- */
-
 import React, { useState, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  Alert, Vibration, TextInput, KeyboardAvoidingView, Platform,
-  StatusBar, Modal, Dimensions,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Vibration,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import api from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
-import { updateOrderStatusByQR } from '../../services/orderService';
+import { getOrderById } from '../../services/orderService';
 
 const SCAN_BOX_SIZE = 250;
 const CORNER = 28;
@@ -503,33 +497,44 @@ const QRScanner = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   centerContent: { justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: '#fff', marginTop: 12, fontSize: 14 },
 
   header: {
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    backgroundColor: 'rgba(16,58,18,0.74)',
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     zIndex: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.glassBorder,
   },
   backBtn: { padding: 6 },
-  headerTitle: { flex: 1, fontSize: 18, fontWeight: 'bold', color: '#fff', marginLeft: 12 },
+  headerTitle: {
+    flex: 1,
+    fontSize: Font.xl,
+    fontWeight: Font.weightBold,
+    color: Colors.textOnDark,
+    marginLeft: 12,
+    letterSpacing: Font.trackTight,
+  },
   headerActions: { flexDirection: 'row', gap: 12 },
   headerActionBtn: { padding: 6 },
-  rescanText: { color: '#A5D6A7', fontWeight: '700', fontSize: 15 },
+  rescanText: { color: Colors.primaryGlow, fontWeight: Font.weightBold, fontSize: Font.md },
 
   overlay: { ...StyleSheet.absoluteFillObject },
-  overlayTop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  overlayTop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.58)' },
   overlayMiddle: { flexDirection: 'row' },
-  overlaySide: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  overlaySide: { flex: 1, backgroundColor: 'rgba(0,0,0,0.58)' },
   overlayBottom: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.58)',
     alignItems: 'center',
     paddingTop: 24,
     gap: 8,
   },
 
+  // Scan box
   scanBox: { width: SCAN_BOX_SIZE, height: SCAN_BOX_SIZE, position: 'relative' },
   corner: { position: 'absolute', width: CORNER, height: CORNER, borderColor: '#4CAF50' },
   topLeft: { top: 0, left: 0, borderTopWidth: BORDER_W, borderLeftWidth: BORDER_W, borderTopLeftRadius: 6 },
@@ -537,57 +542,130 @@ const styles = StyleSheet.create({
   bottomLeft: { bottom: 0, left: 0, borderBottomWidth: BORDER_W, borderLeftWidth: BORDER_W, borderBottomLeftRadius: 6 },
   bottomRight: { bottom: 0, right: 0, borderBottomWidth: BORDER_W, borderRightWidth: BORDER_W, borderBottomRightRadius: 6 },
   scanLine: {
-    position: 'absolute', top: '50%', left: 10, right: 10,
-    height: 2, backgroundColor: '#4CAF50', opacity: 0.8,
+    position: 'absolute',
+    top: '50%',
+    left: 10,
+    right: 10,
+    height: 2,
+    backgroundColor: '#4CAF50',
+    opacity: 0.8,
   },
 
   processingBox: { alignItems: 'center', gap: 12 },
   processingText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  scanInstructions: { color: '#ccc', fontSize: 14, textAlign: 'center', paddingHorizontal: 40, lineHeight: 20 },
-  scanNote: { color: 'rgba(255,255,255,0.5)', fontSize: 12, textAlign: 'center', paddingHorizontal: 40 },
-
-  bottomControls: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    flexDirection: 'row', justifyContent: 'space-evenly',
-    paddingTop: 16, backgroundColor: 'rgba(0,0,0,0.6)',
+  scanInstructions: {
+    color: '#ccc',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+    lineHeight: 20,
   },
-  controlBtn: { alignItems: 'center', gap: 6, padding: 12 },
+
+  // Bottom controls
+  bottomControls: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    paddingTop: 16,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  controlBtn: {
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+  },
   controlBtnActive: { opacity: 1 },
-  controlBtnText: { color: '#fff', fontSize: 12, fontWeight: '500' },
+  controlBtnText: { color: Colors.textOnDark, fontSize: Font.sm, fontWeight: Font.weightMedium },
 
   permissionContainer: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
-    padding: 32, backgroundColor: '#F1F8E9',
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    backgroundColor: '#F1F8E9',
   },
   permIconContainer: {
-    width: 140, height: 140, borderRadius: 70,
-    backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginBottom: 24,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
   },
-  permTitle: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 12, textAlign: 'center' },
-  permText: { fontSize: 15, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 30 },
+  permTitle: { fontSize: Font.xxxl, fontWeight: Font.weightBold, color: Colors.textPrimary, marginBottom: 12, textAlign: 'center' },
+  permText: { fontSize: Font.md, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 30 },
   permBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: '#388E3C', borderRadius: 14, paddingHorizontal: 28, paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#388E3C',
+    borderRadius: 14,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
   },
   permBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  manualEntryLink: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 24, padding: 10 },
+  manualEntryLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 24,
+    padding: 10,
+  },
   manualEntryLinkText: { color: '#388E3C', fontSize: 15, fontWeight: '600' },
 
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
   modalSubtext: { fontSize: 14, color: '#888', marginBottom: 20, lineHeight: 20 },
   manualInput: {
-    backgroundColor: '#f8f8f8', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
-    fontSize: 18, fontWeight: '600', borderWidth: 1.5, borderColor: '#e0e0e0',
-    color: '#333', textAlign: 'center', marginBottom: 16,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 18,
+    fontWeight: '600',
+    borderWidth: 1.5,
+    borderColor: '#e0e0e0',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 16,
   },
   manualSubmitBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 10, backgroundColor: '#388E3C', borderRadius: 14, paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#388E3C',
+    borderRadius: 14,
+    paddingVertical: 16,
   },
-  manualSubmitText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  manualSubmitText: { color: Colors.textOnDark, fontSize: Font.lg, fontWeight: Font.weightBold },
 });
 
 export default QRScanner;

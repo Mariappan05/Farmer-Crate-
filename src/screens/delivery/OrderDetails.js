@@ -1,21 +1,22 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Linking,
-  StatusBar,
-  RefreshControl,
-  Image,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    Linking,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
+import { updateDeliveryOrderStatus } from '../../services/orderService';
 
 const STATUS_COLORS = {
   PENDING: '#FF9800',
@@ -327,7 +328,7 @@ const OrderDetails = ({ navigation, route }) => {
       <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
+      <LinearGradient colors={Colors.gradientHeroDark} style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -532,7 +533,7 @@ const OrderDetails = ({ navigation, route }) => {
               activeOpacity={0.7}
             >
               <LinearGradient
-                colors={['#103A12', '#1B5E20', '#2E7D32']}
+                colors={Colors.gradientHeroDark}
                 style={styles.primaryActionGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
@@ -549,33 +550,31 @@ const OrderDetails = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F8E9' },
+  container: { flex: 1, backgroundColor: Colors.background },
 
   // Header
   header: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
+    borderBottomLeftRadius: Radius.xxl,
+    borderBottomRightRadius: Radius.xxl,
   },
   backBtn: { padding: 6 },
-  headerTitle: { flex: 1, fontSize: 18, fontWeight: 'bold', color: '#fff', marginLeft: 12 },
+  headerTitle: { flex: 1, fontSize: Font.xl, fontWeight: Font.weightBold, color: Colors.textOnDark, marginLeft: 12 },
 
   // Loading
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   // Status card
   statusCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
     padding: 20,
     marginBottom: 14,
     alignItems: 'center',
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.09,
-    shadowRadius: 7,
-    elevation: 4,
+    ...shadowStyle('sm'),
   },
   statusBadge: {
     flexDirection: 'row',
@@ -586,27 +585,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
-  statusText: { fontSize: 18, fontWeight: '800', textTransform: 'uppercase' },
-  statusSub: { fontSize: 13, color: '#888', marginTop: 8 },
+  statusText: { fontSize: Font.xl, fontWeight: Font.weightExtraBold, textTransform: 'uppercase' },
+  statusSub: { fontSize: Font.sm, color: Colors.textMuted, marginTop: 8 },
 
   // Cards
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
     padding: 16,
     marginBottom: 14,
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 7,
-    elevation: 4,
+    ...shadowStyle('sm'),
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  cardTitle: { fontSize: 14, fontWeight: '800', color: '#1B5E20', textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardTitle: { fontSize: Font.base, fontWeight: Font.weightExtraBold, color: Colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  personName: { fontSize: 17, fontWeight: '800', color: '#1A1A1A', marginBottom: 8 },
+  personName: { fontSize: Font.lg, fontWeight: Font.weightExtraBold, color: Colors.textPrimary, marginBottom: 8 },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 },
-  infoText: { flex: 1, fontSize: 13, color: '#666', lineHeight: 19 },
+  infoText: { flex: 1, fontSize: Font.sm, color: Colors.textSecondary, lineHeight: 19 },
 
   // Action buttons row
   actionBtnRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
@@ -616,10 +611,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingVertical: 10,
   },
-  actionBtnText: { fontSize: 13, fontWeight: '600' },
+  actionBtnText: { fontSize: Font.sm, fontWeight: Font.weightSemiBold },
 
   // Products
   productRow: {
@@ -627,14 +622,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f5',
+    borderBottomColor: Colors.divider,
     gap: 12,
   },
   productImage: { width: 50, height: 50, borderRadius: 10 },
-  productName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  productQty: { fontSize: 12, color: '#888', marginTop: 2 },
-  productPrice: { fontSize: 15, fontWeight: '800', color: '#1B5E20' },
-  noItems: { fontSize: 13, color: '#aaa', textAlign: 'center', padding: 16 },
+  productName: { fontSize: Font.base, fontWeight: Font.weightSemiBold, color: Colors.textPrimary },
+  productQty: { fontSize: Font.sm, color: Colors.textMuted, marginTop: 2 },
+  productPrice: { fontSize: Font.md, fontWeight: Font.weightExtraBold, color: Colors.primary },
+  noItems: { fontSize: Font.sm, color: Colors.textLight, textAlign: 'center', padding: 16 },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -642,17 +637,17 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     marginTop: 8,
     borderTopWidth: 1.5,
-    borderTopColor: '#E8F5E9',
+    borderTopColor: Colors.primarySoft,
   },
-  totalLabel: { fontSize: 14, fontWeight: '800', color: '#1A1A1A' },
-  totalValue: { fontSize: 20, fontWeight: '800', color: '#1B5E20' },
+  totalLabel: { fontSize: Font.base, fontWeight: Font.weightExtraBold, color: Colors.textPrimary },
+  totalValue: { fontSize: Font.xxl, fontWeight: Font.weightExtraBold, color: Colors.primary },
   paymentRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  paymentText: { fontSize: 13, color: '#888' },
+  paymentText: { fontSize: Font.sm, color: Colors.textMuted },
 
   // QR Code
   qrContainer: { alignItems: 'center', padding: 16 },
   qrImage: { width: 180, height: 180 },
-  qrText: { fontSize: 14, fontFamily: 'monospace', color: '#555', textAlign: 'center' },
+  qrText: { fontSize: Font.base, fontFamily: 'monospace', color: Colors.textSecondary, textAlign: 'center' },
 
   // Timeline
   timelineContainer: { paddingLeft: 4 },
@@ -676,13 +671,13 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   timelineLine: { width: 2, flex: 1, marginVertical: 2 },
-  timelineText: { fontSize: 12, color: '#bbb', paddingTop: 3, flex: 1 },
-  timelineTextActive: { color: '#555', fontWeight: '500' },
-  timelineTextCurrent: { color: '#1B5E20', fontWeight: '700', fontSize: 13 },
+  timelineText: { fontSize: Font.sm, color: Colors.textLight, paddingTop: 3, flex: 1 },
+  timelineTextActive: { color: Colors.textSecondary, fontWeight: Font.weightMedium },
+  timelineTextCurrent: { color: Colors.primary, fontWeight: Font.weightBold, fontSize: Font.sm },
 
   // Actions
   actionsContainer: { gap: 12, marginTop: 8 },
-  primaryActionBtn: { borderRadius: 16, overflow: 'hidden' },
+  primaryActionBtn: { borderRadius: Radius.lg, overflow: 'hidden', ...shadowStyle('md') },
   primaryActionGradient: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -690,19 +685,19 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 16,
   },
-  primaryActionText: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  primaryActionText: { color: Colors.textOnDark, fontSize: Font.lg, fontWeight: Font.weightExtraBold },
   secondaryActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#FFF8E1',
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     paddingVertical: 14,
     borderWidth: 1,
     borderColor: '#FFE082',
   },
-  secondaryActionText: { color: '#FF9800', fontSize: 15, fontWeight: 'bold' },
+  secondaryActionText: { color: '#FF9800', fontSize: Font.md, fontWeight: Font.weightBold },
 });
 
 export default OrderDetails;

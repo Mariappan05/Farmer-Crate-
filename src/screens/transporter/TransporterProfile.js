@@ -1,26 +1,25 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  Alert,
-  Modal,
   ActivityIndicator,
-  RefreshControl,
+  Alert,
   Animated,
   Dimensions,
+  Image,
+  Modal,
+  RefreshControl,
+  ScrollView,
   StatusBar,
-  Linking,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { pickImage, uploadImageToCloudinary, optimizeImageUrl } from '../../services/cloudinaryService';
+import api from '../../services/api';
+import { optimizeImageUrl, pickImage, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import ToastMessage from '../../utils/Toast';
 
 const { width } = Dimensions.get('window');
@@ -61,6 +60,68 @@ const TransporterProfile = ({ navigation }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const toastRef = useRef(null);
 
+  const pickFirst = (...values) => {
+    for (const v of values) {
+      if (v === 0) return v;
+      if (typeof v === 'string') {
+        const t = v.trim();
+        if (t) return t;
+      } else if (v !== undefined && v !== null) {
+        return v;
+      }
+    }
+    return '';
+  };
+
+  const mapProfileToForm = (rawProfile, fallbackUser = authState?.user) => {
+    const nestedUser = rawProfile?.user || rawProfile?.transporter_user || {};
+    const transporterNested =
+      rawProfile?.transporter ||
+      rawProfile?.details ||
+      rawProfile?.profile ||
+      {};
+    const location = rawProfile?.location || transporterNested?.location || {};
+    const d = {
+      ...(fallbackUser || {}),
+      ...nestedUser,
+      ...transporterNested,
+      ...(rawProfile || {}),
+    };
+
+    return {
+      full_name: String(pickFirst(d.full_name, d.fullName, d.name)),
+      email: String(pickFirst(d.email, fallbackUser?.email)),
+      phone: String(pickFirst(d.phone, d.mobile_number, d.mobile, d.phone_number, d.contact_number)),
+      company_name: String(
+        pickFirst(
+          d.company_name,
+          d.company,
+          d.companyName,
+          d.business_name,
+          d.organization_name,
+          d.enterprise_name,
+          transporterNested?.company_name,
+          transporterNested?.company
+        )
+      ),
+      address_line: String(pickFirst(d.address_line, d.address, d.addressLine, d.office_address)),
+      city: String(
+        pickFirst(
+          d.city,
+          d.town,
+          d.current_city,
+          location?.city,
+          location?.town,
+          transporterNested?.city,
+          transporterNested?.town
+        )
+      ),
+      state: String(pickFirst(d.state)),
+      district: String(pickFirst(d.district)),
+      pincode: String(pickFirst(d.pincode, d.zip_code, d.zipCode, d.postal_code)),
+    };
+  };
+
   useEffect(() => {
     fetchProfile();
     Animated.timing(fadeAnim, {
@@ -73,22 +134,32 @@ const TransporterProfile = ({ navigation }) => {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/transporters/profile');
-      const data = res.data?.user || res.data?.data || res.data;
-      setProfile(data);
-      setFormData({
-        full_name: data.full_name || '',
-        email: data.email || '',
-        phone: data.phone || '',
-        company_name: data.company_name || '',
-        address_line: data.address_line || '',
-        city: data.city || '',
-        state: data.state || '',
-        district: data.district || '',
-        pincode: data.pincode || '',
-      });
+      let res;
+      try {
+        res = await api.get('/transporters/profile');
+      } catch (_) {
+        res = await api.get('/transporters/me');
+      }
+
+      const raw =
+        res.data?.transporter ||
+        res.data?.data?.transporter ||
+        res.data?.data ||
+        res.data?.user ||
+        res.data?.profile ||
+        res.data ||
+        {};
+
+      const mapped = mapProfileToForm(raw, authState?.user);
+      setProfile({ ...(authState?.user || {}), ...(raw || {}) });
+      setFormData(mapped);
     } catch (e) {
       console.log('Profile fetch error:', e.message);
+      if (authState?.user) {
+        setProfile(authState.user);
+        setFormData(mapProfileToForm(authState.user, authState.user));
+        toastRef.current?.show('Showing cached profile data.', 'warning');
+      }
     } finally {
       setLoading(false);
     }
@@ -190,16 +261,17 @@ const TransporterProfile = ({ navigation }) => {
             style={styles.editButton}
             onPress={() => {
               if (editMode) {
+                const mapped = mapProfileToForm(profile, authState?.user);
                 setFormData({
-                  full_name: profile?.full_name || '',
-                  email: profile?.email || '',
-                  phone: profile?.phone || '',
-                  company_name: profile?.company_name || '',
-                  address_line: profile?.address_line || '',
-                  city: profile?.city || '',
-                  state: profile?.state || '',
-                  district: profile?.district || '',
-                  pincode: profile?.pincode || '',
+                  full_name: mapped.full_name,
+                  email: mapped.email,
+                  phone: mapped.phone,
+                  company_name: mapped.company_name,
+                  address_line: mapped.address_line,
+                  city: mapped.city,
+                  state: mapped.state,
+                  district: mapped.district,
+                  pincode: mapped.pincode,
                 });
               }
               setEditMode(!editMode);
@@ -215,14 +287,14 @@ const TransporterProfile = ({ navigation }) => {
             <View style={styles.avatarPlaceholder}>
               <ActivityIndicator color="#fff" size="small" />
             </View>
-          ) : profile?.profile_image ? (
+          ) : (profile?.profile_image || profile?.image_url || profile?.avatar) ? (
             <Image
-              source={{ uri: optimizeImageUrl(profile.profile_image, { width: 200, height: 200 }) }}
+              source={{ uri: optimizeImageUrl(profile?.profile_image || profile?.image_url || profile?.avatar, { width: 200, height: 200 }) }}
               style={styles.avatar}
             />
           ) : (
             <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarInitials}>{getInitials(profile?.full_name)}</Text>
+              <Text style={styles.avatarInitials}>{getInitials(profile?.full_name || profile?.name || formData.full_name)}</Text>
             </View>
           )}
           <View style={styles.cameraIcon}>
@@ -230,14 +302,14 @@ const TransporterProfile = ({ navigation }) => {
           </View>
         </TouchableOpacity>
 
-        <Text style={styles.profileName}>{profile?.full_name || 'Transporter'}</Text>
-        <Text style={styles.profileEmail}>{profile?.email || ''}</Text>
+        <Text style={styles.profileName}>{profile?.full_name || profile?.name || formData.full_name || 'Transporter'}</Text>
+        <Text style={styles.profileEmail}>{profile?.email || formData.email || ''}</Text>
         <View style={styles.roleBadge}>
           <MaterialCommunityIcons name="truck-delivery" size={14} color="#fff" />
           <Text style={styles.roleBadgeText}>Transporter</Text>
         </View>
-        {profile?.company_name ? (
-          <Text style={styles.companyText}>{profile.company_name}</Text>
+        {(profile?.company_name || formData.company_name) ? (
+          <Text style={styles.companyText}>{profile?.company_name || formData.company_name}</Text>
         ) : null}
       </View>
 
@@ -551,7 +623,7 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    marginTop: -12,
+    marginTop: 12,
     gap: 10,
   },
   statCard: {

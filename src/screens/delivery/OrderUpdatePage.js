@@ -1,25 +1,26 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  TextInput,
-  Image,
-  StatusBar,
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
-import { updateDeliveryOrderStatus } from '../../services/orderService';
 import { pickImage, uploadImageToCloudinary } from '../../services/cloudinaryService';
+import { updateDeliveryOrderStatus } from '../../services/orderService';
+import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
 
 const ALL_STATUSES = [
   { key: 'PICKUP_IN_PROGRESS', label: 'Pickup In Progress', icon: 'bicycle-outline', color: '#00BCD4' },
@@ -212,7 +213,7 @@ const OrderUpdatePage = ({ navigation, route }) => {
       <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
+      <LinearGradient colors={Colors.gradientHeroDark} style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -373,7 +374,7 @@ const OrderUpdatePage = ({ navigation, route }) => {
             activeOpacity={0.7}
           >
             <LinearGradient
-              colors={['#103A12', '#1B5E20', '#2E7D32']}
+              colors={Colors.gradientHeroDark}
               style={styles.updateBtnGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
@@ -395,58 +396,57 @@ const OrderUpdatePage = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F8E9' },
+  container: { flex: 1, backgroundColor: Colors.background },
 
   // Header
-  header: { paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' },
+  header: {
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomLeftRadius: Radius.xxl,
+    borderBottomRightRadius: Radius.xxl,
+  },
   backBtn: { padding: 6 },
-  headerTitle: { flex: 1, fontSize: 18, fontWeight: 'bold', color: '#fff', marginLeft: 12 },
+  headerTitle: { flex: 1, fontSize: Font.xl, fontWeight: Font.weightBold, color: Colors.textOnDark, marginLeft: 12 },
 
   // Current status
   currentCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
     padding: 20,
     marginBottom: 14,
     alignItems: 'center',
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    ...shadowStyle('sm'),
   },
   currentLabel: {
-    fontSize: 12,
-    color: '#888',
+    fontSize: Font.xs,
+    color: Colors.textMuted,
     marginBottom: 10,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    fontWeight: '600',
+    fontWeight: Font.weightSemiBold,
   },
   currentBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
-  currentStatusText: { fontSize: 16, fontWeight: '800', textTransform: 'uppercase' },
+  currentStatusText: { fontSize: Font.lg, fontWeight: Font.weightExtraBold, textTransform: 'uppercase' },
 
   // Card
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
     padding: 16,
     marginBottom: 14,
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    ...shadowStyle('sm'),
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  cardTitle: { fontSize: 14, fontWeight: '800', color: '#1B5E20', textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardTitle: { fontSize: Font.base, fontWeight: Font.weightExtraBold, color: Colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   // Status options
   statusOption: {
@@ -456,13 +456,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f5',
+    borderBottomColor: Colors.divider,
   },
   statusOptionActive: {
-    backgroundColor: '#F1F8E9',
+    backgroundColor: Colors.primaryXSoft,
     marginHorizontal: -16,
     paddingHorizontal: 20,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderBottomColor: 'transparent',
   },
   statusIconBox: {
@@ -472,11 +472,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  statusOptionText: { flex: 1, fontSize: 15, color: '#555' },
-  statusOptionTextActive: { fontWeight: '800', color: '#333' },
+  statusOptionText: { flex: 1, fontSize: Font.md, color: Colors.textSecondary },
+  statusOptionTextActive: { fontWeight: Font.weightExtraBold, color: Colors.textPrimary },
 
   // Photo
-  photoSubtext: { fontSize: 13, color: '#888', marginBottom: 14, lineHeight: 18 },
+  photoSubtext: { fontSize: Font.sm, color: Colors.textMuted, marginBottom: 14, lineHeight: 18 },
   photoBtnRow: { flexDirection: 'row', gap: 12 },
   photoBtn: {
     flex: 1,
@@ -485,14 +485,14 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 24,
     borderWidth: 2,
-    borderColor: '#E8F5E9',
+    borderColor: Colors.primarySoft,
     borderStyle: 'dashed',
-    borderRadius: 14,
-    backgroundColor: '#FAFFF8',
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surfaceElevated,
   },
-  photoBtnText: { fontSize: 13, fontWeight: '600', color: '#388E3C' },
-  photoPreviewContainer: { position: 'relative', borderRadius: 14, overflow: 'hidden' },
-  photoPreview: { width: '100%', height: 220, borderRadius: 14 },
+  photoBtnText: { fontSize: Font.sm, fontWeight: Font.weightSemiBold, color: Colors.primaryMid },
+  photoPreviewContainer: { position: 'relative', borderRadius: Radius.lg, overflow: 'hidden' },
+  photoPreview: { width: '100%', height: 220, borderRadius: Radius.lg },
   photoUploadOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  photoUploadText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  photoUploadText: { color: Colors.textOnDark, fontSize: Font.base, fontWeight: Font.weightSemiBold },
   photoUploadedBadge: {
     position: 'absolute',
     top: 10,
@@ -509,22 +509,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#4CAF50',
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  photoUploadedText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  photoUploadedText: { color: Colors.textOnDark, fontSize: Font.sm, fontWeight: Font.weightSemiBold },
   removePhotoBtn: { position: 'absolute', top: 8, right: 8 },
 
   // Remarks
   remarksInput: {
-    backgroundColor: '#f8f9f8',
-    borderRadius: 12,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: Radius.md,
     padding: 14,
-    fontSize: 14,
-    color: '#333',
+    fontSize: Font.base,
+    color: Colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#e8e8e8',
+    borderColor: Colors.border,
     minHeight: 100,
     lineHeight: 20,
   },
@@ -535,16 +535,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 30,
     borderWidth: 2,
-    borderColor: '#e8e8e8',
+    borderColor: Colors.border,
     borderStyle: 'dashed',
-    borderRadius: 14,
-    backgroundColor: '#fafafa',
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surfaceElevated,
     gap: 8,
   },
-  signaturePlaceholderText: { fontSize: 13, color: '#bbb' },
+  signaturePlaceholderText: { fontSize: Font.sm, color: Colors.textLight },
 
   // Update button
-  updateBtn: { borderRadius: 16, overflow: 'hidden', marginTop: 4 },
+  updateBtn: { borderRadius: Radius.lg, overflow: 'hidden', marginTop: 4, ...shadowStyle('md') },
   updateBtnGradient: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -552,19 +552,19 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 16,
   },
-  updateBtnText: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
+  updateBtnText: { color: Colors.textOnDark, fontSize: Font.lg, fontWeight: Font.weightBold },
 
   // Success
   successContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F1F8E9',
+    backgroundColor: Colors.background,
     padding: 40,
   },
   successCircle: { marginBottom: 24 },
-  successTitle: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 8 },
-  successSubtext: { fontSize: 16, color: '#888', textAlign: 'center' },
+  successTitle: { fontSize: 28, fontWeight: Font.weightBold, color: Colors.textPrimary, marginBottom: 8 },
+  successSubtext: { fontSize: Font.lg, color: Colors.textMuted, textAlign: 'center' },
 });
 
 export default OrderUpdatePage;

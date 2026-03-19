@@ -11,26 +11,27 @@
  *   - Loading state
  */
 
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  StatusBar,
-  KeyboardAvoidingView,
-  Platform,
-  Modal,
-  FlatList,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
+import { pickImage, uploadImageToCloudinary } from '../../services/cloudinaryService';
 
 const VEHICLE_TYPES = ['Bike', 'Auto', 'Van', 'Truck'];
 
@@ -41,14 +42,19 @@ const AddDeliveryPerson = ({ navigation }) => {
     name: '',
     email: '',
     phone: '',
+    mobile_number: '',
     password: '',
     vehicle_type: '',
     vehicle_number: '',
+    license_number: '',
+    current_location: '',
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
   const [errors, setErrors] = useState({});
+  const [licenseImageUri, setLicenseImageUri] = useState('');
+  const [profileImageUri, setProfileImageUri] = useState('');
 
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -63,12 +69,25 @@ const AddDeliveryPerson = ({ navigation }) => {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errs.email = 'Invalid email';
     if (!form.phone.trim()) errs.phone = 'Phone is required';
     else if (!/^\d{10}$/.test(form.phone.trim())) errs.phone = 'Phone must be 10 digits';
+    if (!form.mobile_number.trim()) errs.mobile_number = 'Mobile number is required';
+    else if (!/^\d{10}$/.test(form.mobile_number.trim())) errs.mobile_number = 'Mobile number must be 10 digits';
     if (!form.password) errs.password = 'Password is required';
     else if (form.password.length < 6) errs.password = 'Password must be at least 6 characters';
     if (!form.vehicle_type) errs.vehicle_type = 'Select vehicle type';
     if (!form.vehicle_number.trim()) errs.vehicle_number = 'Vehicle number is required';
+    if (!form.license_number.trim()) errs.license_number = 'License number is required';
+    if (!licenseImageUri) errs.license_image = 'License image is required';
+    if (!profileImageUri) errs.profile_image = 'Profile image is required';
     setErrors(errs);
     return Object.keys(errs).length === 0;
+  };
+
+  const handlePickImage = async (type) => {
+    const uri = await pickImage(false);
+    if (!uri) return;
+    if (type === 'license') setLicenseImageUri(uri);
+    if (type === 'profile') setProfileImageUri(uri);
+    setErrors((prev) => ({ ...prev, [`${type}_image`]: null }));
   };
 
   /* ── Submit ─────────────────────────────────────────────── */
@@ -76,15 +95,37 @@ const AddDeliveryPerson = ({ navigation }) => {
     if (!validate()) return;
     setLoading(true);
     try {
-      await api.post('/transporters/delivery-persons', {
+      const [licenseUrl, profileUrl] = await Promise.all([
+        uploadImageToCloudinary(licenseImageUri),
+        uploadImageToCloudinary(profileImageUri),
+      ]);
+
+      if (!licenseUrl || !profileUrl) {
+        throw new Error('Failed to upload license/profile images');
+      }
+
+      const payload = {
         full_name: form.name.trim(),
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
         phone: form.phone.trim(),
+        mobile_number: form.mobile_number.trim(),
         password: form.password,
-        vehicle_type: form.vehicle_type,
+        vehicle_type: form.vehicle_type.toLowerCase(),
         vehicle_number: form.vehicle_number.trim().toUpperCase(),
-      });
+        license_number: form.license_number.trim().toUpperCase(),
+        license_url: licenseUrl,
+        image_url: profileUrl,
+        current_location: form.current_location.trim(),
+        is_available: true,
+      };
+
+      try {
+        await api.post('/transporters/delivery-person', payload);
+      } catch {
+        await api.post('/transporters/delivery-persons', payload);
+      }
+
       Alert.alert('Success', 'Delivery person added successfully!', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
@@ -156,6 +197,7 @@ const AddDeliveryPerson = ({ navigation }) => {
             {renderInput('Full Name', 'name', { icon: 'person-outline', autoCapitalize: 'words', placeholder: 'Enter full name' })}
             {renderInput('Email', 'email', { icon: 'mail-outline', keyboardType: 'email-address', placeholder: 'Enter email address' })}
             {renderInput('Phone', 'phone', { icon: 'call-outline', keyboardType: 'phone-pad', placeholder: 'Enter 10-digit phone number' })}
+            {renderInput('Mobile Number', 'mobile_number', { icon: 'call-outline', keyboardType: 'phone-pad', placeholder: 'Enter 10-digit mobile number' })}
             {renderInput('Password', 'password', { icon: 'lock-closed-outline', placeholder: 'Minimum 6 characters' })}
           </View>
 
@@ -187,6 +229,44 @@ const AddDeliveryPerson = ({ navigation }) => {
               autoCapitalize: 'characters',
               placeholder: 'e.g., TN01AB1234',
             })}
+
+            {renderInput('License Number', 'license_number', {
+              icon: 'card-outline',
+              autoCapitalize: 'characters',
+              placeholder: 'Enter driving license number',
+            })}
+
+            {renderInput('Current Location', 'current_location', {
+              icon: 'location-outline',
+              autoCapitalize: 'words',
+              placeholder: 'Enter current location (optional)',
+            })}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>License Image</Text>
+              <TouchableOpacity style={[styles.uploadCard, errors.license_image && styles.inputError]} onPress={() => handlePickImage('license')}>
+                {licenseImageUri ? (
+                  <Image source={{ uri: licenseImageUri }} style={styles.uploadPreview} />
+                ) : (
+                  <MaterialCommunityIcons name="file-image-plus-outline" size={26} color="#666" />
+                )}
+                <Text style={styles.uploadText}>{licenseImageUri ? 'Change license image' : 'Upload license image'}</Text>
+              </TouchableOpacity>
+              {errors.license_image && <Text style={styles.errorText}>{errors.license_image}</Text>}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Profile Image</Text>
+              <TouchableOpacity style={[styles.uploadCard, errors.profile_image && styles.inputError]} onPress={() => handlePickImage('profile')}>
+                {profileImageUri ? (
+                  <Image source={{ uri: profileImageUri }} style={styles.uploadPreview} />
+                ) : (
+                  <MaterialCommunityIcons name="account-box-plus-outline" size={26} color="#666" />
+                )}
+                <Text style={styles.uploadText}>{profileImageUri ? 'Change profile image' : 'Upload profile image'}</Text>
+              </TouchableOpacity>
+              {errors.profile_image && <Text style={styles.errorText}>{errors.profile_image}</Text>}
+            </View>
           </View>
 
           {/* Submit Button */}
@@ -273,6 +353,14 @@ const styles = StyleSheet.create({
   inputIcon: { marginRight: 8 },
   input: { flex: 1, fontSize: 15, color: '#333' },
   errorText: { color: '#F44336', fontSize: 12, marginTop: 4 },
+
+  uploadCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#F8F8F8', borderRadius: 12, borderWidth: 1, borderColor: '#E0E0E0',
+    paddingHorizontal: 12, paddingVertical: 10,
+  },
+  uploadPreview: { width: 42, height: 42, borderRadius: 8, backgroundColor: '#EEE' },
+  uploadText: { color: '#444', fontSize: 14, fontWeight: '600' },
 
   submitBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

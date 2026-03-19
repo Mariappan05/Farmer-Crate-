@@ -1,10 +1,18 @@
-﻿import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+﻿import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Image,
-  ActivityIndicator, RefreshControl, Dimensions, Platform, Animated,
+    ActivityIndicator,
+    Dimensions,
+    FlatList,
+    Image,
+    Platform,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCart } from '../../context/CartContext';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 import ToastMessage from '../../utils/Toast';
@@ -390,7 +398,7 @@ const Cart = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7FAF7' },
+  container: { flex: 1, backgroundColor: '#EDF6EE' },
   header: {
     backgroundColor: '#1B5E20',
     paddingHorizontal: 16,
@@ -398,9 +406,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.18)',
     ...Platform.select({
-      android: { elevation: 6 },
-      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 6 },
+      android: { elevation: 8 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
     }),
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -432,9 +442,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     marginBottom: 12,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(46,125,50,0.06)',
     ...Platform.select({
-      android: { elevation: 3 },
-      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
+      android: { elevation: 4 },
+      ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8 },
     }),
   },
   cardDimmed: { opacity: 0.45 },
@@ -472,6 +484,8 @@ const styles = StyleSheet.create({
   lineTotal: { fontSize: 15, fontWeight: '800', color: '#1A1A1A' },
   priceCard: {
     backgroundColor: '#fff', borderRadius: 18, padding: 18, marginTop: 6, marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E4EEE4',
     ...Platform.select({
       android: { elevation: 2 },
       ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 },
@@ -518,7 +532,7 @@ const styles = StyleSheet.create({
   browseBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#fff',
+    backgroundColor: '#FBFDFB',
     borderTopWidth: 1, borderTopColor: '#E8F5E9',
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingTop: 14,
@@ -535,6 +549,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1B5E20', borderRadius: 16,
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 22, paddingVertical: 15, gap: 8,
+    borderWidth: 1,
+    borderColor: '#245F28',
     ...Platform.select({
       android: { elevation: 4 },
       ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8 },

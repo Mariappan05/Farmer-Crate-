@@ -11,22 +11,21 @@
  *   - Pull to refresh, empty state
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  RefreshControl,
-  StatusBar,
-  Animated,
-  Alert,
-  Platform,
-  Dimensions,
+    Alert,
+    Animated,
+    Dimensions,
+    FlatList,
+    Platform,
+    RefreshControl,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import api from '../../services/api';
@@ -449,7 +448,7 @@ const Notifications = ({ navigation }) => {
  * ------------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  container: { flex: 1, backgroundColor: '#EDF6EE' },
 
   headerBar: {
     backgroundColor: '#1B5E20',
@@ -457,6 +456,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.2)',
   },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
   headerSubtitle: { fontSize: 12, color: '#A5D6A7', marginTop: 1 },
@@ -506,6 +507,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 14,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5EEE5',
     ...Platform.select({
       ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
       android: { elevation: 2 },

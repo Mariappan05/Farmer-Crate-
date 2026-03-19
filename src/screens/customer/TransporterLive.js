@@ -14,30 +14,28 @@
  *   - Order details card
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Image,
-  Modal,
-  TextInput,
-  Animated,
-  Easing,
-  StatusBar,
-  Dimensions,
-  Platform,
-  Linking,
-  Alert,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    Easing,
+    Linking,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import api from '../../services/api';
-import { optimizeImageUrl } from '../../services/cloudinaryService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -538,7 +536,7 @@ const TransporterLive = ({ navigation, route }) => {
  * ------------------------------------------------------------------------ */
 
 const liveStyles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#EEF5EF' },
 
   headerBar: {
     backgroundColor: '#1B5E20',
@@ -547,6 +545,8 @@ const liveStyles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.2)',
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
 
@@ -573,6 +573,8 @@ const liveStyles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E3EDE4',
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
       android: { elevation: 3 },
@@ -592,6 +594,8 @@ const liveStyles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E3EDE4',
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
       android: { elevation: 3 },

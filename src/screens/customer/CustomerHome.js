@@ -1,25 +1,25 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
   ActivityIndicator,
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
-  Dimensions,
-  Animated,
-  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
+import api from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 import ToastMessage from '../../utils/Toast';
 
@@ -660,7 +660,7 @@ export default function CustomerHome({ navigation }) {
       {/* ============ Glassmorphic AppBar ============ */}
       <View style={[styles.appBar, { paddingTop: insets.top + 8 }]}>
         <LinearGradient
-          colors={['#103A12', '#1B5E20', '#2E7D32']}
+          colors={['#071A08', '#0D3B10', '#1B5E20', '#2E7D32']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -879,7 +879,7 @@ export default function CustomerHome({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F1F8E9',
+    backgroundColor: '#EDF6EE',
   },
 
   /* ===== AppBar ===== */
@@ -975,10 +975,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === 'ios' ? 10 : 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(46,125,50,0.08)',
   },
   searchPlaceholder: {
     flex: 1,
@@ -1039,15 +1041,15 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 29,
-    backgroundColor: '#fff',
+    backgroundColor: '#FBFDFB',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    borderWidth: 1.5,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+    borderWidth: 2,
     borderColor: '#E8F5E9',
   },
   categoryEmoji: {
@@ -1065,14 +1067,16 @@ const styles = StyleSheet.create({
   topBuyCard: {
     width: 155,
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     marginRight: 12,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#E2ECE3',
   },
   topBuyImage: {
     width: '100%',
@@ -1122,13 +1126,15 @@ const styles = StyleSheet.create({
   productCard: {
     width: CARD_WIDTH,
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 5,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#E4EEE5',
   },
   productImageWrapper: {
     position: 'relative',

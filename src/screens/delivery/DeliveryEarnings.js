@@ -1,20 +1,21 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  StatusBar,
-  Dimensions,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Dimensions,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
+import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PERIOD_LABELS = {
@@ -140,7 +141,7 @@ const DeliveryEarnings = ({ navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
+      <LinearGradient colors={Colors.gradientHeroDark} style={styles.header}>
         <Text style={styles.headerTitle}>Earnings</Text>
         <TouchableOpacity onPress={onRefresh} style={styles.headerBtn}>
           <Ionicons name="refresh-outline" size={22} color="#fff" />
@@ -178,7 +179,7 @@ const DeliveryEarnings = ({ navigation }) => {
         >
           {/* Main Earnings Display */}
           <LinearGradient
-            colors={['#103A12', '#1B5E20', '#2E7D32']}
+            colors={Colors.gradientHeroDark}
             style={styles.totalCard}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -314,22 +315,32 @@ const DeliveryEarnings = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  container: { flex: 1, backgroundColor: Colors.background },
 
   // Header
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.base,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderBottomLeftRadius: Radius.xxl,
+    borderBottomRightRadius: Radius.xxl,
+    overflow: 'hidden',
   },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+  headerTitle: {
+    fontSize: Font.xxxl,
+    fontWeight: Font.weightExtraBold,
+    color: Colors.textOnDark,
+    letterSpacing: Font.trackTight,
+  },
   headerBtn: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: Colors.glassBgStrong,
+    borderWidth: 1,
+    borderColor: Colors.glassBorderStrong,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -340,152 +351,136 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#fff',
+    backgroundColor: Colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: Colors.divider,
   },
   periodChip: {
     flex: 1,
     paddingVertical: 11,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     alignItems: 'center',
-    backgroundColor: '#F4F8F4',
+    backgroundColor: Colors.primaryXSoft,
   },
-  periodChipActive: { backgroundColor: '#2E7D32' },
-  periodText: { fontSize: 12, color: '#666', fontWeight: '600' },
-  periodTextActive: { color: '#fff', fontWeight: '800' },
+  periodChipActive: { backgroundColor: Colors.primaryMid },
+  periodText: { fontSize: Font.sm, color: Colors.textSecondary, fontWeight: Font.weightSemiBold },
+  periodTextActive: { color: Colors.textOnDark, fontWeight: Font.weightExtraBold },
 
   // Loading
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#888', marginTop: 12, fontSize: 14 },
+  loadingText: { color: Colors.textSecondary, marginTop: 12, fontSize: Font.base },
 
   // Total earnings card
   totalCard: {
-    borderRadius: 22,
+    borderRadius: Radius.xxl,
     padding: 28,
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: '#1B5E20',
+    shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
     elevation: 7,
   },
-  totalLabel: { fontSize: 14, color: '#C8E6C9', fontWeight: '600', marginBottom: 4 },
-  totalAmount: { fontSize: 42, fontWeight: '900', color: '#fff', letterSpacing: 1 },
-  totalDeliveries: { fontSize: 14, color: '#A5D6A7', marginTop: 6 },
+  totalLabel: { fontSize: Font.base, color: Colors.textOnDarkSoft, fontWeight: Font.weightSemiBold, marginBottom: 4 },
+  totalAmount: { fontSize: 42, fontWeight: Font.weightBlack, color: Colors.textOnDark, letterSpacing: 1 },
+  totalDeliveries: { fontSize: Font.base, color: Colors.primaryGlow, marginTop: 6 },
 
   // Breakdown cards
   breakdownRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   breakdownCard: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
     padding: 14,
     alignItems: 'center',
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    elevation: 3,
+    ...shadowStyle('sm'),
     gap: 4,
   },
-  breakdownVal: { fontSize: 18, fontWeight: '800', color: '#1A1A1A' },
-  breakdownLabel: { fontSize: 11, color: '#888', fontWeight: '500' },
+  breakdownVal: { fontSize: Font.xl, fontWeight: Font.weightExtraBold, color: Colors.textPrimary },
+  breakdownLabel: { fontSize: Font.xs, color: Colors.textMuted, fontWeight: Font.weightMedium },
 
   // Stats row
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   statCard: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
     padding: 16,
     borderLeftWidth: 4,
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 5,
-    elevation: 3,
+    ...shadowStyle('sm'),
   },
-  statVal: { fontSize: 20, fontWeight: '800', color: '#1A1A1A' },
-  statLabel: { fontSize: 12, color: '#888', marginTop: 4, fontWeight: '500' },
+  statVal: { fontSize: Font.xxl, fontWeight: Font.weightExtraBold, color: Colors.textPrimary },
+  statLabel: { fontSize: Font.sm, color: Colors.textMuted, marginTop: 4, fontWeight: Font.weightMedium },
 
   // Chart
   chartCard: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
-    elevation: 4,
+    ...shadowStyle('sm'),
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-  cardTitle: { fontSize: 14, fontWeight: '800', color: '#1B5E20', textTransform: 'uppercase', letterSpacing: 0.6 },
+  cardTitle: { fontSize: Font.base, fontWeight: Font.weightExtraBold, color: Colors.primary, textTransform: 'uppercase', letterSpacing: 0.6 },
   chartRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
-  chartMonth: { width: 55, fontSize: 12, color: '#666', fontWeight: '500' },
+  chartMonth: { width: 55, fontSize: Font.sm, color: Colors.textSecondary, fontWeight: Font.weightMedium },
   chartBarContainer: {
     flex: 1,
     height: 20,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: Colors.primaryXSoft,
     borderRadius: 10,
     overflow: 'hidden',
   },
-  chartBar: { height: '100%', backgroundColor: '#4CAF50', borderRadius: 10 },
+  chartBar: { height: '100%', backgroundColor: Colors.primaryLight, borderRadius: 10 },
   chartValues: { width: 75, alignItems: 'flex-end' },
-  chartEarning: { fontSize: 12, fontWeight: '800', color: '#333' },
-  chartCount: { fontSize: 10, color: '#aaa' },
+  chartEarning: { fontSize: Font.sm, fontWeight: Font.weightExtraBold, color: Colors.textPrimary },
+  chartCount: { fontSize: 10, color: Colors.textMuted },
 
   // Delivery list
   listCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
+    ...shadowStyle('xs'),
   },
   deliveryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f5',
+    borderBottomColor: Colors.divider,
   },
   deliveryIcon: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: Colors.primaryXSoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  deliveryOrderId: { fontSize: 14, fontWeight: '700', color: '#333' },
-  deliveryCustomer: { fontSize: 12, color: '#666', marginTop: 2 },
-  deliveryDate: { fontSize: 11, color: '#aaa', marginTop: 2 },
-  deliveryEarning: { fontSize: 16, fontWeight: 'bold', color: '#1B5E20' },
+  deliveryOrderId: { fontSize: Font.base, fontWeight: Font.weightBold, color: Colors.textPrimary },
+  deliveryCustomer: { fontSize: Font.sm, color: Colors.textSecondary, marginTop: 2 },
+  deliveryDate: { fontSize: Font.xs, color: Colors.textMuted, marginTop: 2 },
+  deliveryEarning: { fontSize: Font.lg, fontWeight: Font.weightBold, color: Colors.primary },
 
   // Empty
   emptyContainer: { alignItems: 'center', paddingVertical: 30, gap: 8 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  emptyMsg: { fontSize: 14, color: '#888' },
+  emptyTitle: { fontSize: Font.xl, fontWeight: Font.weightBold, color: Colors.textPrimary },
+  emptyMsg: { fontSize: Font.base, color: Colors.textMuted },
 
   // Pending payouts
   pendingCard: {
-    backgroundColor: '#FFF8E1',
-    borderRadius: 16,
+    backgroundColor: Colors.accentLight,
+    borderRadius: Radius.lg,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#FFE082',
+    borderColor: '#FFE7B8',
   },
-  pendingAmount: { fontSize: 28, fontWeight: 'bold', color: '#F57F17', marginVertical: 8 },
-  pendingNote: { fontSize: 13, color: '#888', lineHeight: 18 },
+  pendingAmount: { fontSize: 28, fontWeight: Font.weightBold, color: '#F57F17', marginVertical: 8 },
+  pendingNote: { fontSize: Font.sm, color: Colors.textSecondary, lineHeight: 18 },
 });
 
 export default DeliveryEarnings;

@@ -1,416 +1,409 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Animated,
-  Easing,
-  Dimensions,
-  StatusBar,
-  Image,
+  View, Text, StyleSheet, Animated, Easing,
+  Dimensions, StatusBar, Image,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Line, Defs, RadialGradient, Stop } from 'react-native-svg';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
-// Floating icon configurations
-const FLOATING_ICONS = [
-  { name: 'leaf', lib: 'Ionicons', size: 28, top: '8%', left: '10%', delay: 0 },
-  { name: 'nutrition', lib: 'Ionicons', size: 24, top: '12%', right: '15%', delay: 200 },
-  { name: 'flower', lib: 'Ionicons', size: 26, top: '25%', left: '5%', delay: 400 },
-  { name: 'grain', lib: 'Material', size: 24, top: '18%', right: '8%', delay: 600 },
-  { name: 'leaf', lib: 'Ionicons', size: 22, bottom: '28%', left: '12%', delay: 300 },
-  { name: 'nutrition', lib: 'Ionicons', size: 20, bottom: '22%', right: '10%', delay: 500 },
-  { name: 'flower', lib: 'Ionicons', size: 30, bottom: '35%', right: '20%', delay: 100 },
-  { name: 'sprout', lib: 'Material', size: 26, top: '40%', left: '85%', delay: 700 },
+/* ─── Particle dots scattered in background ─── */
+const PARTICLES = Array.from({ length: 28 }, (_, i) => ({
+  cx: Math.random() * width,
+  cy: Math.random() * height,
+  r:  1 + Math.random() * 2.5,
+  opacity: 0.08 + Math.random() * 0.18,
+}));
+
+/* ─── Floating farm icons ─── */
+const ICONS = [
+  { name: 'leaf',      lib: 'I', size: 32, top: '6%',    left: '7%',   delay: 0   },
+  { name: 'nutrition', lib: 'I', size: 22, top: '11%',   right: '11%', delay: 150 },
+  { name: 'flower',    lib: 'I', size: 26, top: '26%',   left: '3%',   delay: 350 },
+  { name: 'grain',     lib: 'M', size: 24, top: '19%',   right: '5%',  delay: 550 },
+  { name: 'leaf',      lib: 'I', size: 20, bottom: '32%',left: '9%',   delay: 250 },
+  { name: 'nutrition', lib: 'I', size: 22, bottom: '22%',right: '8%',  delay: 450 },
+  { name: 'flower',    lib: 'I', size: 28, bottom: '40%',right: '16%', delay: 80  },
+  { name: 'sprout',    lib: 'M', size: 26, top: '44%',   left: '88%',  delay: 650 },
+  { name: 'leaf',      lib: 'I', size: 18, top: '57%',   left: '2%',   delay: 200 },
+  { name: 'grain',     lib: 'M', size: 20, bottom: '14%',left: '82%',  delay: 400 },
 ];
 
 const FloatingIcon = ({ icon, index }) => {
-  const floatAnim = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fade  = useRef(new Animated.Value(0)).current;
+  const float = useRef(new Animated.Value(0)).current;
+  const rot   = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Fade in
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 800,
-      delay: icon.delay,
-      useNativeDriver: true,
-    }).start();
-
-    // Continuous floating bounce
+    Animated.timing(fade, { toValue: 1, duration: 1000, delay: icon.delay, useNativeDriver: true }).start();
+    Animated.loop(Animated.sequence([
+      Animated.timing(float, { toValue: 1, duration: 2200 + index * 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(float, { toValue: 0, duration: 2200 + index * 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ])).start();
     Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: 1,
-          duration: 1800 + index * 200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(floatAnim, {
-          toValue: 0,
-          duration: 1800 + index * 200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
+      Animated.timing(rot, { toValue: 1, duration: 9000 + index * 600, easing: Easing.linear, useNativeDriver: true })
     ).start();
   }, []);
 
-  const translateY = floatAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -18],
-  });
+  const translateY = float.interpolate({ inputRange: [0, 1], outputRange: [0, -22] });
+  const rotate     = rot.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const pos = {};
+  if (icon.top)    pos.top    = icon.top;
+  if (icon.bottom) pos.bottom = icon.bottom;
+  if (icon.left)   pos.left   = icon.left;
+  if (icon.right)  pos.right  = icon.right;
 
-  const positionStyle = {};
-  if (icon.top) positionStyle.top = icon.top;
-  if (icon.bottom) positionStyle.bottom = icon.bottom;
-  if (icon.left) positionStyle.left = icon.left;
-  if (icon.right) positionStyle.right = icon.right;
-
-  const IconComponent = icon.lib === 'Material' ? MaterialCommunityIcons : Ionicons;
-
+  const Icon = icon.lib === 'M' ? MaterialCommunityIcons : Ionicons;
   return (
-    <Animated.View
-      style={[
-        styles.floatingIcon,
-        positionStyle,
-        { opacity: fadeAnim, transform: [{ translateY }] },
-      ]}
-    >
-      <IconComponent name={icon.name} size={icon.size} color="rgba(255,255,255,0.25)" />
+    <Animated.View style={[styles.floatIcon, pos, { opacity: fade, transform: [{ translateY }, { rotate }] }]}>
+      <Icon name={icon.name} size={icon.size} color="rgba(255,255,255,0.15)" />
     </Animated.View>
   );
 };
 
+/* ─── Spinning ring ─── */
+const SpinRing = ({ size, borderColor, duration, reverse = false, style }) => {
+  const spin = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(spin, { toValue: 1, duration, easing: Easing.linear, useNativeDriver: true })
+    ).start();
+  }, []);
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: reverse ? ['360deg', '0deg'] : ['0deg', '360deg'] });
+  return (
+    <Animated.View style={[{ width: size, height: size, borderRadius: size / 2, borderWidth: 1.5, borderColor, position: 'absolute', transform: [{ rotate }] }, style]} />
+  );
+};
+
+/* ─── Bouncing dot ─── */
+const Dot = ({ delay }) => {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(Animated.sequence([
+      Animated.delay(delay),
+      Animated.timing(anim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(anim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      Animated.delay(400),
+    ])).start();
+  }, []);
+  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -10] });
+  const scale      = anim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.4] });
+  return <Animated.View style={[styles.dot, { transform: [{ translateY }, { scale }] }]} />;
+};
+
+/* ══════════════════════════════════════════════ */
 const SplashScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
 
-  // Animations
-  const logoScaleAnim = useRef(new Animated.Value(0.3)).current;
-  const logoFadeAnim = useRef(new Animated.Value(0)).current;
-  const titleSlideAnim = useRef(new Animated.Value(40)).current;
-  const titleFadeAnim = useRef(new Animated.Value(0)).current;
-  const subtitleFadeAnim = useRef(new Animated.Value(0)).current;
-  const subtitleSlideAnim = useRef(new Animated.Value(20)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  // Refs
+  const logoScale  = useRef(new Animated.Value(0)).current;
+  const logoFade   = useRef(new Animated.Value(0)).current;
+  const glow       = useRef(new Animated.Value(0.3)).current;
+  const ring1Scale = useRef(new Animated.Value(0.4)).current;
+  const ring1Fade  = useRef(new Animated.Value(0)).current;
+  const ring2Scale = useRef(new Animated.Value(0.4)).current;
+  const ring2Fade  = useRef(new Animated.Value(0)).current;
+  const titleY     = useRef(new Animated.Value(60)).current;
+  const titleFade  = useRef(new Animated.Value(0)).current;
+  const shimmer    = useRef(new Animated.Value(-width)).current;
+  const badgeScale = useRef(new Animated.Value(0)).current;
+  const badgeFade  = useRef(new Animated.Value(0)).current;
+  const subY       = useRef(new Animated.Value(30)).current;
+  const subFade    = useRef(new Animated.Value(0)).current;
+  const divW       = useRef(new Animated.Value(0)).current;
+  const tagFade    = useRef(new Animated.Value(0)).current;
+  const dotsFade   = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     StatusBar.setBarStyle('light-content');
 
-    // Logo scale + fade entrance
+    // Logo pop-in
     Animated.parallel([
-      Animated.spring(logoScaleAnim, {
-        toValue: 1,
-        friction: 6,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(logoFadeAnim, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
+      Animated.spring(logoScale, { toValue: 1, friction: 4, tension: 30, useNativeDriver: true }),
+      Animated.timing(logoFade,  { toValue: 1, duration: 800, useNativeDriver: true }),
     ]).start();
 
-    // Logo pulse loop
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.08,
-          duration: 1200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    // Title slide + fade
+    // Rings expand
     Animated.parallel([
-      Animated.timing(titleFadeAnim, {
-        toValue: 1,
-        duration: 800,
-        delay: 400,
-        useNativeDriver: true,
-      }),
-      Animated.timing(titleSlideAnim, {
-        toValue: 0,
-        duration: 800,
-        delay: 400,
-        easing: Easing.out(Easing.back(1.5)),
-        useNativeDriver: true,
-      }),
+      Animated.spring(ring1Scale, { toValue: 1, friction: 5, tension: 25, delay: 200, useNativeDriver: true }),
+      Animated.timing(ring1Fade,  { toValue: 1, duration: 700, delay: 200, useNativeDriver: true }),
+      Animated.spring(ring2Scale, { toValue: 1, friction: 5, tension: 20, delay: 400, useNativeDriver: true }),
+      Animated.timing(ring2Fade,  { toValue: 1, duration: 700, delay: 400, useNativeDriver: true }),
     ]).start();
 
-    // Subtitle slide + fade
+    // Glow pulse
+    Animated.loop(Animated.sequence([
+      Animated.timing(glow, { toValue: 1,   duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(glow, { toValue: 0.3, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ])).start();
+
+    // Title slide up
     Animated.parallel([
-      Animated.timing(subtitleFadeAnim, {
-        toValue: 1,
-        duration: 700,
-        delay: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(subtitleSlideAnim, {
-        toValue: 0,
-        duration: 700,
-        delay: 800,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
+      Animated.timing(titleFade, { toValue: 1, duration: 700, delay: 550, useNativeDriver: true }),
+      Animated.timing(titleY,    { toValue: 0, duration: 700, delay: 550, easing: Easing.out(Easing.back(1.6)), useNativeDriver: true }),
     ]).start();
 
-    // Progress bar fills over 3 seconds
-    Animated.timing(progressAnim, {
-      toValue: 1,
-      duration: 3000,
-      easing: Easing.linear,
-      useNativeDriver: false, // width animation needs layout
-    }).start();
+    // Shimmer sweep on title
+    Animated.loop(
+      Animated.timing(shimmer, { toValue: width * 1.5, duration: 2200, delay: 1200, easing: Easing.linear, useNativeDriver: true })
+    ).start();
 
-    pulseLoop.start();
+    // Badge pop
+    Animated.parallel([
+      Animated.spring(badgeScale, { toValue: 1, friction: 4, tension: 40, delay: 900, useNativeDriver: true }),
+      Animated.timing(badgeFade,  { toValue: 1, duration: 500, delay: 900, useNativeDriver: true }),
+    ]).start();
 
-    // Navigate after 3 seconds
-    const timer = setTimeout(() => {
-      navigation.replace('GetStarted');
-    }, 3000);
+    // Subtitle
+    Animated.parallel([
+      Animated.timing(subFade, { toValue: 1, duration: 600, delay: 1100, useNativeDriver: true }),
+      Animated.timing(subY,    { toValue: 0, duration: 600, delay: 1100, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+    ]).start();
 
-    return () => {
-      clearTimeout(timer);
-      pulseLoop.stop();
-    };
+    // Divider
+    Animated.timing(divW, { toValue: 1, duration: 700, delay: 1400, easing: Easing.out(Easing.ease), useNativeDriver: false }).start();
+
+    // Tagline
+    Animated.timing(tagFade, { toValue: 1, duration: 600, delay: 1700, useNativeDriver: true }).start();
+
+    // Dots
+    Animated.timing(dotsFade, { toValue: 1, duration: 500, delay: 1900, useNativeDriver: true }).start();
+
+    const timer = setTimeout(() => navigation.replace('GetStarted'), 3400);
+    return () => clearTimeout(timer);
   }, []);
 
-  const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
+  const dividerWidth = divW.interpolate({ inputRange: [0, 1], outputRange: ['0%', '55%'] });
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <StatusBar backgroundColor="#103A12" barStyle="light-content" />
+    <View style={styles.root}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {/* Background decorative circles for gradient effect */}
-      <View style={styles.bgCircleTopRight} />
-      <View style={styles.bgCircleMidLeft} />
-      <View style={styles.bgCircleBottomLeft} />
-      <View style={styles.bgCircleCenter} />
+      {/* ── Full-screen gradient ── */}
+      <LinearGradient
+        colors={['#0A2E0C', '#1B5E20', '#2E7D32', '#1B5E20', '#0A2E0C']}
+        locations={[0, 0.25, 0.5, 0.75, 1]}
+        start={{ x: 0.2, y: 0 }}
+        end={{ x: 0.8, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
 
-      {/* Floating decorative icons */}
-      {FLOATING_ICONS.map((icon, index) => (
-        <FloatingIcon key={index} icon={icon} index={index} />
-      ))}
+      {/* ── SVG particle layer ── */}
+      <Svg style={StyleSheet.absoluteFill} width={width} height={height}>
+        <Defs>
+          <RadialGradient id="rg" cx="50%" cy="40%" r="60%">
+            <Stop offset="0%"   stopColor="#81C784" stopOpacity="0.18" />
+            <Stop offset="100%" stopColor="#0A2E0C" stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Circle cx={width / 2} cy={height * 0.42} r={width * 0.7} fill="url(#rg)" />
+        {PARTICLES.map((p, i) => (
+          <Circle key={i} cx={p.cx} cy={p.cy} r={p.r} fill="white" opacity={p.opacity} />
+        ))}
+        {/* subtle grid lines */}
+        {Array.from({ length: 6 }, (_, i) => (
+          <Line key={`h${i}`}
+            x1={0} y1={height * (i / 6)}
+            x2={width} y2={height * (i / 6)}
+            stroke="rgba(255,255,255,0.03)" strokeWidth={1}
+          />
+        ))}
+        {Array.from({ length: 5 }, (_, i) => (
+          <Line key={`v${i}`}
+            x1={width * (i / 5)} y1={0}
+            x2={width * (i / 5)} y2={height}
+            stroke="rgba(255,255,255,0.03)" strokeWidth={1}
+          />
+        ))}
+      </Svg>
 
-      {/* Main content */}
-      <View style={styles.content}>
+      {/* ── Bottom wave ── */}
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.25)']}
+        style={styles.bottomWave}
+      />
+
+      {/* ── Floating icons ── */}
+      {ICONS.map((icon, i) => <FloatingIcon key={i} icon={icon} index={i} />)}
+
+      {/* ── Center content ── */}
+      <View style={[styles.content, { paddingTop: insets.top }]}>
+
+        {/* Glow halo */}
+        <Animated.View style={[styles.glow, { opacity: glow }]} />
+
+        {/* Spinning decorative rings */}
+        <SpinRing size={230} borderColor="rgba(129,199,132,0.12)" duration={12000} />
+        <SpinRing size={200} borderColor="rgba(255,255,255,0.08)" duration={8000} reverse />
+
+        {/* Expanding entrance rings */}
+        <Animated.View style={[styles.ring2, { opacity: ring2Fade, transform: [{ scale: ring2Scale }] }]} />
+        <Animated.View style={[styles.ring1, { opacity: ring1Fade, transform: [{ scale: ring1Scale }] }]} />
+
         {/* Logo */}
-        <Animated.View
-          style={[
-            styles.logoContainer,
-            {
-              opacity: logoFadeAnim,
-              transform: [{ scale: logoScaleAnim }, { scale: pulseAnim }],
-            },
-          ]}
-        >
-          <View style={styles.logoOuterRing}>
-            <View style={styles.logoInnerCircle}>
+        <Animated.View style={[styles.logoWrap, { opacity: logoFade, transform: [{ scale: logoScale }] }]}>
+          <LinearGradient
+            colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.05)']}
+            style={styles.logoGradBorder}
+          >
+            <View style={styles.logoCircle}>
               <Image
                 source={require('../../assets/FarmerCrate_Logo.jpg')}
                 style={styles.logoImg}
-                resizeMode="contain"
+                resizeMode="cover"
               />
             </View>
-          </View>
+          </LinearGradient>
         </Animated.View>
 
-        {/* Title */}
-        <Animated.Text
-          style={[
-            styles.title,
-            {
-              opacity: titleFadeAnim,
-              transform: [{ translateY: titleSlideAnim }],
-            },
-          ]}
-        >
-          Farmer Crate
-        </Animated.Text>
+        {/* Title + shimmer */}
+        <Animated.View style={[styles.titleWrap, { opacity: titleFade, transform: [{ translateY: titleY }] }]}>
+          <Text style={styles.title}>Farmer Crate</Text>
+          {/* shimmer overlay */}
+          <Animated.View
+            style={[styles.shimmer, { transform: [{ translateX: shimmer }] }]}
+            pointerEvents="none"
+          />
+        </Animated.View>
+
+        {/* "Fresh" badge */}
+        <Animated.View style={[styles.badge, { opacity: badgeFade, transform: [{ scale: badgeScale }] }]}>
+          <LinearGradient colors={['#66BB6A', '#2E7D32']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.badgeGrad}>
+            <Ionicons name="leaf" size={11} color="#fff" />
+            <Text style={styles.badgeText}>100% Farm Fresh</Text>
+            <Ionicons name="leaf" size={11} color="#fff" />
+          </LinearGradient>
+        </Animated.View>
 
         {/* Subtitle */}
-        <Animated.Text
-          style={[
-            styles.subtitle,
-            {
-              opacity: subtitleFadeAnim,
-              transform: [{ translateY: subtitleSlideAnim }],
-            },
-          ]}
-        >
-          Fresh from Farm to Your Table
+        <Animated.Text style={[styles.subtitle, { opacity: subFade, transform: [{ translateY: subY }] }]}>
+          Farm-Fresh. Delivered to Your Door.
         </Animated.Text>
-      </View>
 
-      {/* Progress bar at bottom */}
-      <View style={styles.progressContainer}>
-        <View style={styles.progressTrack}>
-          <Animated.View style={[styles.progressBar, { width: progressWidth }]} />
+        {/* Divider */}
+        <View style={styles.divRow}>
+          <Animated.View style={[styles.divLine, { width: dividerWidth }]} />
+          <Animated.View style={{ opacity: tagFade }}>
+            <MaterialCommunityIcons name="sprout" size={18} color="rgba(129,199,132,0.8)" style={{ marginHorizontal: 10 }} />
+          </Animated.View>
+          <Animated.View style={[styles.divLine, { width: dividerWidth }]} />
         </View>
-        <Animated.Text style={[styles.loadingText, { opacity: subtitleFadeAnim }]}>
-          Loading...
+
+        {/* Tagline */}
+        <Animated.Text style={[styles.tagline, { opacity: tagFade }]}>
+          Connecting Farmers &amp; Customers
         </Animated.Text>
       </View>
 
-      {/* Version */}
-      <Text style={styles.version}>v1.0.0</Text>
+      {/* ── Loading dots ── */}
+      <Animated.View style={[styles.dotsRow, { opacity: dotsFade, paddingBottom: insets.bottom + 40 }]}>
+        <Dot delay={0} />
+        <Dot delay={180} />
+        <Dot delay={360} />
+      </Animated.View>
+
+      <Text style={[styles.version, { bottom: insets.bottom + 10 }]}>v1.0.0</Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1B5E20',
-    overflow: 'hidden',
+  root: { flex: 1, backgroundColor: '#0A2E0C' },
+
+  bottomWave: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, height: height * 0.22,
+    borderTopLeftRadius: width * 0.7, borderTopRightRadius: width * 0.7,
   },
-  // Background decorative circles to simulate gradient
-  bgCircleTopRight: {
+
+  floatIcon: { position: 'absolute', zIndex: 1 },
+
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+
+  // Glow
+  glow: {
     position: 'absolute',
-    top: -height * 0.12,
-    right: -width * 0.25,
-    width: width * 0.8,
-    height: width * 0.8,
-    borderRadius: width * 0.4,
-    backgroundColor: 'rgba(76, 175, 80, 0.3)',
+    width: 260, height: 260, borderRadius: 130,
+    backgroundColor: 'rgba(100,200,100,0.18)',
+    shadowColor: '#81C784', shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1, shadowRadius: 60, elevation: 0,
   },
-  bgCircleMidLeft: {
-    position: 'absolute',
-    top: height * 0.3,
-    left: -width * 0.3,
-    width: width * 0.7,
-    height: width * 0.7,
-    borderRadius: width * 0.35,
-    backgroundColor: 'rgba(129, 199, 132, 0.15)',
+
+  // Rings
+  ring2: {
+    position: 'absolute', width: 210, height: 210, borderRadius: 105,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  bgCircleBottomLeft: {
-    position: 'absolute',
-    bottom: -height * 0.08,
-    left: -width * 0.15,
-    width: width * 0.85,
-    height: width * 0.85,
-    borderRadius: width * 0.425,
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  ring1: {
+    position: 'absolute', width: 175, height: 175, borderRadius: 87.5,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.18)',
   },
-  bgCircleCenter: {
-    position: 'absolute',
-    top: height * 0.25,
-    right: -width * 0.1,
-    width: width * 0.5,
-    height: width * 0.5,
-    borderRadius: width * 0.25,
-    backgroundColor: 'rgba(129, 199, 132, 0.1)',
+
+  // Logo
+  logoWrap: { marginBottom: 26 },
+  logoGradBorder: {
+    width: 148, height: 148, borderRadius: 74,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5, shadowRadius: 20, elevation: 16,
   },
-  // Floating icons
-  floatingIcon: {
-    position: 'absolute',
-    zIndex: 1,
+  logoCircle: {
+    width: 128, height: 128, borderRadius: 64,
+    backgroundColor: '#fff', overflow: 'hidden',
+    justifyContent: 'center', alignItems: 'center',
   },
-  // Main content
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2,
-  },
-  logoContainer: {
-    marginBottom: 24,
-  },
-  logoOuterRing: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  logoInnerCircle: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    overflow: 'hidden',
-  },
-  logoImg: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
+  logoImg: { width: 128, height: 128, borderRadius: 64 },
+
+  // Title
+  titleWrap: { overflow: 'hidden', marginBottom: 10 },
   title: {
-    fontSize: 38,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 2,
-    textShadowColor: 'rgba(0, 0, 0, 0.35)',
-    textShadowOffset: { width: 1, height: 2 },
-    textShadowRadius: 6,
+    fontSize: 44, fontWeight: '900', color: '#FFFFFF',
+    letterSpacing: 3,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 12,
   },
+  shimmer: {
+    position: 'absolute', top: 0, left: 0, bottom: 0, width: 80,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    transform: [{ skewX: '-20deg' }],
+  },
+
+  // Badge
+  badge: { marginBottom: 14 },
+  badgeGrad: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 14, paddingVertical: 5, borderRadius: 20,
+    shadowColor: '#2E7D32', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5, shadowRadius: 6, elevation: 6,
+  },
+  badgeText: { fontSize: 11, color: '#fff', fontWeight: '700', letterSpacing: 0.8 },
+
+  // Subtitle
   subtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 10,
-    letterSpacing: 0.8,
-    fontStyle: 'italic',
+    fontSize: 14.5, color: 'rgba(255,255,255,0.72)',
+    letterSpacing: 1, fontWeight: '500',
   },
-  // Progress bar
-  progressContainer: {
-    alignItems: 'center',
-    paddingBottom: 40,
-    paddingHorizontal: 50,
-    zIndex: 2,
+
+  // Divider
+  divRow: { flexDirection: 'row', alignItems: 'center', marginTop: 22 },
+  divLine: { height: 1, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 1 },
+
+  // Tagline
+  tagline: {
+    marginTop: 14, fontSize: 13, color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 0.8, fontStyle: 'italic',
   },
-  progressTrack: {
-    width: '100%',
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: '#81C784',
-    borderRadius: 2,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.55)',
-    letterSpacing: 1,
-  },
+
+  // Dots
+  dotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', gap: 10, zIndex: 2 },
+  dot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#81C784' },
+
   version: {
-    position: 'absolute',
-    bottom: 16,
-    alignSelf: 'center',
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.35)',
-    letterSpacing: 0.5,
+    position: 'absolute', alignSelf: 'center',
+    fontSize: 11, color: 'rgba(255,255,255,0.25)', letterSpacing: 0.5,
   },
 });
 

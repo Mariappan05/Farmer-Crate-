@@ -428,11 +428,12 @@ const LoginScreen = ({ navigation }) => {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
-      {/* True gradient background */}
+      {/* Enhanced gradient background */}
       <LinearGradient
-        colors={['#103A12', '#1B5E20', '#2E7D32', '#388E3C']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0.6, y: 1 }}
+        colors={['#071A08', '#0D3B10', '#1B5E20', '#2E7D32']}
+        locations={[0, 0.3, 0.6, 1]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
 
@@ -763,14 +764,16 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 400,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.98)',
     borderRadius: 28,
     padding: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.22,
-    shadowRadius: 32,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.3,
+    shadowRadius: 40,
+    elevation: 20,
   },
   cardTitle: {
     fontSize: 26,

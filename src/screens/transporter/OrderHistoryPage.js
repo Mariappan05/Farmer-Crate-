@@ -3,28 +3,27 @@
  * Order history with filter chips and stats summary.
  *
  * Features:
- *   - GET /api/transporters/orders or /api/transporters/orders/history
+ *   - GET /api/orders/transporter/allocated (fallbacks to transporter history endpoints)
  *   - Filter chips: All, Completed, Cancelled
  *   - Order cards with status, date, from/to, amount
  *   - Stats summary: total, completed, cancelled
  *   - Pull to refresh
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  StatusBar,
-  Dimensions,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 
 const FILTERS = ['All', 'Completed', 'Cancelled'];
@@ -62,11 +61,20 @@ const OrderHistoryPage = ({ navigation }) => {
     try {
       let data = [];
       try {
-        const res = await api.get('/transporters/orders/history');
-        data = res.data?.data || res.data?.orders || res.data || [];
+        const allocatedRes = await api.get('/orders/transporter/allocated');
+        const allocated = allocatedRes.data?.data || allocatedRes.data?.orders || allocatedRes.data || [];
+        data = (Array.isArray(allocated) ? allocated : []).filter((o) => {
+          const st = (o.current_status || o.status || '').toUpperCase();
+          return st === 'COMPLETED' || st === 'DELIVERED' || st === 'CANCELLED';
+        });
       } catch {
-        const res2 = await api.get('/transporters/orders');
-        data = res2.data?.data || res2.data?.orders || res2.data || [];
+        try {
+          const res = await api.get('/transporters/orders/history');
+          data = res.data?.data || res.data?.orders || res.data || [];
+        } catch {
+          const res2 = await api.get('/transporters/orders');
+          data = res2.data?.data || res2.data?.orders || res2.data || [];
+        }
       }
       setOrders(Array.isArray(data) ? data : []);
     } catch (e) {

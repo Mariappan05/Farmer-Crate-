@@ -14,17 +14,29 @@
  *  9. DELIVERED         - Customer received (QR by destination delivery person)
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Image, RefreshControl, Animated, Easing,
-  StatusBar, Platform, Linking, Alert,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Image,
+  RefreshControl,
+  Animated,
+  Easing,
+  StatusBar,
+  Dimensions,
+  Platform,
+  Linking,
+  Alert,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
-import { getOrderById } from '../../services/orderService';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
+import { getOrderById } from '../../services/orderService';
 
 const TRACKING_STAGES = [
   { key: 'PENDING',              label: 'Order Placed',            icon: 'cart-outline',                  mc: null,                    color: '#FF9800' },
@@ -108,50 +120,9 @@ const getProductImage = (item) => {
   return p.image_url || p.image || null;
 };
 
-const normalizeOrdersArray = (payload) =>
-  Array.isArray(payload) ? payload : payload?.orders || payload?.data || [];
-
-const findOrderById = (orders, id) =>
-  orders.find((o) =>
-    (o?.order_id && String(o.order_id) === String(id)) ||
-    (o?.id && String(o.id) === String(id))
-  );
-
-const withTransporterPlaceholders = (orderWithDetails) => {
-  const result = { ...orderWithDetails };
-
-  if (orderWithDetails?.source_transporter_id && !orderWithDetails?.source_transporter) {
-    console.log('[TransporterOrderTracking] Creating source transporter placeholder for ID:', orderWithDetails.source_transporter_id);
-    result.source_transporter = {
-      transporter_id: orderWithDetails.source_transporter_id,
-      name: 'Source Transporter',
-      mobile_number: null,
-      mobile: null,
-      phone: null,
-      email: null,
-      address: null,
-      note: 'Source transporter details unavailable on this endpoint',
-    };
-  }
-
-  if (orderWithDetails?.destination_transporter_id && !orderWithDetails?.destination_transporter) {
-    console.log('[TransporterOrderTracking] Creating destination transporter placeholder for ID:', orderWithDetails.destination_transporter_id);
-    result.destination_transporter = {
-      transporter_id: orderWithDetails.destination_transporter_id,
-      name: 'Destination Transporter',
-      mobile_number: null,
-      mobile: null,
-      phone: null,
-      email: null,
-      address: null,
-      note: 'Destination transporter details unavailable on this endpoint',
-    };
-  }
-
-  return result;
-};
-
-/* ── Animated Vehicle ─────────────────────────────────────── */
+/* --------------------------------------------------------------------------
+ * ANIMATED VEHICLE
+ * ------------------------------------------------------------------------ */
 const AnimatedVehicle = ({ progress }) => {
   const slideAnim = useRef(new Animated.Value(0)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
@@ -169,17 +140,14 @@ const AnimatedVehicle = ({ progress }) => {
     ).start();
   }, [progress]);
 
+  const left = slideAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '90%'] });
+
   return (
-    <View style={s.vehicleTrack}>
-      <View style={s.trackLine}>
-        <Animated.View style={[s.trackFill, {
-          width: slideAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-        }]} />
+    <View style={trackStyles.vehicleTrack}>
+      <View style={trackStyles.trackLine}>
+        <Animated.View style={[trackStyles.trackFill, { width: slideAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
       </View>
-      <Animated.View style={[s.vehicleIcon, {
-        left: slideAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '90%'] }),
-        transform: [{ translateY: bounceAnim }],
-      }]}>
+      <Animated.View style={[trackStyles.vehicleIcon, { left, transform: [{ translateY: bounceAnim }] }]}>
         <MaterialCommunityIcons name="truck-fast" size={28} color="#1B5E20" />
       </Animated.View>
     </View>
@@ -263,6 +231,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
   const [order, setOrder] = useState(initialOrder || null);
   const [loading, setLoading] = useState(!initialOrder);
   const [refreshing, setRefreshing] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [error, setError] = useState(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const intervalRef = useRef(null);
@@ -270,6 +239,13 @@ const TransporterOrderTracking = ({ navigation, route }) => {
   const currentIndex = getStageIndex(order?.current_status || order?.status);
   const isCancelled = (order?.current_status || order?.status || '').toUpperCase() === 'CANCELLED';
   const progress = isCancelled ? 0 : Math.min(1, currentIndex / (TRACKING_STAGES.length - 1));
+  const nextStatusMap = {
+    ASSIGNED: 'SHIPPED',
+    RECEIVED: 'SHIPPED',
+    SHIPPED: 'OUT_FOR_DELIVERY',
+    REACHED_DESTINATION: 'OUT_FOR_DELIVERY',
+  };
+  const nextStatus = nextStatusMap[(order?.current_status || order?.status || '').toUpperCase()] || null;
 
   const fetchOrder = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -277,63 +253,17 @@ const TransporterOrderTracking = ({ navigation, route }) => {
       const id = orderId || order?.order_id || order?.id;
       if (!id) return;
 
-      console.log('[TransporterOrderTracking] Fetching order:', id);
-      let o = null;
-
+      // Try transporter-specific endpoint first, fallback to general
+      let o;
       try {
         const res = await api.get(`/transporters/orders/${id}/track`);
         o = res.data?.data || res.data?.order || res.data;
-        console.log('[TransporterOrderTracking] Got order from tracking endpoint:', JSON.stringify(o, null, 2));
-      } catch (trackingError) {
-        console.log('[TransporterOrderTracking] Tracking endpoint not available:', trackingError.message);
+      } catch {
+        const data = await getOrderById(id);
+        o = data?.data || data?.order || data;
       }
 
-      if (!o) {
-        try {
-          const activeResp = await api.get('/transporters/orders/active');
-          const activeOrders = normalizeOrdersArray(activeResp?.data);
-          o = findOrderById(activeOrders, id);
-          if (o) {
-            console.log('[TransporterOrderTracking] Found order from active orders endpoint:', id);
-          }
-        } catch (activeError) {
-          console.log('[TransporterOrderTracking] Active orders fallback failed:', activeError.message);
-        }
-      }
-
-      if (!o) {
-        try {
-          const allResp = await api.get('/transporters/orders');
-          const allOrders = normalizeOrdersArray(allResp?.data);
-          o = findOrderById(allOrders, id);
-          if (o) {
-            console.log('[TransporterOrderTracking] Found order from orders endpoint:', id);
-          }
-        } catch (ordersError) {
-          console.log('[TransporterOrderTracking] Orders list fallback failed:', ordersError.message);
-        }
-      }
-
-      if (!o) {
-        try {
-          const data = await getOrderById(id);
-          o = data?.data || data?.order || data;
-          if (o) {
-            console.log('[TransporterOrderTracking] Found order from generic order endpoint:', id);
-          }
-        } catch (genericError) {
-          console.log('[TransporterOrderTracking] Generic order fallback failed:', genericError.message);
-        }
-      }
-
-      if (o) {
-        const normalizedOrder = withTransporterPlaceholders(o);
-        console.log('[TransporterOrderTracking] Final order payload:', JSON.stringify(normalizedOrder, null, 2));
-        setOrder(normalizedOrder);
-      } else {
-        console.error('[TransporterOrderTracking] Order not found for ID:', id);
-      }
-
+      if (o) setOrder(o);
       setError(null);
     } catch (e) {
       console.error('[TransporterOrderTracking] Fetch tracking error:', e.message);
@@ -368,27 +298,26 @@ const TransporterOrderTracking = ({ navigation, route }) => {
     }).start();
   }, [progress]);
 
-  const items = order?.items || order?.order_items || [];
-  const farmer = order?.farmer || items[0]?.farmer;
-  const customer = order?.customer;
-  const deliveryPerson = order?.delivery_person;
-  const customerName =
-    customer?.name ||
-    customer?.full_name ||
-    order?.customer_name ||
-    null;
-  const customerPhone =
-    customer?.phone ||
-    customer?.mobile ||
-    customer?.mobile_number ||
-    null;
-  const customerEmail = customer?.email || null;
-  const customerAddress = formatAddress(order?.delivery_address || customer?.address || customer?.address_line);
-  const customerDetails = [
-    customerAddress,
-    customerEmail ? `Email: ${customerEmail}` : null,
-  ].filter(Boolean).join('\n');
+  const handleUpdateStatus = async () => {
+    const id = orderId || order?.order_id || order?.id;
+    if (!id || !nextStatus) return;
+    setUpdatingStatus(true);
+    try {
+      await api.put(`/transporters/orders/${id}/status`, { status: nextStatus });
+      await fetchOrder(true);
+    } catch (e) {
+      Alert.alert('Error', e?.response?.data?.message || e.message || 'Failed to update status');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
 
+  const items = order?.items || order?.order_items || [];
+  const farmer = order?.farmer || items[0]?.farmer || items[0]?.product?.farmer;
+  const customer = order?.customer || order?.buyer;
+  const deliveryPerson = order?.delivery_person;
+
+  /* -- Loading state ----------------------------------------- */
   if (loading && !order) {
     return (
       <View style={[s.container, { paddingTop: insets.top }]}>
@@ -499,14 +428,21 @@ const TransporterOrderTracking = ({ navigation, route }) => {
           </View>
         )}
 
-        {/* QR Scan button — only shown after ASSIGNED (step 3+) */}
-        {!isCancelled && currentIndex >= 2 && (
+        {/* Transporter status update button */}
+        {!isCancelled && nextStatus && (
           <TouchableOpacity
-            style={s.qrBtn}
-            onPress={() => navigation.navigate('QRScan', { orderId: order?.order_id || order?.id })}
+            style={[trackStyles.updateStatusBtn, updatingStatus && { opacity: 0.7 }]}
+            onPress={handleUpdateStatus}
+            disabled={updatingStatus}
           >
-            <Ionicons name="qr-code-outline" size={20} color="#fff" />
-            <Text style={s.qrBtnText}>Scan QR to Update Status</Text>
+            {updatingStatus ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <MaterialCommunityIcons name="truck-check" size={20} color="#fff" />
+                <Text style={trackStyles.updateStatusText}>Mark as {nextStatus.replace(/_/g, ' ')}</Text>
+              </>
+            )}
           </TouchableOpacity>
         )}
 
@@ -555,69 +491,78 @@ const TransporterOrderTracking = ({ navigation, route }) => {
           </View>
         )}
 
-        {/* Farmer */}
+        {/* Farmer Info */}
         {farmer && (
           <InfoCard
             icon="leaf-outline"
-            title="Farmer (Pickup)"
-            name={farmer.name || farmer.full_name}
-            details={farmer.address || farmer.city}
-            phone={farmer.phone || farmer.mobile}
+            title="Farmer"
+            name={farmer.name || farmer.full_name || farmer.username}
+            details={farmer.farm_name || farmer.location || farmer.city}
+            phone={farmer.phone}
           />
         )}
 
-        {/* Source Transporter */}
-        {order?.source_transporter && (
-          <InfoCard
-            mc="truck-outline"
-            title="Source Transporter"
-            name={order.source_transporter.name || order.source_transporter.full_name}
-            details={order.source_transporter.address}
-            phone={order.source_transporter.phone || order.source_transporter.mobile}
-          />
-        )}
-
-        {/* Destination Transporter */}
-        {order?.destination_transporter && (
-          <InfoCard
-            mc="truck-delivery-outline"
-            title="Destination Transporter"
-            name={order.destination_transporter.name || order.destination_transporter.full_name}
-            details={order.destination_transporter.address}
-            phone={order.destination_transporter.phone || order.destination_transporter.mobile}
-          />
-        )}
-
-        {/* Customer */}
-        {(customerName || customerPhone || customerDetails) && (
+        {/* Customer Info */}
+        {customer && (
           <InfoCard
             icon="person-outline"
-            title="Customer (Delivery)"
-            name={customerName || 'Customer'}
-            details={customerDetails}
-            phone={customerPhone}
+            title="Customer"
+            name={customer.name || customer.full_name || customer.username}
+            details={customer.city || customer.address}
+            phone={customer.phone}
           />
         )}
 
-        {/* Delivery Person */}
+        {/* Delivery Person Info */}
         {deliveryPerson && (
           <InfoCard
             icon="bicycle-outline"
             title="Delivery Person"
-            name={deliveryPerson.name || deliveryPerson.full_name}
+            name={deliveryPerson.name || deliveryPerson.full_name || deliveryPerson.username}
             details={deliveryPerson.vehicle_number}
             phone={deliveryPerson.phone}
           />
         )}
 
-        {/* Bill */}
-        <TouchableOpacity
-          style={s.billBtn}
-          onPress={() => navigation.navigate('BillPreview', { orderId: order?.order_id || order?.id, order })}
-        >
-          <Ionicons name="receipt-outline" size={18} color="#1B5E20" />
-          <Text style={s.billBtnText}>View Bill</Text>
-        </TouchableOpacity>
+        {/* Delivery address */}
+        {(order?.delivery_address || order?.shipping_address) && (
+          <View style={trackStyles.addressCard}>
+            <Ionicons name="location-outline" size={20} color="#1B5E20" />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={trackStyles.addressTitle}>Delivery Address</Text>
+              <Text style={trackStyles.addressText}>{order.delivery_address || order.shipping_address}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Pickup address */}
+        {(order?.pickup_address || order?.farmer_address) && (
+          <View style={trackStyles.addressCard}>
+            <Ionicons name="location-outline" size={20} color="#FF9800" />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={trackStyles.addressTitle}>Pickup Address</Text>
+              <Text style={trackStyles.addressText}>{order.pickup_address || order.farmer_address}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* QR / Bill actions */}
+        <View style={trackStyles.actionRow}>
+          <TouchableOpacity
+            style={trackStyles.actionBtn}
+            onPress={() => navigation.navigate('QRScan', { orderId: order?.order_id || order?.id })}
+          >
+            <Ionicons name="qr-code-outline" size={20} color="#1B5E20" />
+            <Text style={trackStyles.actionBtnText}>Scan QR</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={trackStyles.actionBtn}
+            onPress={() => navigation.navigate('BillPreview', { orderId: order?.order_id || order?.id, order })}
+          >
+            <Ionicons name="receipt-outline" size={20} color="#1B5E20" />
+            <Text style={trackStyles.actionBtnText}>View Bill</Text>
+          </TouchableOpacity>
+        </View>
 
         <Text style={s.refreshNote}>Auto-refreshes every 40 seconds</Text>
       </ScrollView>
@@ -704,14 +649,49 @@ const s = StyleSheet.create({
   infoTitle: { fontSize: 11, color: '#888', fontWeight: '500', textTransform: 'uppercase' },
   infoName: { fontSize: 15, fontWeight: '600', color: '#333', marginTop: 2 },
   infoDetail: { fontSize: 12, color: '#666', marginTop: 2 },
-  callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+  callBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
-  billBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#E8F5E9', borderRadius: 14, paddingVertical: 14, marginBottom: 8, gap: 8,
+  addressCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
+      android: { elevation: 2 },
+    }),
+  },
+  addressTitle: { fontSize: 11, color: '#888', fontWeight: '500', textTransform: 'uppercase' },
+  addressText: { fontSize: 14, color: '#333', marginTop: 2, lineHeight: 20 },
+
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 14,
+    paddingVertical: 14,
+    gap: 8,
   },
   billBtnText: { fontSize: 15, fontWeight: '600', color: '#1B5E20' },
   refreshNote: { fontSize: 12, color: '#aaa', textAlign: 'center', marginTop: 8 },
 });
+
+const trackStyles = s;
 
 export default TransporterOrderTracking;

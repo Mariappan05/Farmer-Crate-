@@ -13,26 +13,26 @@
  *   - Back button, green themed cards
  */
 
-import React, { useState, useCallback } from 'react';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Switch,
-  Alert,
-  StatusBar,
-  Platform,
-  Modal,
-  FlatList,
-  ActivityIndicator,
-  ToastAndroid,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Switch,
+    Text,
+    ToastAndroid,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * CONSTANTS
@@ -552,7 +552,7 @@ const modalStyles = StyleSheet.create({
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f1f8e9' },
+  container: { flex: 1, backgroundColor: '#EDF6EE' },
 
   /* Header */
   header: {
@@ -562,6 +562,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.18)',
   },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#fff' },
@@ -569,17 +571,19 @@ const styles = StyleSheet.create({
   /* Cards */
   card: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E4EFE5',
     ...Platform.select({
       ios: {
         shadowColor: '#1B5E20',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 5,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.09,
+        shadowRadius: 8,
       },
-      android: { elevation: 2 },
+      android: { elevation: 3 },
     }),
   },
   cardHeader: {

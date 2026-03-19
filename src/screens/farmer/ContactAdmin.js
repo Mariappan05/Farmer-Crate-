@@ -1,24 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  StatusBar,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  RefreshControl,
-} from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 
 const SUBJECT_OPTIONS = [
   'General Inquiry',
@@ -344,6 +343,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   adminInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   adminIconCircle: {
@@ -372,17 +373,19 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   formTitle: { fontSize: 17, fontWeight: '800', color: '#1B5E20', marginBottom: 12 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginTop: 12, marginBottom: 6 },
 
   dropdown: {
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#FDFEFD',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#DDE8DD',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -391,7 +394,7 @@ const styles = StyleSheet.create({
   dropdownList: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#DDE8DD',
     borderRadius: 10,
     marginTop: 4,
     overflow: 'hidden',
@@ -406,9 +409,9 @@ const styles = StyleSheet.create({
   dropdownItemText: { fontSize: 15, color: '#333' },
 
   textarea: {
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#FDFEFD',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#DDE8DD',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingTop: 12,
@@ -449,6 +452,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   ticketHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   ticketSubject: { fontSize: 15, fontWeight: '600', color: '#333' },

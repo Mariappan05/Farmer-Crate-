@@ -16,30 +16,30 @@
  *   - Pull to refresh, loading skeleton
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  ActivityIndicator,
-  StatusBar,
-  Platform,
-  Dimensions,
-  Animated,
-  Modal,
-  FlatList,
-  RefreshControl,
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    FlatList,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
-import { pickImage, uploadImageToCloudinary, optimizeImageUrl } from '../../services/cloudinaryService';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
+import { optimizeImageUrl, pickImage, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import ToastMessage from '../../utils/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -927,7 +927,7 @@ const CustomerProfile = ({ navigation }) => {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  container: { flex: 1, backgroundColor: '#EDF6EE' },
 
   /* Header bar */
   headerBar: {
@@ -1024,12 +1024,12 @@ const styles = StyleSheet.create({
   /* Cards */
   card: {
     backgroundColor: '#fff',
-    borderRadius: 18,
+    borderRadius: 20,
     marginHorizontal: 14,
     marginTop: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: '#E3ECE4',
     ...Platform.select({
       ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 7 },
       android: { elevation: 4 },
@@ -1151,7 +1151,7 @@ const styles = StyleSheet.create({
   menuIconBox: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: '#E8F5E9',
     justifyContent: 'center',
     alignItems: 'center',

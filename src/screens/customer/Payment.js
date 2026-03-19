@@ -15,39 +15,39 @@
  *   - Trust indicators
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  StatusBar,
-  Dimensions,
-  Animated,
-  Easing,
-  Modal,
-  FlatList,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Location from 'expo-location';
 import axios from 'axios';
+import * as Location from 'expo-location';
+import { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    Easing,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 
 import RazorpayCheckout from 'react-native-razorpay';
 
-import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
-import { createOrder, updateQRImage } from '../../services/orderService';
+import api from '../../services/api';
 import { uploadImageToCloudinary } from '../../services/cloudinaryService';
+import { createOrder, updateQRImage } from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -1034,7 +1034,7 @@ const Payment = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f1f8e9',
+    backgroundColor: '#EDF6EE',
   },
 
   /* Header */
@@ -1053,9 +1053,11 @@ const styles = StyleSheet.create({
   /* Cards */
   card: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E4EEE4',
     shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -1130,7 +1132,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   input: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#FBFCFB',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -1138,7 +1140,7 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: '#DDE8DD',
   },
   rowFields: {
     flexDirection: 'row',
@@ -1147,12 +1149,12 @@ const styles = StyleSheet.create({
 
   /* Dropdown */
   dropdownBtn: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#FBFCFB',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 13,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: '#DDE8DD',
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
