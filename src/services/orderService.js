@@ -191,15 +191,39 @@ export const updateFarmerOrderStatus = async (orderId, status) => {
 
 export const assignTransporters = async (orderId) => {
   console.log('[OrderService] Assigning transporters for order:', orderId);
-  const { data } = await api.put(`/farmers/orders/${orderId}/assign-transporters`);
-  console.log('[OrderService] Assign transporters response:', data);
-  triggerOrderWorkflowNotification({
-    orderId,
-    event: 'transporters_assigned',
-    status: 'ASSIGNED',
-    actorRole: 'farmer',
-  });
-  return data;
+  const attempts = [
+    { method: 'put', endpoint: `/farmers/orders/${orderId}/assign-transporters` },
+    { method: 'post', endpoint: `/farmers/orders/${orderId}/assign-transporters` },
+    { method: 'put', endpoint: `/farmers/orders/${orderId}/assign-transporter` },
+    { method: 'post', endpoint: `/farmers/orders/${orderId}/assign-transporter` },
+    { method: 'put', endpoint: `/farmers/orders/${orderId}/assign` },
+    { method: 'post', endpoint: `/farmers/orders/${orderId}/assign` },
+  ];
+
+  let lastError = null;
+  for (const attempt of attempts) {
+    try {
+      const { data } = await api[attempt.method](attempt.endpoint);
+      console.log('[OrderService] Assign transporters response:', data, 'via', attempt.method.toUpperCase(), attempt.endpoint);
+      triggerOrderWorkflowNotification({
+        orderId,
+        event: 'transporters_assigned',
+        status: 'ASSIGNED',
+        actorRole: 'farmer',
+      });
+      return data;
+    } catch (err) {
+      lastError = err;
+      console.warn(
+        '[OrderService] Assign transporters attempt failed:',
+        attempt.method.toUpperCase(),
+        attempt.endpoint,
+        err?.response?.data?.message || err.message
+      );
+    }
+  }
+
+  throw lastError || new Error('Failed to assign transporters');
 };
 
 // ─── Delivery orders ────────────────────────────────────────────────────────
