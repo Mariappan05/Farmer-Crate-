@@ -13,29 +13,27 @@
  *   - Pull to refresh, loading & empty states
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  RefreshControl,
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  Animated,
-  StatusBar,
-  Dimensions,
-  Platform,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import api from '../../services/api';
-import { getCustomerOrders } from '../../services/orderService';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
+import { getCustomerOrders } from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -161,6 +159,70 @@ const getOrderItems = (order) => {
     }];
   }
   return [];
+};
+
+const getAddressText = (rawAddress) => {
+  if (!rawAddress) return '';
+
+  const parts = [];
+  const addPart = (value) => {
+    if (value === null || value === undefined) return;
+    const text = String(value).trim();
+    if (!text) return;
+    if (!parts.includes(text)) parts.push(text);
+  };
+
+  const parseAddress = (value) => {
+    if (value === null || value === undefined) return;
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          parseAddress(JSON.parse(trimmed));
+          return;
+        } catch (_) {
+          // Keep as plain text when parsing fails.
+        }
+      }
+
+      addPart(trimmed);
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(parseAddress);
+      return;
+    }
+
+    if (typeof value === 'object') {
+      addPart(value.full_name || value.name || value.customer_name);
+
+      const phone = value.phone || value.mobile || value.mobile_number || value.phone_number;
+      if (phone) addPart(`Phone: ${phone}`);
+
+      addPart(value.address_line || value.address || value.street);
+
+      const cityLine = [value.city, value.district].filter(Boolean).join(', ');
+      addPart(cityLine);
+
+      const stateLine = [value.state, value.pincode || value.zipcode || value.zip].filter(Boolean).join(' - ');
+      addPart(stateLine);
+
+      if (value.zone) addPart(`Zone: ${value.zone}`);
+
+      if (parts.length === 0) {
+        Object.values(value).forEach((entry) => {
+          if (typeof entry === 'string' || typeof entry === 'number') addPart(entry);
+        });
+      }
+    }
+  };
+
+  parseAddress(rawAddress);
+  return parts.join(', ');
 };
 
 /* --------------------------------------------------------------------------
@@ -293,19 +355,7 @@ const OrderDetailModal = ({ visible, order, onClose, onTrack, onViewSummary }) =
             {/* Delivery Address */}
             {(order.delivery_address || order.shipping_address) && (() => {
               const raw = order.delivery_address || order.shipping_address;
-              let addrText = raw;
-              if (typeof raw === 'string') {
-                try {
-                  const parsed = JSON.parse(raw);
-                  if (parsed && typeof parsed === 'object') {
-                    addrText = [parsed.full_name, parsed.address_line, parsed.city, parsed.district, parsed.state, parsed.pincode]
-                      .filter(Boolean).join(', ');
-                  }
-                } catch (_) { /* use raw string */ }
-              } else if (raw && typeof raw === 'object') {
-                addrText = [raw.full_name, raw.address_line, raw.city, raw.district, raw.state, raw.pincode]
-                  .filter(Boolean).join(', ');
-              }
+              const addrText = getAddressText(raw);
               return (
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>Delivery</Text>
@@ -755,17 +805,19 @@ const OrderHistory = ({ navigation }) => {
  * ------------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  container: { flex: 1, backgroundColor: '#EDF6EE' },
 
   /* Header */
   header: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 8,
-    backgroundColor: '#fff',
+    paddingBottom: 10,
+    backgroundColor: '#FBFDFB',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E6EFE6',
   },
   headerTitle: { fontSize: 24, fontWeight: '800', color: '#1B5E20' },
   headerSub: { fontSize: 13, color: '#888', marginTop: 2 },
@@ -774,6 +826,7 @@ const styles = StyleSheet.create({
   /* Filter chips */
   chipContainer: {
     backgroundColor: '#fff',
+    marginTop: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#E8F5E9',
     ...Platform.select({
@@ -803,9 +856,11 @@ const styles = StyleSheet.create({
   /* Card */
   card: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E4EEE4',
     ...Platform.select({
       ios: { shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.09, shadowRadius: 8 },
       android: { elevation: 3 },

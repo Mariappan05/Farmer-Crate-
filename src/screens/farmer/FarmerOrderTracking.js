@@ -1,17 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  StatusBar,
-  RefreshControl,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 
 const STAGES = [
@@ -380,6 +380,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   summaryOrderId: { fontSize: 18, fontWeight: '800', color: '#333' },
@@ -418,6 +420,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   cardTitle: { fontSize: 17, fontWeight: '800', color: '#1B5E20', marginBottom: 16 },
 
@@ -469,6 +473,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   infoText: { fontSize: 14, color: '#555', flex: 1 },

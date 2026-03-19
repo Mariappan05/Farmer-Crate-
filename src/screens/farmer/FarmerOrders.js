@@ -1,23 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Alert,
-  RefreshControl,
-  ActivityIndicator,
-  StatusBar,
-  Modal,
-  ScrollView,
-  Image,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { getFarmerOrders, acceptFarmerOrder, rejectFarmerOrder } from '../../services/orderService';
+import { acceptFarmerOrder, getFarmerOrders, rejectFarmerOrder } from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
 
 const STATUS_LIST = ['All', 'PLACED', 'PENDING', 'CONFIRMED', 'ASSIGNED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'];
@@ -440,7 +440,7 @@ const FarmerOrders = ({ navigation }) => {
 export default FarmerOrders;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 12, color: '#666', fontSize: 14 },
   emptyText: { marginTop: 12, fontSize: 15, color: '#999' },
@@ -466,16 +466,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginHorizontal: 4,
     elevation: 1,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 2,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   filterChipActive: { backgroundColor: '#1B5E20' },
   filterChipText: { fontSize: 13, color: '#666', fontWeight: '500', textTransform: 'capitalize' },
   filterChipTextActive: { color: '#fff' },
   filterCount: {
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#ECF3EC',
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 10,
@@ -495,6 +497,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.10,
     shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   orderId: { fontSize: 15, fontWeight: '800', color: '#1A1A1A', letterSpacing: 0.1 },
@@ -506,7 +510,7 @@ const styles = StyleSheet.create({
   customerName: { fontSize: 14, color: '#555', fontWeight: '500' },
 
   /* Product rows in card */
-  productsSection: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#F5F5F5', paddingTop: 12, gap: 10 },
+  productsSection: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#EDF3ED', paddingTop: 12, gap: 10 },
   productRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   productThumb: { width: 52, height: 52, borderRadius: 10, backgroundColor: '#F5F5F5' },
   productThumbPlaceholder: {

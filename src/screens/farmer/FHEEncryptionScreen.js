@@ -8,15 +8,20 @@
  *   4. Transaction Ledger â†’ farmer's completed order earnings
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, ActivityIndicator, StatusBar,
-  Platform, RefreshControl,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import ToastMessage from '../../utils/Toast';
 
@@ -590,6 +595,8 @@ const s = StyleSheet.create({
   tabBar: {
     flexDirection: 'row', backgroundColor: C.card,
     borderBottomWidth: 1, borderBottomColor: C.border,
+    borderTopWidth: 1,
+    borderTopColor: '#E6EFE6',
   },
   tabBtn      : { flex: 1, alignItems: 'center', paddingVertical: 10, gap: 3, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabBtnActive: { borderBottomColor: C.accent },
@@ -622,6 +629,8 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: C.border,
     shadowColor: C.dark, shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   productCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   productName  : { fontSize: 15, fontWeight: '800', color: '#222', marginBottom: 2 },
@@ -638,6 +647,8 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: C.border,
     shadowColor: C.dark, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   resultRow  : { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   resultLabel: { fontSize: 13, color: '#666', fontWeight: '600' },
@@ -667,7 +678,7 @@ const s = StyleSheet.create({
 
   // Stats (Tab 3)
   statsRow : { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  statBox  : { flex: 1, borderRadius: 12, padding: 12, alignItems: 'center' },
+  statBox: { flex: 1, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#E6EFE6' },
   statVal  : { fontSize: 15, fontWeight: '900', color: C.primary },
   statLbl  : { fontSize: 10, color: '#555', fontWeight: '600', marginTop: 2 },
 

@@ -1,41 +1,41 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  Switch,
-  Dimensions,
-  Animated,
-  StatusBar,
-  Linking,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Linking,
+  RefreshControl,
+  StatusBar,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { getDeliveryPickups, getDeliveryDrops } from '../../services/orderService';
+import api from '../../services/api';
 import { updateDeliveryAvailability } from '../../services/authService';
+import { getDeliveryDrops, getDeliveryPickups } from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
+import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const STATUS_COLORS = {
-  PENDING: '#FF9800',
+  PENDING: Colors.warning,
   CONFIRMED: '#2196F3',
   ASSIGNED: '#9C27B0',
   PICKUP_IN_PROGRESS: '#00BCD4',
   PICKED_UP: '#00897B',
   SHIPPED: '#FF5722',
   IN_TRANSIT: '#00BCD4',
-  OUT_FOR_DELIVERY: '#FF9800',
-  DELIVERED: '#4CAF50',
-  COMPLETED: '#4CAF50',
-  CANCELLED: '#F44336',
+  OUT_FOR_DELIVERY: Colors.warning,
+  DELIVERED: Colors.success,
+  COMPLETED: Colors.success,
+  CANCELLED: Colors.error,
 };
 
 function getGreeting() {
@@ -287,11 +287,14 @@ const DeliveryDashboard = ({ navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
+      <LinearGradient colors={Colors.gradientHeroDark} style={styles.header}>
+        <View style={styles.headerOrbOne} />
+        <View style={styles.headerOrbTwo} />
         <View style={styles.headerTop}>
           <View style={{ flex: 1 }}>
             <Text style={styles.greeting}>{getGreeting()},</Text>
             <Text style={styles.name}>{deliveryName}</Text>
+            <Text style={styles.subtitle}>Stay focused, deliver faster</Text>
           </View>
           <TouchableOpacity
             style={styles.notifBtn}
@@ -448,97 +451,170 @@ const DeliveryDashboard = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F8E9' },
+  container: { flex: 1, backgroundColor: Colors.background },
 
   // Header
-  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
+  header: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.base,
+    paddingBottom: Spacing.xl,
+    borderBottomLeftRadius: Radius.xxl,
+    borderBottomRightRadius: Radius.xxl,
+    overflow: 'hidden',
+  },
+  headerOrbOne: {
+    position: 'absolute',
+    right: -40,
+    top: -24,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: Colors.headerBlob1,
+  },
+  headerOrbTwo: {
+    position: 'absolute',
+    right: 52,
+    top: 20,
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: Colors.headerBlob2,
+  },
   headerTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  greeting: { fontSize: 14, color: '#C8E6C9' },
-  name: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginTop: 2 },
+  greeting: { fontSize: Font.base, color: Colors.textOnDarkSoft },
+  name: {
+    fontSize: Font.xxxl,
+    fontWeight: Font.weightExtraBold,
+    color: Colors.textOnDark,
+    marginTop: 2,
+    letterSpacing: Font.trackTight,
+  },
+  subtitle: { fontSize: Font.sm, color: Colors.textOnDarkMuted, marginTop: 5 },
   notifBtn: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: Colors.glassBgStrong,
+    borderWidth: 1,
+    borderColor: Colors.glassBorderStrong,
     justifyContent: 'center', alignItems: 'center',
   },
 
   // Availability
   availabilityRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: Colors.glassBg,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.md,
   },
   availabilityLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   availabilityDot: { width: 10, height: 10, borderRadius: 5 },
-  availabilityText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  availabilityText: { color: Colors.textOnDark, fontSize: Font.md, fontWeight: Font.weightSemiBold },
 
   // Loading
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#888', marginTop: 12, fontSize: 14 },
+  loadingText: { color: Colors.textSecondary, marginTop: 12, fontSize: Font.base },
 
   // Stats
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 22 },
   statCard: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center',
-    borderTopWidth: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2, gap: 4,
+    flex: 1,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    alignItems: 'center',
+    borderTopWidth: 3,
+    gap: 4,
+    ...shadowStyle('sm'),
   },
-  statVal: { fontSize: 20, fontWeight: 'bold' },
-  statLabel: { fontSize: 11, color: '#888', textAlign: 'center' },
+  statVal: { fontSize: Font.xxl, fontWeight: Font.weightExtraBold },
+  statLabel: { fontSize: Font.xs, color: Colors.textMuted, textAlign: 'center' },
 
   // Quick Actions
   quickActionsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  quickAction: { flex: 1, alignItems: 'center', gap: 8 },
-  quickActionIcon: {
-    width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center',
+  quickAction: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    paddingVertical: 12,
+    ...shadowStyle('xs'),
   },
-  quickActionText: { fontSize: 12, fontWeight: '600', color: '#555' },
+  quickActionIcon: {
+    width: 56, height: 56, borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center',
+  },
+  quickActionText: { fontSize: Font.sm, fontWeight: Font.weightSemiBold, color: Colors.textSecondary },
 
   // Pending counts
   pendingCountRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
   pendingCountCard: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 16,
-    borderLeftWidth: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
+    flex: 1,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    padding: Spacing.base,
+    borderLeftWidth: 4,
+    ...shadowStyle('xs'),
   },
-  pendingCountVal: { fontSize: 28, fontWeight: 'bold', color: '#333' },
-  pendingCountLabel: { fontSize: 12, color: '#888', marginTop: 4 },
+  pendingCountVal: { fontSize: 28, fontWeight: Font.weightExtraBold, color: Colors.textPrimary },
+  pendingCountLabel: { fontSize: Font.sm, color: Colors.textMuted, marginTop: 4 },
 
   // Section
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1B5E20', paddingLeft: 10, borderLeftWidth: 3, borderLeftColor: '#43A047' },
+  sectionTitle: {
+    fontSize: Font.lg,
+    fontWeight: Font.weightBold,
+    color: Colors.primary,
+    paddingLeft: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.primaryLight,
+  },
 
   // Order cards
   orderCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.09,
-    shadowRadius: 6, elevation: 3,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    padding: Spacing.base,
+    marginBottom: 12,
+    ...shadowStyle('sm'),
   },
   orderCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   orderIdRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  orderId: { fontSize: 15, fontWeight: '700', color: '#333' },
+  orderId: { fontSize: Font.md, fontWeight: Font.weightBold, color: Colors.textPrimary },
   statusBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  statusBadgeText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
+  statusBadgeText: { fontSize: 10, fontWeight: Font.weightBold, textTransform: 'uppercase' },
   infoSection: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
-  infoText: { flex: 1, fontSize: 13, color: '#666', lineHeight: 18 },
+  infoText: { flex: 1, fontSize: Font.sm, color: Colors.textSecondary, lineHeight: 19 },
   orderCardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f5f5f5' },
-  orderAmount: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  orderAmount: { fontSize: Font.lg, fontWeight: Font.weightBold, color: Colors.textPrimary },
   navigateBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#388E3C',
-    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.primaryMid,
+    borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 8,
   },
-  navigateBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  navigateBtnText: { color: Colors.textOnDark, fontSize: Font.sm, fontWeight: Font.weightSemiBold },
 
   // Empty
   emptyCard: {
-    backgroundColor: '#fff', borderRadius: 20, padding: 40, alignItems: 'center', marginTop: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06,
-    shadowRadius: 4, elevation: 2,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
+    padding: 40,
+    alignItems: 'center',
+    marginTop: 10,
+    ...shadowStyle('sm'),
   },
-  emptyTitle: { fontSize: 20, fontWeight: 'bold', color: '#333', marginTop: 16 },
-  emptyMsg: { fontSize: 14, color: '#888', textAlign: 'center', marginTop: 8 },
+  emptyTitle: { fontSize: Font.xxl, fontWeight: Font.weightBold, color: Colors.textPrimary, marginTop: 16 },
+  emptyMsg: { fontSize: Font.base, color: Colors.textMuted, textAlign: 'center', marginTop: 8 },
   refreshBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 20,
-    backgroundColor: '#E8F5E9', borderRadius: 12, paddingHorizontal: 20, paddingVertical: 10,
+    backgroundColor: Colors.primaryXSoft,
+    borderRadius: Radius.md,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
   },
-  refreshBtnText: { color: '#388E3C', fontSize: 14, fontWeight: '600' },
+  refreshBtnText: { color: Colors.primaryMid, fontSize: Font.base, fontWeight: Font.weightSemiBold },
 });
 
 export default DeliveryDashboard;

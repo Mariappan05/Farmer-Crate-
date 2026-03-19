@@ -13,28 +13,27 @@
  *   - Loading and empty states
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  TextInput,
-  RefreshControl,
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  Animated,
-  Easing,
-  StatusBar,
-  Alert,
-  Dimensions,
-  Platform,
-  Linking,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    Alert,
+    Animated,
+    Dimensions,
+    Easing,
+    FlatList,
+    Image,
+    Linking,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import api from '../../services/api';
@@ -501,7 +500,7 @@ const FindTransporter = ({ navigation, route }) => {
  * ------------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#EEF5EF' },
 
   headerBar: {
     backgroundColor: '#1B5E20',
@@ -510,6 +509,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.2)',
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
 
@@ -539,6 +540,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderRadius: 12,
     padding: 12,
+    borderWidth: 1,
+    borderColor: '#CFE6D1',
   },
   searchingText: { fontSize: 14, fontWeight: '600', color: '#1B5E20' },
   searchingCountdown: { fontSize: 12, color: '#388E3C', marginTop: 2 },
@@ -554,9 +557,11 @@ const styles = StyleSheet.create({
   /* Card */
   card: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E5EEE5',
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
       android: { elevation: 3 },

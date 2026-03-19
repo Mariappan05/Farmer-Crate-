@@ -1,23 +1,23 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Image,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  StatusBar,
-  Dimensions,
-  RefreshControl,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Image,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -388,7 +388,7 @@ const ProductDetail = ({ navigation, route }) => {
 export default ProductDetail;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   header: {
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
 
   /* Images */
   productImage: { width: SCREEN_WIDTH, height: 280 },
-  noImage: { height: 200, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F0F0' },
+  noImage: { height: 200, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EEF4EE' },
   dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -431,10 +431,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   infoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   productName: { fontSize: 22, fontWeight: '700', color: '#333' },
@@ -458,9 +460,11 @@ const styles = StyleSheet.create({
   /* Quantity */
   quantitySection: {
     marginTop: 16,
-    backgroundColor: '#F9FBE7',
+    backgroundColor: '#F0F6E8',
     borderRadius: 12,
     padding: 14,
+    borderWidth: 1,
+    borderColor: '#DDE8DD',
   },
   quantityHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   quantityLabel: { fontSize: 14, fontWeight: '600', color: '#555' },
@@ -496,10 +500,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1B5E20', marginBottom: 14 },
 
@@ -518,10 +524,12 @@ const styles = StyleSheet.create({
   emptyReviews: { alignItems: 'center', paddingVertical: 20 },
   emptyText: { marginTop: 8, color: '#999', fontSize: 14 },
   reviewCard: {
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#FBFDFB',
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#EAF2EA',
   },
   reviewHeader: {
     flexDirection: 'row',

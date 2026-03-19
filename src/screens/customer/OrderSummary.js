@@ -16,29 +16,28 @@
  *   - Track Order / Back to Order History buttons
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Image,
-  RefreshControl,
-  Animated,
-  Easing,
-  StatusBar,
-  Dimensions,
-  Platform,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Easing,
+  Image,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import api from '../../services/api';
-import { getOrderById } from '../../services/orderService';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
+import { getOrderById } from '../../services/orderService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -81,6 +80,69 @@ const getProductImage = (item) => {
     return typeof primary === 'string' ? primary : primary?.image_url || primary?.url || null;
   }
   return null;
+};
+
+const toAddressLines = (value) => {
+  if (!value) return [];
+
+  const lineItems = [];
+  const pushLine = (line) => {
+    if (line === null || line === undefined) return;
+    const text = String(line).trim();
+    if (!text) return;
+    if (!lineItems.includes(text)) lineItems.push(text);
+  };
+
+  const parseValue = (input) => {
+    if (!input) return;
+
+    if (typeof input === 'string') {
+      const text = input.trim();
+      if (!text) return;
+
+      if (text.startsWith('{') || text.startsWith('[')) {
+        try {
+          parseValue(JSON.parse(text));
+          return;
+        } catch {
+          // Fallback: keep original text when JSON parse fails.
+        }
+      }
+
+      pushLine(text);
+      return;
+    }
+
+    if (Array.isArray(input)) {
+      input.forEach(parseValue);
+      return;
+    }
+
+    if (typeof input === 'object') {
+      const fullName = input.full_name || input.name || input.customer_name;
+      const phone = input.phone || input.mobile || input.mobile_number || input.phone_number;
+      const addressLine = input.address_line || input.address || input.street;
+      const cityLine = [input.city, input.district].filter(Boolean).join(', ');
+      const stateLine = [input.state, input.pincode || input.zipcode || input.zip].filter(Boolean).join(' - ');
+
+      pushLine(fullName);
+      if (phone) pushLine(`Phone: ${phone}`);
+      pushLine(addressLine);
+      pushLine(cityLine);
+      pushLine(stateLine);
+      if (input.zone) pushLine(`Zone: ${input.zone}`);
+
+      // Generic fallback for unexpected object shapes.
+      if (lineItems.length === 0) {
+        Object.values(input).forEach((v) => {
+          if (typeof v === 'string' || typeof v === 'number') pushLine(v);
+        });
+      }
+    }
+  };
+
+  parseValue(value);
+  return lineItems;
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -237,20 +299,8 @@ const OrderSummary = ({ navigation, route }) => {
   const timeline = order?.timeline || order?.status_history || null;
 
   // Delivery address
-  const deliveryAddr = order?.delivery_address;
-  let addressLines = [];
-  if (typeof deliveryAddr === 'string') {
-    addressLines = [deliveryAddr];
-  } else if (deliveryAddr) {
-    if (deliveryAddr.full_name) addressLines.push(deliveryAddr.full_name);
-    if (deliveryAddr.phone) addressLines.push(`Phone: ${deliveryAddr.phone}`);
-    if (deliveryAddr.address_line) addressLines.push(deliveryAddr.address_line);
-    const cityLine = [deliveryAddr.city, deliveryAddr.district].filter(Boolean).join(', ');
-    if (cityLine) addressLines.push(cityLine);
-    const stateLine = [deliveryAddr.state, deliveryAddr.pincode].filter(Boolean).join(' - ');
-    if (stateLine) addressLines.push(stateLine);
-    if (deliveryAddr.zone) addressLines.push(`Zone: ${deliveryAddr.zone}`);
-  }
+  const deliveryAddr = order?.delivery_address || order?.deliveryAddress || order?.customer_address;
+  const addressLines = toAddressLines(deliveryAddr);
 
   /* ─── LOADING STATE ─── */
   if (isLoading) {
@@ -551,7 +601,7 @@ const OrderSummary = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f1f8e9',
+    backgroundColor: '#EDF6EE',
   },
 
   /* Header */
@@ -577,12 +627,14 @@ const styles = StyleSheet.create({
 
   /* Status card */
   statusCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    borderWidth: 1,
+    borderColor: '#DCE8DC',
   },
   statusIconCircle: {
     width: 44,
@@ -607,9 +659,11 @@ const styles = StyleSheet.create({
   /* Cards */
   card: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E4EEE4',
     shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,

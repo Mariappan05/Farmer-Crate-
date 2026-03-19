@@ -1,12 +1,22 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Image,
-  ActivityIndicator, RefreshControl, TextInput, Dimensions, ScrollView, Alert,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import api from '../../services/api';
 import { useCart } from '../../context/CartContext';
+import api from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -602,6 +612,7 @@ const Categories = ({ navigation, route }) => {
             </View>
           ) : isGridView ? (
             <FlatList
+              key="category-grid"
               data={filteredProducts}
               keyExtractor={(item) => String(item.id || item.product_id)}
               renderItem={renderGridCard}
@@ -627,6 +638,7 @@ const Categories = ({ navigation, route }) => {
             />
           ) : (
             <FlatList
+              key="category-list"
               data={filteredProducts}
               keyExtractor={(item) => String(item.id || item.product_id)}
               renderItem={renderListCard}
@@ -659,7 +671,7 @@ const Categories = ({ navigation, route }) => {
 // Styles
 // ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  container: { flex: 1, backgroundColor: '#EDF6EE' },
 
   // Header
   header: {
@@ -669,6 +681,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.18)',
   },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', flex: 1, marginLeft: 14 },
@@ -679,9 +693,9 @@ const styles = StyleSheet.create({
   // Sidebar
   sidebar: {
     width: SIDEBAR_WIDTH,
-    backgroundColor: '#fff',
+    backgroundColor: '#FAFCFA',
     borderRightWidth: 1,
-    borderRightColor: '#f0f0f0',
+    borderRightColor: '#E7EFE7',
   },
   sidebarContent: { paddingBottom: 20 },
   sidebarItem: {
@@ -713,7 +727,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#DDE8DD',
     height: 40,
   },
   searchInput: {
@@ -736,7 +750,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#E6F2E8',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,

@@ -1,27 +1,28 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Switch,
-  StatusBar,
-  RefreshControl,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
-import { pickImage, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import { updateDeliveryAvailability } from '../../services/authService';
+import { pickImage, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import ToastMessage from '../../utils/Toast';
+import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
 
 const DeliveryProfile = ({ navigation }) => {
   const { authState, clearSession } = useAuth();
@@ -205,7 +206,7 @@ const DeliveryProfile = ({ navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
+      <LinearGradient colors={Colors.gradientHeroDark} style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
         <TouchableOpacity
           onPress={() => (isEditing ? handleSave() : setIsEditing(true))}
@@ -229,7 +230,7 @@ const DeliveryProfile = ({ navigation }) => {
       >
         {/* Profile Header */}
         <LinearGradient
-          colors={['#388E3C', '#4CAF50']}
+          colors={Colors.gradientCard}
           style={styles.profileSection}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -515,22 +516,27 @@ const DeliveryProfile = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F8E9' },
+  container: { flex: 1, backgroundColor: Colors.background },
 
   // Header
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.base,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderBottomLeftRadius: Radius.xxl,
+    borderBottomRightRadius: Radius.xxl,
+    overflow: 'hidden',
   },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  headerTitle: { fontSize: Font.xxxl, fontWeight: Font.weightExtraBold, color: Colors.textOnDark },
   headerBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: Colors.glassBgStrong,
+    borderWidth: 1,
+    borderColor: Colors.glassBorderStrong,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -540,6 +546,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 28,
     paddingBottom: 24,
+    marginHorizontal: Spacing.base,
+    marginTop: Spacing.base,
+    borderRadius: Radius.xxl,
+    ...shadowStyle('md'),
   },
   avatarContainer: { position: 'relative' },
   avatar: {
@@ -559,18 +569,18 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: 'rgba(255,255,255,0.3)',
   },
-  avatarInit: { fontSize: 40, fontWeight: 'bold', color: '#fff' },
+  avatarInit: { fontSize: 40, fontWeight: Font.weightBold, color: Colors.textOnDark },
   avatarEdit: {
     position: 'absolute',
     bottom: 2,
     right: 2,
-    backgroundColor: '#1B5E20',
+    backgroundColor: Colors.primary,
     borderRadius: 16,
     padding: 6,
     borderWidth: 2,
     borderColor: '#fff',
   },
-  profileName: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginTop: 12 },
+  profileName: { fontSize: Font.xxxl, fontWeight: Font.weightExtraBold, color: Colors.textOnDark, marginTop: 12 },
   availBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -582,7 +592,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   availDot: { width: 8, height: 8, borderRadius: 4 },
-  availText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  availText: { color: Colors.textOnDark, fontSize: Font.sm, fontWeight: Font.weightSemiBold },
   vehicleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -593,64 +603,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  vehicleText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  vehicleText: { color: Colors.textOnDark, fontSize: Font.sm, fontWeight: Font.weightSemiBold },
 
   // Stats
   statsRow: {
     flexDirection: 'row',
     marginHorizontal: 16,
-    marginTop: -16,
+    marginTop: 12,
     marginBottom: 16,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    ...shadowStyle('sm'),
   },
   statCard: { flex: 1, alignItems: 'center', paddingVertical: 18, gap: 6 },
-  statCardMiddle: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#f0f0f0' },
-  statVal: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  statLabel: { fontSize: 11, color: '#888' },
+  statCardMiddle: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: Colors.divider },
+  statVal: { fontSize: Font.xl, fontWeight: Font.weightBold, color: Colors.textPrimary },
+  statLabel: { fontSize: Font.xs, color: Colors.textMuted },
 
   // Availability toggle
   availCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
     marginHorizontal: 16,
     marginBottom: 12,
     padding: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    ...shadowStyle('xs'),
   },
-  availCardTitle: { fontSize: 14, fontWeight: '700', color: '#333' },
-  availCardSub: { fontSize: 12, color: '#888', marginTop: 2 },
+  availCardTitle: { fontSize: Font.base, fontWeight: Font.weightBold, color: Colors.textPrimary },
+  availCardSub: { fontSize: Font.sm, color: Colors.textMuted, marginTop: 2 },
 
   // Section cards
   sectionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
     marginHorizontal: 16,
     marginBottom: 12,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    ...shadowStyle('xs'),
   },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1B5E20',
+    fontSize: Font.base,
+    fontWeight: Font.weightBold,
+    color: Colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -661,42 +659,38 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f8f8f8',
+    borderBottomColor: Colors.divider,
   },
-  infoLabel: { fontSize: 11, color: '#aaa', marginBottom: 2 },
-  infoValue: { fontSize: 14, color: '#333', fontWeight: '500' },
-  noDataText: { fontSize: 13, color: '#bbb', fontStyle: 'italic', paddingVertical: 8 },
+  infoLabel: { fontSize: Font.xs, color: Colors.textMuted, marginBottom: 2 },
+  infoValue: { fontSize: Font.base, color: Colors.textPrimary, fontWeight: Font.weightMedium },
+  noDataText: { fontSize: Font.sm, color: Colors.textLight, fontStyle: 'italic', paddingVertical: 8 },
 
   // Edit mode
-  fieldLabel: { fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 4 },
+  fieldLabel: { fontSize: Font.sm, fontWeight: Font.weightSemiBold, color: Colors.textSecondary, marginBottom: 4 },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
+    backgroundColor: '#F9FBF9',
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#e8e8e8',
+    borderColor: Colors.border,
     gap: 8,
   },
   input: {
     flex: 1,
     paddingVertical: 11,
-    fontSize: 14,
-    color: '#333',
+    fontSize: Font.base,
+    color: Colors.textPrimary,
   },
 
   // Menu
   menuCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
     marginHorizontal: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    ...shadowStyle('xs'),
     overflow: 'hidden',
   },
   menuRow: {
@@ -706,7 +700,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 12,
   },
-  menuRowBorder: { borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
+  menuRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.divider },
   menuIcon: {
     width: 38,
     height: 38,
@@ -714,7 +708,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  menuLabel: { flex: 1, fontSize: 15, color: '#333', fontWeight: '500' },
+  menuLabel: { flex: 1, fontSize: Font.md, color: Colors.textPrimary, fontWeight: Font.weightMedium },
 
   // App info
   appInfoRow: {
@@ -726,7 +720,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 8,
   },
-  appInfoText: { flex: 1, fontSize: 14, color: '#888' },
+  appInfoText: { flex: 1, fontSize: Font.base, color: Colors.textMuted },
 
   // Logout
   logoutBtn: {
@@ -734,13 +728,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: '#FFEBEE',
-    borderRadius: 16,
+    backgroundColor: Colors.errorLight,
+    borderRadius: Radius.lg,
     marginHorizontal: 16,
     paddingVertical: 16,
     marginBottom: 8,
   },
-  logoutText: { color: '#F44336', fontSize: 16, fontWeight: 'bold' },
+  logoutText: { color: Colors.error, fontSize: Font.lg, fontWeight: Font.weightBold },
 
   // Cancel
   cancelBtn: {
@@ -748,7 +742,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginHorizontal: 16,
   },
-  cancelText: { color: '#888', fontSize: 14, fontWeight: '500' },
+  cancelText: { color: Colors.textMuted, fontSize: Font.base, fontWeight: Font.weightMedium },
 
   // Logout Modal
   logoutOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },

@@ -15,30 +15,30 @@
  *   - Transporter-specific status updates
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Image,
-  RefreshControl,
-  Animated,
-  Easing,
-  StatusBar,
-  Dimensions,
-  Platform,
-  Linking,
-  Alert,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    Easing,
+    Image,
+    Linking,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import api from '../../services/api';
-import { getOrderById } from '../../services/orderService';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
+import { getOrderById } from '../../services/orderService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -90,6 +90,61 @@ const formatDate = (d) => {
 
 const formatCurrency = (a) => '\u20B9' + (parseFloat(a) || 0).toFixed(2);
 
+const pickFirst = (...values) => {
+  for (const v of values) {
+    if (v === 0) return v;
+    if (typeof v === 'string') {
+      const t = v.trim();
+      if (t) return t;
+    } else if (v !== undefined && v !== null && v !== '') {
+      return v;
+    }
+  }
+  return '';
+};
+
+const toReadableText = (value) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(toReadableText).filter(Boolean).join(', ');
+  if (typeof value === 'object') {
+    const best = pickFirst(
+      value.full_name,
+      value.name,
+      value.username,
+      value.farm_name,
+      value.company_name,
+      value.address,
+      value.address_line,
+      [value.street, value.city, value.district, value.state, value.pincode].filter(Boolean).join(', ')
+    );
+    return best ? toReadableText(best) : '';
+  }
+  return '';
+};
+
+const normalizeParty = (entity, fallbackName, fallbackDetails) => {
+  const nestedUser = entity?.user || {};
+  const d = { ...nestedUser, ...(entity || {}) };
+
+  return {
+    name: toReadableText(pickFirst(d.full_name, d.name, d.username, fallbackName)),
+    phone: toReadableText(pickFirst(d.phone, d.mobile, d.mobile_number, d.phone_number)),
+    details: toReadableText(
+      pickFirst(
+        d.address,
+        d.address_line,
+        d.location,
+        d.farm_name,
+        d.city,
+        [d.street, d.city, d.district, d.state, d.pincode].filter(Boolean),
+        fallbackDetails
+      )
+    ),
+  };
+};
+
 /* --------------------------------------------------------------------------
  * ANIMATED VEHICLE
  * ------------------------------------------------------------------------ */
@@ -107,14 +162,15 @@ const AnimatedVehicle = ({ progress }) => {
     ).start();
   }, [progress]);
 
-  const left = slideAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '90%'] });
+  const leftInterpolate = slideAnim.interpolate({ inputRange: [0, 1], outputRange: [0, SCREEN_WIDTH * 0.9] });
+  const widthInterpolate = slideAnim.interpolate({ inputRange: [0, 1], outputRange: [0, SCREEN_WIDTH - 32] });
 
   return (
     <View style={trackStyles.vehicleTrack}>
       <View style={trackStyles.trackLine}>
-        <Animated.View style={[trackStyles.trackFill, { width: slideAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
+        <Animated.View style={[trackStyles.trackFill, { width: widthInterpolate }]} />
       </View>
-      <Animated.View style={[trackStyles.vehicleIcon, { left, transform: [{ translateY: bounceAnim }] }]}>
+      <Animated.View style={[trackStyles.vehicleIcon, { left: leftInterpolate, transform: [{ translateY: bounceAnim }] }]}>
         <MaterialCommunityIcons name="truck-fast" size={28} color="#1B5E20" />
       </Animated.View>
     </View>
@@ -224,15 +280,10 @@ const TransporterOrderTracking = ({ navigation, route }) => {
       const id = orderId || order?.order_id || order?.id;
       if (!id) return;
 
-      // Try transporter-specific endpoint first, fallback to general
-      let o;
-      try {
-        const res = await api.get(`/transporters/orders/${id}/track`);
-        o = res.data?.data || res.data?.order || res.data;
-      } catch {
-        const data = await getOrderById(id);
-        o = data?.data || data?.order || data;
-      }
+      // Use the new track endpoint
+      const res = await api.get(`/transporters/orders/${id}/track`);
+      const trackData = res.data?.data || res.data;
+      const o = trackData?.order || trackData;
 
       if (o) setOrder(o);
       setError(null);
@@ -300,9 +351,15 @@ const TransporterOrderTracking = ({ navigation, route }) => {
   };
 
   const items = order?.items || order?.order_items || [];
-  const farmer = order?.farmer || items[0]?.farmer || items[0]?.product?.farmer;
-  const customer = order?.customer || order?.buyer;
-  const deliveryPerson = order?.delivery_person;
+  const farmer = normalizeParty(order?.farmer || items[0]?.farmer || items[0]?.product?.farmer || {}, order?.farmer_name, order?.pickup_address || order?.farmer_address);
+  const customer = normalizeParty(order?.customer || order?.buyer || {}, order?.customer_name, order?.delivery_address || order?.shipping_address);
+  const deliveryPerson = normalizeParty(order?.delivery_person || {}, null, (order?.delivery_person || {})?.vehicle_number);
+  const hasAssignedDeliveryPerson = !!(
+    order?.delivery_person_id ||
+    order?.assigned_delivery_person_id ||
+    order?.delivery_person?.id ||
+    order?.delivery_person?.delivery_person_id
+  );
 
   /* -- Loading state ----------------------------------------- */
   if (loading && !order) {
@@ -418,23 +475,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
           </View>
         )}
 
-        {/* Transporter status update button */}
-        {!isCancelled && nextStatus && (
-          <TouchableOpacity
-            style={[trackStyles.updateStatusBtn, updatingStatus && { opacity: 0.7 }]}
-            onPress={handleUpdateStatus}
-            disabled={updatingStatus}
-          >
-            {updatingStatus ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <>
-                <MaterialCommunityIcons name="truck-check" size={20} color="#fff" />
-                <Text style={trackStyles.updateStatusText}>Mark as {nextStatus.replace(/_/g, ' ')}</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
+        {/* Transporter status update button - REMOVED */}
 
         {/* Timeline */}
         {!isCancelled && (
@@ -481,45 +522,119 @@ const TransporterOrderTracking = ({ navigation, route }) => {
         )}
 
         {/* Farmer Info */}
-        {farmer && (
+        {(farmer.name || farmer.details || farmer.phone) && (
           <InfoCard
             icon="leaf-outline"
             title="Farmer"
-            name={farmer.name || farmer.full_name || farmer.username}
-            details={farmer.farm_name || farmer.location || farmer.city}
+            name={farmer.name || 'N/A'}
+            details={farmer.details}
             phone={farmer.phone}
           />
         )}
 
         {/* Customer Info */}
-        {customer && (
+        {(customer.name || customer.details || customer.phone) && (
           <InfoCard
             icon="person-outline"
             title="Customer"
-            name={customer.name || customer.full_name || customer.username}
-            details={customer.city || customer.address}
+            name={customer.name || 'N/A'}
+            details={customer.details}
             phone={customer.phone}
           />
         )}
 
         {/* Delivery Person Info */}
-        {deliveryPerson && (
-          <InfoCard
-            icon="bicycle-outline"
-            title="Delivery Person"
-            name={deliveryPerson.name || deliveryPerson.full_name || deliveryPerson.username}
-            details={deliveryPerson.vehicle_number}
-            phone={deliveryPerson.phone}
-          />
+        {hasAssignedDeliveryPerson && (deliveryPerson.name || deliveryPerson.details || deliveryPerson.phone) && (
+          <View style={trackStyles.deliveryPersonCard}>
+            <View style={trackStyles.dpHeader}>
+              <View style={trackStyles.dpIconWrap}>
+                <Ionicons name="bicycle" size={22} color="#9C27B0" />
+              </View>
+              <Text style={trackStyles.dpHeaderTitle}>Delivery Person</Text>
+            </View>
+            <View style={trackStyles.dpContent}>
+              <View style={trackStyles.dpAvatarSection}>
+                {order?.delivery_person?.image_url ? (
+                  <Image source={{ uri: order.delivery_person.image_url }} style={trackStyles.dpAvatar} />
+                ) : (
+                  <View style={trackStyles.dpAvatarPlaceholder}>
+                    <Ionicons name="person" size={32} color="#9C27B0" />
+                  </View>
+                )}
+                <Text style={trackStyles.dpName}>{deliveryPerson.name || 'N/A'}</Text>
+              </View>
+              <View style={trackStyles.dpDetailsSection}>
+                {deliveryPerson.phone && (
+                  <View style={trackStyles.dpDetailRow}>
+                    <View style={trackStyles.dpDetailIcon}>
+                      <Ionicons name="call" size={16} color="#9C27B0" />
+                    </View>
+                    <Text style={trackStyles.dpDetailText}>{deliveryPerson.phone}</Text>
+                  </View>
+                )}
+                {deliveryPerson.details && (
+                  <View style={trackStyles.dpDetailRow}>
+                    <View style={trackStyles.dpDetailIcon}>
+                      <Ionicons name="car" size={16} color="#9C27B0" />
+                    </View>
+                    <Text style={trackStyles.dpDetailText}>{deliveryPerson.details}</Text>
+                  </View>
+                )}
+                {order?.delivery_person?.vehicle_type && (
+                  <View style={trackStyles.dpDetailRow}>
+                    <View style={trackStyles.dpDetailIcon}>
+                      <Ionicons name="information-circle" size={16} color="#9C27B0" />
+                    </View>
+                    <Text style={trackStyles.dpDetailText}>{order.delivery_person.vehicle_type}</Text>
+                  </View>
+                )}
+              </View>
+              {deliveryPerson.phone && (
+                <TouchableOpacity 
+                  style={trackStyles.dpCallButton} 
+                  onPress={() => Linking.openURL('tel:' + deliveryPerson.phone)}
+                >
+                  <Ionicons name="call" size={18} color="#fff" />
+                  <Text style={trackStyles.dpCallButtonText}>Call Now</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
         )}
 
         {/* Delivery address */}
         {(order?.delivery_address || order?.shipping_address) && (
-          <View style={trackStyles.addressCard}>
-            <Ionicons name="location-outline" size={20} color="#1B5E20" />
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={trackStyles.addressTitle}>Delivery Address</Text>
-              <Text style={trackStyles.addressText}>{order.delivery_address || order.shipping_address}</Text>
+          <View style={trackStyles.deliveryAddressCard}>
+            <View style={trackStyles.addressCardHeader}>
+              <View style={trackStyles.addressIconWrap}>
+                <Ionicons name="location" size={22} color="#2196F3" />
+              </View>
+              <Text style={trackStyles.addressCardTitle}>Delivery Address</Text>
+            </View>
+            <View style={trackStyles.addressCardContent}>
+              <View style={trackStyles.addressDetailRow}>
+                <Ionicons name="person-outline" size={18} color="#2196F3" />
+                <Text style={trackStyles.addressDetailText}>{customer.name || 'N/A'}</Text>
+              </View>
+              {customer.phone && (
+                <View style={trackStyles.addressDetailRow}>
+                  <Ionicons name="call-outline" size={18} color="#2196F3" />
+                  <Text style={trackStyles.addressDetailText}>{customer.phone}</Text>
+                </View>
+              )}
+              <View style={trackStyles.addressDetailRow}>
+                <Ionicons name="location-outline" size={18} color="#2196F3" />
+                <Text style={trackStyles.addressDetailText}>{toReadableText(order.delivery_address || order.shipping_address)}</Text>
+              </View>
+              {customer.phone && (
+                <TouchableOpacity 
+                  style={trackStyles.addressCallButton} 
+                  onPress={() => Linking.openURL('tel:' + customer.phone)}
+                >
+                  <Ionicons name="call" size={18} color="#fff" />
+                  <Text style={trackStyles.addressCallButtonText}>Call Customer</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
@@ -530,7 +645,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
             <Ionicons name="location-outline" size={20} color="#FF9800" />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={trackStyles.addressTitle}>Pickup Address</Text>
-              <Text style={trackStyles.addressText}>{order.pickup_address || order.farmer_address}</Text>
+              <Text style={trackStyles.addressText}>{toReadableText(order.pickup_address || order.farmer_address)}</Text>
             </View>
           </View>
         )}
@@ -735,6 +850,111 @@ const trackStyles = StyleSheet.create({
     alignItems: 'center',
   },
 
+  // Delivery Person Card
+  deliveryPersonCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
+      android: { elevation: 3 },
+    }),
+  },
+  dpHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  dpIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#9C27B015',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  dpHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+  },
+  dpContent: {
+    backgroundColor: '#F8F5FF',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E1BEE7',
+  },
+  dpAvatarSection: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  dpAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 12,
+    borderWidth: 3,
+    borderColor: '#9C27B0',
+  },
+  dpAvatarPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E1BEE7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  dpName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#9C27B0',
+    textAlign: 'center',
+  },
+  dpDetailsSection: {
+    marginBottom: 16,
+  },
+  dpDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  dpDetailIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E1BEE7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  dpDetailText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  dpCallButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#9C27B0',
+    paddingVertical: 14,
+    borderRadius: 10,
+    gap: 8,
+  },
+  dpCallButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
   addressCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -749,6 +969,75 @@ const trackStyles = StyleSheet.create({
   },
   addressTitle: { fontSize: 11, color: '#888', fontWeight: '500', textTransform: 'uppercase' },
   addressText: { fontSize: 14, color: '#333', marginTop: 2, lineHeight: 20 },
+
+  // Delivery Address Card
+  deliveryAddressCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
+      android: { elevation: 3 },
+    }),
+  },
+  addressCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  addressIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#2196F315',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  addressCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+  },
+  addressCardContent: {
+    backgroundColor: '#F5F9FF',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#BBDEFB',
+  },
+  addressDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    gap: 10,
+  },
+  addressDetailText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  addressCallButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2196F3',
+    paddingVertical: 14,
+    borderRadius: 10,
+    gap: 8,
+    marginTop: 8,
+  },
+  addressCallButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
 
   actionRow: {
     flexDirection: 'row',

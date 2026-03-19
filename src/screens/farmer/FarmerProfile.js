@@ -4,79 +4,239 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   Image,
-  Modal,
+  TextInput,
   ActivityIndicator,
   StatusBar,
-  KeyboardAvoidingView,
   Platform,
+  Animated,
+  Modal,
+  FlatList,
   RefreshControl,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
 import { pickImage, uploadImageToCloudinary, optimizeImageUrl } from '../../services/cloudinaryService';
+import { useAuth } from '../../context/AuthContext';
 import ToastMessage from '../../utils/Toast';
 
-const SOUTH_INDIAN_STATES = {
+const SOUTH_INDIAN_STATES = [
+  'Tamil Nadu',
+  'Kerala',
+  'Karnataka',
+  'Andhra Pradesh',
+  'Telangana',
+  'Puducherry',
+];
+
+const DISTRICTS_BY_STATE = {
   'Tamil Nadu': [
-    'Chennai', 'Coimbatore', 'Madurai', 'Salem', 'Tiruchirappalli', 'Tirunelveli',
-    'Erode', 'Vellore', 'Thoothukudi', 'Dindigul', 'Thanjavur', 'Ranipet',
-    'Sivaganga', 'Karur', 'Namakkal', 'Tirupur', 'Tiruvarur', 'Nagapattinam',
-    'Ramanathapuram', 'Cuddalore', 'Viluppuram', 'Krishnagiri', 'Dharmapuri',
-    'Kanchipuram', 'Chengalpattu', 'Tiruvallur', 'Perambalur', 'Ariyalur',
-    'Nilgiris', 'Kallakurichi', 'Tenkasi', 'Mayiladuthurai',
+    'Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem',
+    'Tirunelveli', 'Erode', 'Vellore', 'Thoothukudi', 'Dindigul',
+    'Thanjavur', 'Ranipet', 'Sivagangai', 'Karur', 'Namakkal',
+    'Tiruppur', 'Cuddalore', 'Kanchipuram', 'Tiruvallur', 'Villupuram',
+    'Nagapattinam', 'Krishnagiri', 'Dharmapuri', 'Ramanathapuram',
+    'Virudhunagar', 'Theni', 'Ariyalur', 'Perambalur', 'Nilgiris',
+    'Pudukkottai', 'Kallakurichi', 'Tenkasi', 'Tirupattur',
+    'Chengalpattu', 'Tiruvarur', 'Mayiladuthurai',
   ],
-  'Kerala': [
+  Kerala: [
     'Thiruvananthapuram', 'Kochi', 'Kozhikode', 'Thrissur', 'Kollam',
     'Palakkad', 'Alappuzha', 'Malappuram', 'Kannur', 'Kottayam',
-    'Kasaragod', 'Pathanamthitta', 'Idukki', 'Wayanad',
+    'Idukki', 'Pathanamthitta', 'Ernakulam', 'Wayanad', 'Kasaragod',
   ],
-  'Karnataka': [
-    'Bengaluru', 'Mysuru', 'Mangaluru', 'Hubballi', 'Belagavi', 'Kalaburagi',
-    'Davanagere', 'Ballari', 'Vijayapura', 'Shivamogga', 'Tumakuru',
-    'Raichur', 'Hassan', 'Udupi', 'Chikkamagaluru', 'Mandya', 'Kodagu',
-    'Dharwad', 'Chitradurga', 'Haveri', 'Gadag', 'Bagalkot', 'Yadgir',
-    'Chamarajanagar', 'Ramanagara', 'Chikkaballapura', 'Koppal',
+  Karnataka: [
+    'Bengaluru', 'Mysuru', 'Mangaluru', 'Hubballi-Dharwad', 'Belagavi',
+    'Kalaburagi', 'Davanagere', 'Ballari', 'Vijayapura', 'Shivamogga',
+    'Tumakuru', 'Raichur', 'Bidar', 'Mandya', 'Hassan',
+    'Chitradurga', 'Udupi', 'Chikkamagaluru', 'Kodagu', 'Yadgir',
+    'Haveri', 'Gadag', 'Chamarajanagar', 'Bagalkot', 'Ramanagara',
+    'Chikkaballapur', 'Koppal', 'Dharwad',
   ],
   'Andhra Pradesh': [
     'Visakhapatnam', 'Vijayawada', 'Guntur', 'Nellore', 'Kurnool',
     'Tirupati', 'Rajahmundry', 'Kakinada', 'Kadapa', 'Anantapur',
-    'Eluru', 'Ongole', 'Chittoor', 'Srikakulam', 'Prakasam',
-    'East Godavari', 'West Godavari', 'Krishna', 'Palnadu',
+    'Eluru', 'Ongole', 'Srikakulam', 'Vizianagaram', 'Chittoor',
+    'Prakasam', 'West Godavari', 'East Godavari', 'Krishna', 'Palnadu',
+    'Bapatla', 'Anakapalli', 'Alluri Sitharama Raju', 'Konaseema',
+    'NTR', 'Sri Sathya Sai', 'Annamayya',
   ],
-  'Telangana': [
+  Telangana: [
     'Hyderabad', 'Warangal', 'Nizamabad', 'Khammam', 'Karimnagar',
     'Ramagundam', 'Mahbubnagar', 'Nalgonda', 'Adilabad', 'Suryapet',
-    'Siddipet', 'Mancherial', 'Medak', 'Sangareddy', 'Rangareddy',
-    'Medchal-Malkajgiri', 'Jagtial', 'Peddapalli', 'Kamareddy',
-    'Nirmal', 'Wanaparthy', 'Nagarkurnool', 'Jogulamba Gadwal',
+    'Siddipet', 'Miryalaguda', 'Jagtial', 'Mancherial', 'Nirmal',
+    'Kamareddy', 'Medak', 'Wanaparthy', 'Nagarkurnool',
+    'Jogulamba Gadwal', 'Sangareddy', 'Medchal-Malkajgiri', 'Vikarabad',
+    'Rangareddy', 'Yadadri Bhuvanagiri', 'Jayashankar Bhupalpally',
+    'Mulugu', 'Narayanpet', 'Mahabubabad', 'Jangaon', 'Peddapalli',
+    'Rajanna Sircilla', 'Kumuram Bheem Asifabad',
   ],
-  'Puducherry': ['Puducherry', 'Karaikal', 'Mahe', 'Yanam'],
+  Puducherry: [
+    'Puducherry', 'Karaikal', 'Mahe', 'Yanam',
+  ],
 };
 
-const ZONES = ['North', 'South', 'East', 'West', 'Central', 'North-East'];
+const ShimmerBlock = ({ width, height, style, borderRadius = 8 }) => {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 800, useNativeDriver: false }),
+        Animated.timing(anim, { toValue: 0, duration: 800, useNativeDriver: false }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim]);
+
+  const bg = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#e0e0e0', '#f5f5f5'],
+  });
+
+  return <Animated.View style={[{ width, height, borderRadius, backgroundColor: bg }, style]} />;
+};
+
+const DropdownModal = ({ visible, title, data, selected, onSelect, onClose }) => {
+  const [search, setSearch] = useState('');
+  const filtered = data.filter((item) => item.toLowerCase().includes(search.toLowerCase()));
+
+  useEffect(() => {
+    if (visible) setSearch('');
+  }, [visible]);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={ddStyles.overlay}>
+        <View style={ddStyles.container}>
+          <View style={ddStyles.header}>
+            <Text style={ddStyles.headerTitle}>{title}</Text>
+            <TouchableOpacity onPress={onClose} style={ddStyles.closeBtn}>
+              <Ionicons name="close" size={22} color="#666" />
+            </TouchableOpacity>
+          </View>
+
+          {data.length > 6 && (
+            <View style={ddStyles.searchWrap}>
+              <Ionicons name="search-outline" size={18} color="#999" />
+              <TextInput
+                style={ddStyles.searchInput}
+                placeholder={'Search ' + title.toLowerCase().replace('select ', '') + '...'}
+                placeholderTextColor="#aaa"
+                value={search}
+                onChangeText={setSearch}
+                autoCorrect={false}
+              />
+              {search.length > 0 && (
+                <TouchableOpacity onPress={() => setSearch('')}>
+                  <Ionicons name="close-circle" size={18} color="#ccc" />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item}
+            renderItem={({ item }) => {
+              const isSelected = item === selected;
+              return (
+                <TouchableOpacity
+                  style={[ddStyles.item, isSelected && ddStyles.itemSelected]}
+                  onPress={() => {
+                    onSelect(item);
+                    onClose();
+                  }}
+                >
+                  <Text style={[ddStyles.itemText, isSelected && ddStyles.itemTextSelected]}>{item}</Text>
+                  {isSelected && <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />}
+                </TouchableOpacity>
+              );
+            }}
+            ListEmptyComponent={
+              <View style={{ padding: 32, alignItems: 'center' }}>
+                <Text style={{ color: '#aaa', fontSize: 14 }}>No results found</Text>
+              </View>
+            }
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const ProfileField = ({
+  icon,
+  label,
+  value,
+  isEditing,
+  onChangeText,
+  keyboardType = 'default',
+  placeholder = '',
+  maxLength,
+  multiline = false,
+  readOnly = false,
+  secureTextEntry = false,
+  autoCapitalize = 'none',
+}) => (
+  <View style={styles.formField}>
+    <Ionicons
+      name={icon}
+      size={18}
+      color={isEditing && !readOnly ? '#1B5E20' : '#999'}
+      style={{ marginRight: 10, marginTop: 2 }}
+    />
+    <View style={{ flex: 1 }}>
+      <Text style={[styles.fieldLabel, isEditing && !readOnly && styles.fieldLabelActive]}>
+        {label}
+        {readOnly && <Text style={{ color: '#ccc', fontSize: 10 }}>  (read-only)</Text>}
+      </Text>
+      {isEditing && !readOnly ? (
+        <TextInput
+          style={[styles.input, multiline && { minHeight: 52, textAlignVertical: 'top' }]}
+          value={value}
+          onChangeText={onChangeText}
+          keyboardType={keyboardType}
+          placeholder={placeholder}
+          placeholderTextColor="#bbb"
+          maxLength={maxLength}
+          multiline={multiline}
+          autoCorrect={false}
+          secureTextEntry={secureTextEntry}
+          autoCapitalize={autoCapitalize}
+        />
+      ) : (
+        <Text style={styles.fieldValue}>{value || '\u2014'}</Text>
+      )}
+    </View>
+  </View>
+);
 
 const FarmerProfile = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { authState, clearSession } = useAuth();
 
   const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [profileImage, setProfileImage] = useState('');
 
-  // Form state
   const [form, setForm] = useState({
     full_name: '',
+    username: '',
+    email: '',
     phone: '',
     farm_name: '',
+    global_farmer_id: '',
     address_line: '',
     city: '',
     state: '',
@@ -86,145 +246,149 @@ const FarmerProfile = ({ navigation }) => {
     account_number: '',
     ifsc_code: '',
     bank_name: '',
-    global_farmer_id: '',
-    profile_image: '',
   });
 
-  const [showStatePicker, setShowStatePicker] = useState(false);
-  const [showDistrictPicker, setShowDistrictPicker] = useState(false);
-  const [showZonePicker, setShowZonePicker] = useState(false);
+  const [stateModalVisible, setStateModalVisible] = useState(false);
+  const [districtModalVisible, setDistrictModalVisible] = useState(false);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
   const toastRef = useRef(null);
 
-  const states = Object.keys(SOUTH_INDIAN_STATES);
-  const districts = form.state ? SOUTH_INDIAN_STATES[form.state] || [] : [];
+  const availableDistricts = DISTRICTS_BY_STATE[form.state] || [];
 
-  const fetchProfile = useCallback(async () => {
+  const populateForm = useCallback((raw) => {
+    const userNested = raw?.user || {};
+    const d = { ...userNested, ...raw };
+
+    setForm({
+      full_name: d.full_name || d.name || userNested.full_name || '',
+      username: d.username || d.user_name || userNested.username || '',
+      email: d.email || userNested.email || '',
+      phone: d.phone || d.mobile || d.mobile_number || userNested.phone || '',
+      farm_name: d.farm_name || userNested.farm_name || '',
+      global_farmer_id: d.global_farmer_id || d.farmer_id || userNested.global_farmer_id || '',
+      address_line: d.address_line || d.address || userNested.address_line || userNested.address || '',
+      city: d.city || userNested.city || '',
+      state: d.state || userNested.state || '',
+      district: d.district || userNested.district || '',
+      pincode: String(d.pincode || d.zip_code || userNested.pincode || ''),
+      zone: d.zone || userNested.zone || '',
+      account_number: d.account_number || userNested.account_number || '',
+      ifsc_code: d.ifsc_code || userNested.ifsc_code || '',
+      bank_name: d.bank_name || userNested.bank_name || '',
+    });
+
+    setProfileImage(
+      d.image_url || d.profile_image || d.profileImage || d.avatar || d.image
+      || userNested.image_url || userNested.profile_image || '',
+    );
+  }, []);
+
+  const fetchProfile = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
+
     try {
       const { data } = await api.get('/farmers/me');
+      const raw = data?.farmer || data?.data?.farmer || data?.data || data?.user || data?.profile || data;
 
-      /*
-       * Unwrap the actual payload:
-       *   { farmer: {...} }
-       *   { data: { farmer: {...} } }
-       *   { data: {...} }
-       *   { user: {...} }
-       *   {...}  (flat)
-       */
-      const raw =
-        data?.farmer      ||
-        data?.data?.farmer ||
-        data?.data        ||
-        data?.user        ||
-        data?.profile     ||
-        data              ||
-        {};
-
-      /*
-       * Some backends nest personal fields under raw.user
-       * while keeping farmer-specific fields at the top level.
-       * Merge so every field is reachable directly.
-       */
-      const userNested = raw?.user || {};
-      const p = { ...userNested, ...raw };
-
-      setProfile(p);
-      setForm({
-        full_name:        p.full_name       || p.name             || userNested.full_name  || '',
-        phone:            p.phone           || p.mobile           || p.mobile_number       || userNested.phone || '',
-        farm_name:        p.farm_name       || '',
-        address_line:     p.address_line    || p.address          || userNested.address_line || userNested.address || '',
-        city:             p.city            || userNested.city    || '',
-        state:            p.state           || userNested.state   || '',
-        district:         p.district        || userNested.district || '',
-        pincode:          String(p.pincode  || p.zip_code         || userNested.pincode || ''),
-        zone:             p.zone            || userNested.zone    || '',
-        account_number:   p.account_number  || '',
-        ifsc_code:        p.ifsc_code       || '',
-        bank_name:        p.bank_name       || '',
-        global_farmer_id: p.global_farmer_id || p.farmer_id      || '',
-        profile_image:    p.profile_image   || p.avatar          || p.image_url || userNested.profile_image || userNested.image_url || '',
-      });
-    } catch (e) {
-      console.error('Profile fetch error:', e?.message || e);
-      // Fall back to whatever was saved at login time
-      const saved = authState?.user;
-      if (saved) {
-        setForm((prev) => ({
-          ...prev,
-          full_name:     prev.full_name     || saved.full_name  || saved.name  || '',
-          phone:         prev.phone         || saved.phone      || saved.mobile_number || '',
-          address_line:  prev.address_line  || saved.address_line || saved.address || '',
-          city:          prev.city          || saved.city       || '',
-          state:         prev.state         || saved.state      || '',
-          district:      prev.district      || saved.district   || '',
-          pincode:       prev.pincode       || String(saved.pincode || ''),
-          zone:          prev.zone          || saved.zone       || '',
-          profile_image: prev.profile_image || saved.profile_image || saved.image_url || '',
-        }));
+      if (raw) {
+        setProfile(raw);
+        populateForm(raw);
       }
-      toastRef.current?.show('Could not load latest profile. Showing cached data.', 'warning');
+    } catch (e) {
+      console.log('Profile fetch error:', e?.message || e);
+      const cached = authState?.user;
+
+      if (cached && !silent) {
+        populateForm(cached);
+        toastRef.current?.show('Showing cached profile. Pull down to refresh.', 'warning');
+      }
     } finally {
-      setLoading(false);
+      setIsLoading(false);
       setRefreshing(false);
     }
-  }, [authState?.user]);
+  }, [authState?.user, populateForm]);
 
-  useEffect(() => { fetchProfile(); }, []);
-
-  const onRefresh = () => { setRefreshing(true); fetchProfile(); };
-
-  const updateForm = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   const handleImagePick = () => {
+    if (!isEditing) return;
     setPhotoPickerVisible(true);
   };
 
   const uploadProfileImage = async (uri) => {
-    setUploadingImage(true);
+    setIsUploading(true);
     try {
       const url = await uploadImageToCloudinary(uri);
       if (url) {
-        updateForm('profile_image', url);
-        // Save immediately
-        await api.put('/farmers/me', { image_url: url });
-        setProfile((prev) => ({ ...prev, image_url: url, profile_image: url }));
+        setProfileImage(url);
+        toastRef.current?.show('Photo uploaded successfully', 'success');
       } else {
-        toastRef.current?.show('Failed to upload image', 'error');
+        toastRef.current?.show('Failed to upload image. Please try again.', 'error');
       }
-    } catch (e) {
-      toastRef.current?.show(e.message || 'Upload failed', 'error');
+    } catch (_e) {
+      toastRef.current?.show('Image upload failed.', 'error');
     } finally {
-      setUploadingImage(false);
+      setIsUploading(false);
     }
   };
 
   const handleSave = async () => {
     if (!form.full_name.trim()) {
-      toastRef.current?.show('Full name is required', 'warning');
+      toastRef.current?.show('Full name is required.', 'warning');
       return;
     }
-    setSaving(true);
+
+    if (form.phone && !/^\d{10}$/.test(form.phone.replace(/\D/g, ''))) {
+      toastRef.current?.show('Please enter a valid 10-digit phone number.', 'warning');
+      return;
+    }
+
+    if (form.pincode && !/^\d{6}$/.test(form.pincode)) {
+      toastRef.current?.show('Please enter a valid 6-digit pincode.', 'warning');
+      return;
+    }
+
+    setIsSaving(true);
+
+    const payload = {
+      name: form.full_name.trim(),
+      mobile_number: form.phone.trim(),
+      farm_name: form.farm_name.trim(),
+      address: form.address_line.trim(),
+      city: form.city.trim(),
+      state: form.state,
+      district: form.district,
+      pincode: form.pincode.trim(),
+      zone: form.zone.trim(),
+      account_number: form.account_number.trim(),
+      ifsc_code: form.ifsc_code.trim().toUpperCase(),
+      bank_name: form.bank_name.trim(),
+      image_url: profileImage,
+    };
+
     try {
-      const payload = {
-        name: form.full_name.trim(),
-        mobile_number: form.phone.trim(),
-        address: form.address_line.trim(),
-        state: form.state,
-        district: form.district,
-        zone: form.zone,
-        account_number: form.account_number.trim(),
-        ifsc_code: form.ifsc_code.trim(),
-      };
       await api.put('/farmers/me', payload);
       setProfile((prev) => ({ ...prev, ...payload }));
-      setEditMode(false);
-      toastRef.current?.show('Profile updated successfully', 'success');
+      setIsEditing(false);
+      toastRef.current?.show('Profile updated successfully!', 'success');
     } catch (e) {
-      toastRef.current?.show(e.message || 'Failed to update profile', 'error');
+      toastRef.current?.show(e?.message || 'Failed to update profile.', 'error');
     } finally {
-      setSaving(false);
+      setIsSaving(false);
+    }
+  };
+
+  const handleStateChange = (value) => {
+    setForm((prev) => ({ ...prev, state: value, district: '' }));
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    if (profile) {
+      populateForm(profile);
     }
   };
 
@@ -232,354 +396,459 @@ const FarmerProfile = ({ navigation }) => {
 
   const confirmLogout = async () => {
     setLogoutModalVisible(false);
-    try { await clearSession(); } catch (e) { console.log('Logout error:', e.message); }
+    try {
+      await clearSession();
+    } catch (e) {
+      console.log('Logout error:', e?.message || e);
+    }
   };
 
   const menuItems = [
-    { label: 'FHE Encryption', icon: 'shield-checkmark-outline', onPress: () => navigation.navigate('FHEEncryption') },
-    { label: 'Edit Products', icon: 'cube-outline', onPress: () => navigation.navigate('EditProduct') },
-    { label: 'Contact Admin', icon: 'mail-outline', onPress: () => navigation.navigate('ContactAdmin') },
-    { label: 'Selling History', icon: 'time-outline', onPress: () => navigation.navigate('History') },
-    { label: 'FAQ', icon: 'help-circle-outline', onPress: () => navigation.navigate('FAQ') },
-    { label: 'Help & Support', icon: 'headset-outline', onPress: () => navigation.navigate('HelpSupport') },
-    { label: 'Feedback', icon: 'chatbubble-ellipses-outline', onPress: () => navigation.navigate('Feedback') },
-    { label: 'App Info', icon: 'information-circle-outline', onPress: () => navigation.navigate('AppInfo') },
+    { icon: 'shield-checkmark-outline', label: 'FHE Encryption', color: '#1B5E20', bg: '#E8F5E9', onPress: () => navigation.navigate('FHEEncryption') },
+    { icon: 'analytics-outline', label: 'Price Prediction', color: '#2E7D32', bg: '#E0F2F1', onPress: () => navigation.navigate('PricePrediction') },
+    { icon: 'cube-outline', label: 'Edit Products', color: '#1565C0', bg: '#E3F2FD', onPress: () => navigation.navigate('EditProduct') },
+    { icon: 'time-outline', label: 'Selling History', color: '#E65100', bg: '#FFF3E0', onPress: () => navigation.navigate('History') },
+    { icon: 'mail-outline', label: 'Contact Admin', color: '#6A1B9A', bg: '#F3E5F5', onPress: () => navigation.navigate('ContactAdmin') },
+    { icon: 'help-circle-outline', label: 'FAQ', color: '#00695C', bg: '#E0F2F1', onPress: () => navigation.navigate('FAQ') },
+    { icon: 'headset-outline', label: 'Help & Support', color: '#37474F', bg: '#ECEFF1', onPress: () => navigation.navigate('HelpSupport') },
+    { icon: 'chatbubble-outline', label: 'Feedback', color: '#F57F17', bg: '#FFFDE7', onPress: () => navigation.navigate('Feedback') },
+    { icon: 'information-circle-outline', label: 'App Info', color: '#424242', bg: '#F5F5F5', onPress: () => navigation.navigate('AppInfo') },
   ];
 
-  const renderDropdown = (items, selected, onSelect, visible, setVisible, placeholder) => (
-    <>
-      <TouchableOpacity
-        style={styles.dropdown}
-        onPress={() => {
-          if (!editMode) return;
-          setShowStatePicker(false);
-          setShowDistrictPicker(false);
-          setShowZonePicker(false);
-          setVisible(!visible);
-        }}
-        activeOpacity={editMode ? 0.7 : 1}
-      >
-        <Text style={[styles.dropdownText, !selected && { color: '#999' }]}>
-          {selected || placeholder}
-        </Text>
-        {editMode && <Ionicons name={visible ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />}
-      </TouchableOpacity>
-      {visible && editMode && (
-        <View style={styles.dropdownList}>
-          <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }}>
-            {items.map((item) => (
-              <TouchableOpacity
-                key={item}
-                style={[styles.dropdownItem, selected === item && styles.dropdownItemActive]}
-                onPress={() => {
-                  onSelect(item);
-                  setVisible(false);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.dropdownItemText,
-                    selected === item && { color: '#1B5E20', fontWeight: '700' },
-                  ]}
-                >
-                  {item}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-    </>
-  );
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <View style={[styles.center, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar barStyle="light-content" backgroundColor="#103A12" />
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <View style={styles.headerBar}>
+          <Text style={styles.headerTitle}>Farmer Profile</Text>
+        </View>
+        <View style={styles.skeletonHeader}>
+          <ShimmerBlock width={100} height={100} borderRadius={50} />
+          <ShimmerBlock width={180} height={18} style={{ marginTop: 14 }} />
+          <ShimmerBlock width={210} height={13} style={{ marginTop: 8 }} />
+          <ShimmerBlock width={92} height={24} borderRadius={12} style={{ marginTop: 10 }} />
+        </View>
+        <View style={{ padding: 16, gap: 12 }}>
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <ShimmerBlock key={i} width="100%" height={52} borderRadius={12} />
+          ))}
+        </View>
       </View>
     );
   }
 
-  const avatarUrl = form.profile_image
-    ? optimizeImageUrl(form.profile_image, { width: 200 })
-    : null;
+  const displayName = form.full_name || form.username || 'Farmer';
+  const displayEmail = form.email || profile?.email || authState?.user?.email || 'No email';
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'F';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}> 
       <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4CAF50']} />}
-          contentContainerStyle={{ paddingBottom: 30 }}
-          keyboardShouldPersistTaps="handled"
+      <View style={styles.headerBar}>
+        <TouchableOpacity
+          onPress={() => navigation.canGoBack() && navigation.goBack()}
+          style={styles.headerBackBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          {/* Profile Header */}
-          <LinearGradient
-            colors={['#103A12', '#1B5E20', '#2E7D32']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.profileHeader, { paddingTop: insets.top + 16 }]}
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Farmer Profile</Text>
+        <TouchableOpacity
+          onPress={() => (isEditing ? handleCancelEdit() : setIsEditing(true))}
+          style={[styles.editToggleBtn, isEditing && styles.editToggleBtnActive]}
+        >
+          <Ionicons name={isEditing ? 'close' : 'create-outline'} size={20} color={isEditing ? '#EF5350' : '#fff'} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              fetchProfile(true);
+            }}
+            colors={['#1B5E20']}
+            tintColor="#1B5E20"
+          />
+        }
+      >
+        <LinearGradient
+          colors={['#103A12', '#1B5E20', '#2E7D32']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.profileHeaderBg}
+        >
+          <TouchableOpacity
+            onPress={isEditing ? handleImagePick : null}
+            activeOpacity={isEditing ? 0.7 : 1}
+            style={styles.avatarWrapper}
           >
-            <View style={styles.headerBlob1} />
-            <View style={styles.headerBlob2} />
-            <TouchableOpacity
-              style={styles.avatarContainer}
-              onPress={handleImagePick}
-              disabled={uploadingImage}
-            >
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Ionicons name="person" size={44} color="#fff" />
-                </View>
-              )}
-              {uploadingImage ? (
-                <View style={styles.avatarOverlay}>
+            {profileImage ? (
+              <Image
+                source={{ uri: optimizeImageUrl(profileImage, { width: 200 }) }}
+                style={styles.avatar}
+              />
+            ) : (
+              <View style={styles.avatarFallback}>
+                <Text style={styles.avatarInitial}>{initials}</Text>
+              </View>
+            )}
+            {isEditing && (
+              <View style={styles.cameraOverlay}>
+                {isUploading ? (
                   <ActivityIndicator size="small" color="#fff" />
-                </View>
+                ) : (
+                  <Ionicons name="camera" size={18} color="#fff" />
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <Text style={styles.profileName}>{displayName}</Text>
+          <Text style={styles.profileEmail}>{displayEmail}</Text>
+
+          <View style={styles.roleBadge}>
+            <MaterialCommunityIcons name="sprout" size={13} color="#fff" />
+            <Text style={styles.roleBadgeText}>Farmer</Text>
+          </View>
+        </LinearGradient>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="person-circle-outline" size={20} color="#1B5E20" />
+            <Text style={styles.cardHeaderText}>Personal Information</Text>
+          </View>
+
+          <ProfileField
+            icon="person-outline"
+            label="Full Name"
+            value={form.full_name}
+            isEditing={isEditing}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, full_name: value }))}
+            placeholder="Enter full name"
+            autoCapitalize="words"
+          />
+
+          <ProfileField
+            icon="mail-outline"
+            label="Email"
+            value={displayEmail}
+            isEditing={false}
+            readOnly
+          />
+
+          <ProfileField
+            icon="call-outline"
+            label="Phone"
+            value={form.phone}
+            isEditing={isEditing}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, phone: value.replace(/\D/g, '') }))}
+            keyboardType="phone-pad"
+            placeholder="Enter 10-digit phone number"
+            maxLength={10}
+          />
+
+          <ProfileField
+            icon="at-outline"
+            label="Username"
+            value={form.username || profile?.username || authState?.user?.username || ''}
+            isEditing={false}
+            readOnly
+          />
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <MaterialCommunityIcons name="barn" size={20} color="#1B5E20" />
+            <Text style={styles.cardHeaderText}>Farm Information</Text>
+          </View>
+
+          <ProfileField
+            icon="leaf-outline"
+            label="Farm Name"
+            value={form.farm_name}
+            isEditing={isEditing}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, farm_name: value }))}
+            placeholder="Enter farm name"
+            autoCapitalize="words"
+          />
+
+          <ProfileField
+            icon="card-outline"
+            label="Global Farmer ID"
+            value={form.global_farmer_id}
+            isEditing={false}
+            readOnly
+          />
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="location-outline" size={20} color="#1B5E20" />
+            <Text style={styles.cardHeaderText}>Address Details</Text>
+          </View>
+
+          <ProfileField
+            icon="home-outline"
+            label="Address Line"
+            value={form.address_line}
+            isEditing={isEditing}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, address_line: value }))}
+            placeholder="Street address, building, etc."
+            multiline
+            autoCapitalize="sentences"
+          />
+
+          <ProfileField
+            icon="business-outline"
+            label="City"
+            value={form.city}
+            isEditing={isEditing}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, city: value }))}
+            placeholder="Enter city"
+            autoCapitalize="words"
+          />
+
+          <View style={styles.formField}>
+            <Ionicons name="map-outline" size={18} color="#888" style={{ marginRight: 10, marginTop: 2 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>State</Text>
+              {isEditing ? (
+                <TouchableOpacity style={styles.dropdownTrigger} onPress={() => setStateModalVisible(true)}>
+                  <Text style={[styles.dropdownText, !form.state && { color: '#aaa' }]}>{form.state || 'Select state'}</Text>
+                  <Ionicons name="chevron-down" size={18} color="#888" />
+                </TouchableOpacity>
               ) : (
-                <View style={styles.cameraIcon}>
-                  <Ionicons name="camera" size={16} color="#fff" />
-                </View>
+                <Text style={styles.fieldValue}>{form.state || '\u2014'}</Text>
               )}
-            </TouchableOpacity>
-
-            <Text style={styles.profileName}>{form.full_name || 'Farmer'}</Text>
-            <Text style={styles.profileEmail}>{profile?.email || authState?.user?.email || ''}</Text>
-            <View style={styles.roleBadge}>
-              <MaterialCommunityIcons name="sprout" size={14} color="#fff" />
-              <Text style={styles.roleBadgeText}>Farmer</Text>
             </View>
-          </LinearGradient>
+          </View>
 
-          {/* Edit Toggle */}
-          <View style={styles.editToggleRow}>
+          <View style={styles.formField}>
+            <Ionicons name="navigate-outline" size={18} color="#888" style={{ marginRight: 10, marginTop: 2 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>District</Text>
+              {isEditing ? (
+                <TouchableOpacity
+                  style={[styles.dropdownTrigger, !form.state && { opacity: 0.5 }]}
+                  onPress={() => {
+                    if (!form.state) {
+                      toastRef.current?.show('Please select a state first.', 'warning');
+                      return;
+                    }
+                    setDistrictModalVisible(true);
+                  }}
+                >
+                  <Text style={[styles.dropdownText, !form.district && { color: '#aaa' }]}>{form.district || 'Select district'}</Text>
+                  <Ionicons name="chevron-down" size={18} color="#888" />
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.fieldValue}>{form.district || '\u2014'}</Text>
+              )}
+            </View>
+          </View>
+
+          <ProfileField
+            icon="keypad-outline"
+            label="Pincode"
+            value={form.pincode}
+            isEditing={isEditing}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, pincode: value.replace(/\D/g, '') }))}
+            keyboardType="number-pad"
+            placeholder="6-digit pincode"
+            maxLength={6}
+          />
+
+          <ProfileField
+            icon="globe-outline"
+            label="Zone"
+            value={form.zone}
+            isEditing={isEditing}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, zone: value }))}
+            placeholder="Enter zone"
+            autoCapitalize="words"
+          />
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="card-outline" size={20} color="#1B5E20" />
+            <Text style={styles.cardHeaderText}>Bank Details</Text>
+          </View>
+
+          <ProfileField
+            icon="wallet-outline"
+            label="Account Number"
+            value={form.account_number}
+            isEditing={isEditing}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, account_number: value.replace(/\D/g, '') }))}
+            keyboardType="number-pad"
+            placeholder="Enter account number"
+            secureTextEntry={!isEditing && !!form.account_number}
+          />
+
+          <ProfileField
+            icon="code-outline"
+            label="IFSC Code"
+            value={form.ifsc_code}
+            isEditing={isEditing}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, ifsc_code: value.toUpperCase() }))}
+            placeholder="Enter IFSC code"
+            autoCapitalize="characters"
+          />
+
+          <ProfileField
+            icon="business-outline"
+            label="Bank Name"
+            value={form.bank_name}
+            isEditing={isEditing}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, bank_name: value }))}
+            placeholder="Enter bank name"
+            autoCapitalize="words"
+          />
+        </View>
+
+        {isEditing && (
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelEdit} disabled={isSaving} activeOpacity={0.7}>
+              <Ionicons name="close-outline" size={20} color="#888" />
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.editToggleBtn, editMode && styles.editToggleBtnActive]}
-              onPress={() => {
-                if (editMode) handleSave();
-                else setEditMode(true);
-              }}
-              disabled={saving}
+              style={[styles.saveBtn, isSaving && { opacity: 0.7 }]}
+              onPress={handleSave}
+              disabled={isSaving}
+              activeOpacity={0.8}
             >
-              {saving ? (
-                <ActivityIndicator size="small" color="#fff" />
+              {isSaving ? (
+                <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <>
-                  <Ionicons
-                    name={editMode ? 'checkmark-circle-outline' : 'create-outline'}
-                    size={18}
-                    color={editMode ? '#fff' : '#1B5E20'}
-                  />
-                  <Text
-                    style={[styles.editToggleText, editMode && { color: '#fff' }]}
-                  >
-                    {editMode ? 'Save Changes' : 'Edit Profile'}
-                  </Text>
+                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                  <Text style={styles.saveBtnText}>Save Changes</Text>
                 </>
               )}
             </TouchableOpacity>
-            {editMode && (
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => {
-                  setEditMode(false);
-                  fetchProfile();
-                }}
-              >
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-            )}
           </View>
+        )}
 
-          {/* Personal Info */}
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionTitleRow}>
-              <Ionicons name="person-outline" size={20} color="#1B5E20" />
-              <Text style={styles.sectionTitle}>Personal Information</Text>
-            </View>
-
-            <Text style={styles.fieldLabel}>Full Name</Text>
-            <TextInput
-              style={[styles.input, !editMode && styles.inputDisabled]}
-              value={form.full_name}
-              onChangeText={(v) => updateForm('full_name', v)}
-              editable={editMode}
-            />
-
-            <Text style={styles.fieldLabel}>Email</Text>
-            <TextInput
-              style={[styles.input, styles.inputDisabled]}
-              value={profile?.email || authState?.user?.email || ''}
-              editable={false}
-            />
-
-            <Text style={styles.fieldLabel}>Phone</Text>
-            <TextInput
-              style={[styles.input, !editMode && styles.inputDisabled]}
-              value={form.phone}
-              onChangeText={(v) => updateForm('phone', v)}
-              editable={editMode}
-              keyboardType="phone-pad"
-            />
-
-            <Text style={styles.fieldLabel}>Username</Text>
-            <TextInput
-              style={[styles.input, styles.inputDisabled]}
-              value={profile?.username || authState?.user?.username || ''}
-              editable={false}
-            />
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="grid-outline" size={20} color="#1B5E20" />
+            <Text style={styles.cardHeaderText}>Quick Links</Text>
           </View>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={item.label}
+              onPress={item.onPress}
+              style={[styles.menuItem, index < menuItems.length - 1 && styles.menuItemBorder]}
+              activeOpacity={0.6}
+            >
+              <View style={[styles.menuIconBox, { backgroundColor: item.bg }]}> 
+                <Ionicons name={item.icon} size={20} color={item.color} />
+              </View>
+              <Text style={styles.menuLabel}>{item.label}</Text>
+              <Ionicons name="chevron-forward" size={18} color="#bbb" />
+            </TouchableOpacity>
+          ))}
+        </View>
 
-          {/* Farm Info */}
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionTitleRow}>
-              <MaterialCommunityIcons name="barn" size={20} color="#1B5E20" />
-              <Text style={styles.sectionTitle}>Farm Information</Text>
-            </View>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
+          <Ionicons name="log-out-outline" size={20} color="#F44336" />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
 
-            <Text style={styles.fieldLabel}>Farm Name</Text>
-            <TextInput
-              style={[styles.input, !editMode && styles.inputDisabled]}
-              value={form.farm_name}
-              onChangeText={(v) => updateForm('farm_name', v)}
-              editable={editMode}
-            />
+        <Text style={styles.versionText}>FarmerCrate v1.0.0</Text>
+      </ScrollView>
 
-            <Text style={styles.fieldLabel}>Global Farmer ID</Text>
-            <TextInput
-              style={[styles.input, styles.inputDisabled]}
-              value={form.global_farmer_id}
-              editable={false}
-              placeholder="Assigned by admin"
-            />
+      <DropdownModal
+        visible={stateModalVisible}
+        title="Select State"
+        data={SOUTH_INDIAN_STATES}
+        selected={form.state}
+        onSelect={handleStateChange}
+        onClose={() => setStateModalVisible(false)}
+      />
+      <DropdownModal
+        visible={districtModalVisible}
+        title="Select District"
+        data={availableDistricts}
+        selected={form.district}
+        onSelect={(value) => setForm((prev) => ({ ...prev, district: value }))}
+        onClose={() => setDistrictModalVisible(false)}
+      />
+      <ToastMessage ref={toastRef} />
 
-            <Text style={styles.fieldLabel}>Address Line</Text>
-            <TextInput
-              style={[styles.input, !editMode && styles.inputDisabled]}
-              value={form.address_line}
-              onChangeText={(v) => updateForm('address_line', v)}
-              editable={editMode}
-            />
-
-            <Text style={styles.fieldLabel}>City</Text>
-            <TextInput
-              style={[styles.input, !editMode && styles.inputDisabled]}
-              value={form.city}
-              onChangeText={(v) => updateForm('city', v)}
-              editable={editMode}
-            />
-
-            <Text style={styles.fieldLabel}>State</Text>
-            {renderDropdown(
-              states,
-              form.state,
-              (v) => {
-                updateForm('state', v);
-                updateForm('district', '');
-              },
-              showStatePicker,
-              setShowStatePicker,
-              'Select state'
-            )}
-
-            <Text style={styles.fieldLabel}>District</Text>
-            {renderDropdown(
-              districts,
-              form.district,
-              (v) => updateForm('district', v),
-              showDistrictPicker,
-              setShowDistrictPicker,
-              form.state ? 'Select district' : 'Select state first'
-            )}
-
-            <Text style={styles.fieldLabel}>Pincode</Text>
-            <TextInput
-              style={[styles.input, !editMode && styles.inputDisabled]}
-              value={form.pincode}
-              onChangeText={(v) => updateForm('pincode', v)}
-              editable={editMode}
-              keyboardType="numeric"
-              maxLength={6}
-            />
-
-            <Text style={styles.fieldLabel}>Zone</Text>
-            {renderDropdown(
-              ZONES,
-              form.zone,
-              (v) => updateForm('zone', v),
-              showZonePicker,
-              setShowZonePicker,
-              'Select zone'
-            )}
+      <Modal
+        visible={photoPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPhotoPickerVisible(false)}
+      >
+        <TouchableOpacity style={ppStyles.overlay} activeOpacity={1} onPress={() => setPhotoPickerVisible(false)}>
+          <View style={ppStyles.sheet}>
+            <View style={ppStyles.handle} />
+            <Text style={ppStyles.title}>Update Profile Photo</Text>
+            <Text style={ppStyles.subtitle}>Choose image source</Text>
+            <TouchableOpacity
+              style={ppStyles.option}
+              onPress={async () => {
+                setPhotoPickerVisible(false);
+                setTimeout(async () => {
+                  const uri = await pickImage(true);
+                  if (uri) uploadProfileImage(uri);
+                }, 300);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[ppStyles.optionIcon, { backgroundColor: '#E3F2FD' }]}> 
+                <Ionicons name="camera" size={26} color="#1565C0" />
+              </View>
+              <View style={ppStyles.optionText}>
+                <Text style={ppStyles.optionLabel}>Camera</Text>
+                <Text style={ppStyles.optionSub}>Take a new photo</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            </TouchableOpacity>
+            <View style={ppStyles.divider} />
+            <TouchableOpacity
+              style={ppStyles.option}
+              onPress={async () => {
+                setPhotoPickerVisible(false);
+                setTimeout(async () => {
+                  const uri = await pickImage(false);
+                  if (uri) uploadProfileImage(uri);
+                }, 300);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[ppStyles.optionIcon, { backgroundColor: '#E8F5E9' }]}> 
+                <Ionicons name="images" size={26} color="#1B5E20" />
+              </View>
+              <View style={ppStyles.optionText}>
+                <Text style={ppStyles.optionLabel}>Photo Gallery</Text>
+                <Text style={ppStyles.optionSub}>Choose from your gallery</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            </TouchableOpacity>
+            <TouchableOpacity style={ppStyles.cancelBtn} onPress={() => setPhotoPickerVisible(false)} activeOpacity={0.7}>
+              <Text style={ppStyles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
+        </TouchableOpacity>
+      </Modal>
 
-          {/* Bank Details */}
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionTitleRow}>
-              <Ionicons name="card-outline" size={20} color="#1B5E20" />
-              <Text style={styles.sectionTitle}>Bank Details</Text>
-            </View>
-
-            <Text style={styles.fieldLabel}>Account Number</Text>
-            <TextInput
-              style={[styles.input, !editMode && styles.inputDisabled]}
-              value={form.account_number}
-              onChangeText={(v) => updateForm('account_number', v)}
-              editable={editMode}
-              keyboardType="numeric"
-              secureTextEntry={!editMode}
-            />
-
-            <Text style={styles.fieldLabel}>IFSC Code</Text>
-            <TextInput
-              style={[styles.input, !editMode && styles.inputDisabled]}
-              value={form.ifsc_code}
-              onChangeText={(v) => updateForm('ifsc_code', v.toUpperCase())}
-              editable={editMode}
-              autoCapitalize="characters"
-            />
-
-            <Text style={styles.fieldLabel}>Bank Name</Text>
-            <TextInput
-              style={[styles.input, !editMode && styles.inputDisabled]}
-              value={form.bank_name}
-              onChangeText={(v) => updateForm('bank_name', v)}
-              editable={editMode}
-            />
-          </View>
-
-          {/* Menu Items */}
-          <View style={styles.sectionCard}>
-            {menuItems.map((item, idx) => (
-              <TouchableOpacity
-                key={idx}
-                style={[styles.menuItem, idx < menuItems.length - 1 && styles.menuItemBorder]}
-                onPress={item.onPress}
-                activeOpacity={0.7}
-              >
-                <View style={styles.menuLeft}>
-                  <Ionicons name={item.icon} size={22} color="#1B5E20" />
-                  <Text style={styles.menuLabel}>{item.label}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#ccc" />
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Logout */}
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
-            <Ionicons name="log-out-outline" size={22} color="#F44336" />
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* ─── Logout Confirmation Modal ─── */}
       <Modal
         visible={logoutModalVisible}
         transparent
@@ -592,138 +861,138 @@ const FarmerProfile = ({ navigation }) => {
               <Ionicons name="log-out-outline" size={36} color="#fff" />
             </View>
             <Text style={styles.logoutModalTitle}>Sign Out</Text>
-            <Text style={styles.logoutModalMsg}>
-              Are you sure you want to sign out from your account?
-            </Text>
+            <Text style={styles.logoutModalMsg}>Are you sure you want to sign out from your account?</Text>
             <View style={styles.logoutModalBtns}>
-              <TouchableOpacity
-                style={styles.logoutCancelBtn}
-                onPress={() => setLogoutModalVisible(false)}
-              >
+              <TouchableOpacity style={styles.logoutCancelBtn} onPress={() => setLogoutModalVisible(false)} activeOpacity={0.8}>
                 <Text style={styles.logoutCancelText}>Stay</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.logoutConfirmBtn}
-                onPress={confirmLogout}
-              >
-                <Ionicons name="log-out-outline" size={16} color="#fff" />
+              <TouchableOpacity style={styles.logoutConfirmBtn} onPress={confirmLogout} activeOpacity={0.8}>
+                <Ionicons name="log-out-outline" size={16} color="#fff" style={{ marginRight: 5 }} />
                 <Text style={styles.logoutConfirmText}>Sign Out</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-      <ToastMessage ref={toastRef} />
-
-      {/* ── Photo Picker Modal ── */}
-      <Modal visible={photoPickerVisible} transparent animationType="slide" onRequestClose={() => setPhotoPickerVisible(false)}>
-        <TouchableOpacity style={fpStyles.overlay} activeOpacity={1} onPress={() => setPhotoPickerVisible(false)}>
-          <View style={fpStyles.sheet}>
-            <View style={fpStyles.handle} />
-            <Text style={fpStyles.sheetTitle}>Profile Photo</Text>
-            <TouchableOpacity
-              style={fpStyles.optionBtn}
-              onPress={() => {
-                setPhotoPickerVisible(false);
-                setTimeout(async () => {
-                  const uri = await pickImage(true);
-                  if (uri) uploadProfileImage(uri);
-                }, 300);
-              }}
-            >
-              <View style={[fpStyles.optionIcon, { backgroundColor: '#E8F5E9' }]}>
-                <Ionicons name="camera-outline" size={24} color="#388E3C" />
-              </View>
-              <Text style={fpStyles.optionText}>Take Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={fpStyles.optionBtn}
-              onPress={() => {
-                setPhotoPickerVisible(false);
-                setTimeout(async () => {
-                  const uri = await pickImage(false);
-                  if (uri) uploadProfileImage(uri);
-                }, 300);
-              }}
-            >
-              <View style={[fpStyles.optionIcon, { backgroundColor: '#E3F2FD' }]}>
-                <Ionicons name="image-outline" size={24} color="#1976D2" />
-              </View>
-              <Text style={fpStyles.optionText}>Choose from Gallery</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={fpStyles.cancelBtn} onPress={() => setPhotoPickerVisible(false)} activeOpacity={0.7}>
-              <Text style={fpStyles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 };
 
-export default FarmerProfile;
-
-const fpStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: {
+const ddStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  container: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 32,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
-  handle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: '#DDD', alignSelf: 'center', marginBottom: 16,
+  headerTitle: { fontSize: 17, fontWeight: '800', color: '#333' },
+  closeBtn: { padding: 4 },
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F4F8F4',
+    borderRadius: 10,
+    marginHorizontal: 16,
+    marginVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 4,
+    gap: 8,
   },
-  sheetTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A', marginBottom: 16 },
-  optionBtn: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
+  searchInput: { flex: 1, fontSize: 14, color: '#333' },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#f0f0f0',
   },
-  optionIcon: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
-  optionText: { fontSize: 15, color: '#333', fontWeight: '500' },
-  cancelBtn: {
-    marginTop: 12, paddingVertical: 14, borderRadius: 14,
-    backgroundColor: '#E8F5E9', alignItems: 'center',
-  },
-  cancelText: { fontSize: 15, color: '#666', fontWeight: '600' },
+  itemSelected: { backgroundColor: '#E8F5E9' },
+  itemText: { fontSize: 15, color: '#333' },
+  itemTextSelected: { color: '#1B5E20', fontWeight: '600' },
 });
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F8F4' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  /* Profile Header */
-  profileHeader: {
+  headerBar: {
+    backgroundColor: '#103A12',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    ...Platform.select({
+      android: { elevation: 6 },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.18,
+        shadowRadius: 6,
+      },
+    }),
+  },
+  headerBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+    flex: 1,
+    textAlign: 'center',
+  },
+  editToggleBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editToggleBtnActive: {
+    backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+
+  profileHeaderBg: {
+    alignItems: 'center',
+    paddingTop: 10,
     paddingBottom: 30,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
     overflow: 'hidden',
   },
-  headerBlob1: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    top: -80,
-    right: -50,
+
+  avatarWrapper: { position: 'relative', marginBottom: 14 },
+  avatar: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    borderWidth: 3,
+    borderColor: '#fff',
   },
-  headerBlob2: {
-    position: 'absolute',
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: 'rgba(0,0,0,0.07)',
-    bottom: -20,
-    left: -20,
-  },
-  avatarContainer: { position: 'relative', marginBottom: 14 },
-  avatar: { width: 104, height: 104, borderRadius: 52, borderWidth: 3, borderColor: '#fff' },
-  avatarPlaceholder: {
+  avatarFallback: {
     width: 104,
     height: 104,
     borderRadius: 52,
@@ -733,160 +1002,302 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.6)',
   },
-  avatarOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    borderRadius: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cameraIcon: {
+  avatarInitial: { fontSize: 36, fontWeight: '800', color: '#fff' },
+  cameraOverlay: {
     position: 'absolute',
     bottom: 2,
     right: 2,
-    backgroundColor: '#4CAF50',
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    backgroundColor: '#388E3C',
+    borderRadius: 16,
+    width: 32,
+    height: 32,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#fff',
   },
-  profileName: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 0.2 },
-  profileEmail: { color: 'rgba(255,255,255,0.8)', fontSize: 14, marginTop: 4 },
+
+  profileName: { fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+  profileEmail: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 3 },
+
   roleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
     backgroundColor: 'rgba(255,255,255,0.18)',
     paddingHorizontal: 14,
     paddingVertical: 5,
     borderRadius: 20,
     marginTop: 10,
   },
-  roleBadgeText: { color: '#fff', fontSize: 13, fontWeight: '700', marginLeft: 6 },
+  roleBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
 
-  /* Edit Toggle */
-  editToggleRow: { flexDirection: 'row', paddingHorizontal: 16, marginTop: 16, gap: 10 },
-  editToggleBtn: {
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    marginHorizontal: 14,
+    marginTop: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1B5E20',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 7,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  cardHeaderText: { fontSize: 15, fontWeight: '800', color: '#1A1A1A', flex: 1 },
+
+  formField: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  fieldLabel: {
+    fontSize: 11,
+    color: '#999',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  fieldLabelActive: { color: '#1B5E20' },
+  fieldValue: { fontSize: 14, color: '#1A1A1A', marginTop: 4 },
+  input: {
+    fontSize: 14,
+    color: '#1A1A1A',
+    backgroundColor: '#F4F8F4',
+    borderWidth: 1.5,
+    borderColor: '#C8E6C9',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 11 : 8,
+    marginTop: 5,
+  },
+
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F4F8F4',
+    borderWidth: 1.5,
+    borderColor: '#C8E6C9',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 11 : 8,
+    marginTop: 5,
+  },
+  dropdownText: { fontSize: 14, color: '#1A1A1A' },
+
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginHorizontal: 14,
+    marginTop: 16,
+  },
+  cancelBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 13,
-    borderRadius: 14,
-    backgroundColor: '#E8F5E9',
     gap: 6,
-  },
-  editToggleBtnActive: { backgroundColor: '#2E7D32' },
-  editToggleText: { fontSize: 15, fontWeight: '700', color: '#1B5E20' },
-  cancelBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 13,
+    backgroundColor: '#E8F5E9',
     borderRadius: 14,
-    backgroundColor: '#FFEBEE',
-    justifyContent: 'center',
-  },
-  cancelText: { color: '#F44336', fontWeight: '700' },
-
-  /* Section Card */
-  sectionCard: {
-    margin: 16,
-    marginBottom: 0,
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 18,
-    elevation: 4,
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-  },
-  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 8 },
-  sectionTitle: { fontSize: 17, fontWeight: '800', color: '#1B5E20', borderLeftWidth: 4, borderLeftColor: '#4CAF50', paddingLeft: 10 },
-
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginTop: 12, marginBottom: 5 },
-  input: {
-    backgroundColor: '#F4F8F4',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#1A1A1A',
-    borderWidth: 1.5,
+    paddingVertical: 15,
+    borderWidth: 1,
     borderColor: '#C8E6C9',
   },
-  inputDisabled: { backgroundColor: '#F0F4F0', color: '#888', borderColor: '#E0E0E0' },
-
-  dropdown: {
-    backgroundColor: '#F4F8F4',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    borderWidth: 1.5,
-    borderColor: '#C8E6C9',
+  cancelBtnText: { color: '#777', fontWeight: '700', fontSize: 15 },
+  saveBtn: {
+    flex: 2,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#1B5E20',
+    borderRadius: 14,
+    paddingVertical: 15,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1B5E20',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 8,
+      },
+      android: { elevation: 5 },
+    }),
   },
-  dropdownText: { fontSize: 15, color: '#1A1A1A' },
-  dropdownList: {
-    backgroundColor: '#fff',
-    borderWidth: 1.5,
-    borderColor: '#C8E6C9',
-    borderRadius: 12,
-    marginTop: 4,
-    overflow: 'hidden',
-  },
-  dropdownItem: {
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#F0F0F0',
-  },
-  dropdownItemActive: { backgroundColor: '#E8F5E9' },
-  dropdownItemText: { fontSize: 15, color: '#333' },
+  saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 
-  /* Menu */
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingVertical: 14,
   },
-  menuItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  menuLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  menuLabel: { fontSize: 15, color: '#1A1A1A', fontWeight: '600' },
+  menuItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  menuIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  menuLabel: { flex: 1, fontSize: 15, color: '#1A1A1A', fontWeight: '600' },
 
-  /* Logout */
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    margin: 16,
-    paddingVertical: 14,
-    backgroundColor: '#fff',
+    gap: 8,
+    backgroundColor: '#FFF3F3',
+    marginHorizontal: 14,
+    marginTop: 16,
     borderRadius: 16,
+    paddingVertical: 15,
     borderWidth: 1.5,
     borderColor: '#FFCDD2',
-    gap: 8,
-    shadowColor: '#F44336',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  logoutText: { color: '#F44336', fontSize: 16, fontWeight: '800' },
+  logoutText: { fontSize: 15, fontWeight: '700', color: '#F44336' },
 
-  // Logout Modal
-  logoutOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
-  logoutModal: { width: '82%', backgroundColor: '#fff', borderRadius: 24, padding: 28, alignItems: 'center', elevation: 16, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 16 },
-  logoutIconCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#E53935', alignItems: 'center', justifyContent: 'center', marginBottom: 16, shadowColor: '#E53935', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 8 },
-  logoutModalTitle: { fontSize: 20, fontWeight: '800', color: '#1A1A1A', marginBottom: 8 },
-  logoutModalMsg: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  logoutModalBtns: { flexDirection: 'row', width: '100%', gap: 12 },
-  logoutCancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: '#E8F5E9', alignItems: 'center' },
-  logoutCancelText: { fontSize: 15, color: '#555', fontWeight: '700' },
-  logoutConfirmBtn: { flex: 1.5, paddingVertical: 13, borderRadius: 14, backgroundColor: '#E53935', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, elevation: 4, shadowColor: '#E53935', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4 },
-  logoutConfirmText: { fontSize: 15, color: '#fff', fontWeight: '800' },
+  logoutOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  logoutModal: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    width: '100%',
+    shadowColor: '#1B5E20',
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 16,
+  },
+  logoutIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#F44336',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 18,
+    shadowColor: '#F44336',
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  logoutModalTitle: { fontSize: 22, fontWeight: '800', color: '#212121', marginBottom: 8 },
+  logoutModalMsg: { fontSize: 14, color: '#757575', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  logoutModalBtns: { flexDirection: 'row', gap: 12, width: '100%' },
+  logoutCancelBtn: {
+    flex: 1,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  logoutCancelText: { fontSize: 15, fontWeight: '700', color: '#424242' },
+  logoutConfirmBtn: {
+    flex: 1.5,
+    backgroundColor: '#F44336',
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#F44336',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  logoutConfirmText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  versionText: {
+    textAlign: 'center',
+    color: '#aaa',
+    fontSize: 12,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+
+  skeletonHeader: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    backgroundColor: '#1B5E20',
+  },
 });
+
+const ppStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E0E0E0',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  title: { fontSize: 19, fontWeight: '800', color: '#212121', marginBottom: 4 },
+  subtitle: { fontSize: 13, color: '#9E9E9E', marginBottom: 20 },
+  option: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
+  optionIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  optionText: { flex: 1 },
+  optionLabel: { fontSize: 16, fontWeight: '800', color: '#212121' },
+  optionSub: { fontSize: 12, color: '#9E9E9E', marginTop: 2 },
+  divider: { height: 1, backgroundColor: '#EEF5EE', marginVertical: 2 },
+  cancelBtn: {
+    marginTop: 12,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  cancelText: { fontSize: 15, fontWeight: '800', color: '#757575' },
+});
+
+export default FarmerProfile;

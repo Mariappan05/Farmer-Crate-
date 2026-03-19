@@ -12,25 +12,25 @@
  *   - Call/contact buttons
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
-  RefreshControl,
-  StatusBar,
   Alert,
   Image,
   Linking,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
-import { getOrderById } from '../../services/orderService';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 
 /* ── Constants ────────────────────────────────────────────── */
@@ -68,6 +68,89 @@ const formatDate = (d) => {
 
 const formatCurrency = (a) => '₹' + (parseFloat(a) || 0).toFixed(2);
 
+const pickFirst = (...values) => {
+  for (const v of values) {
+    if (v === 0) return v;
+    if (typeof v === 'string') {
+      const t = v.trim();
+      if (t) return t;
+    } else if (v !== undefined && v !== null && v !== '') {
+      return v;
+    }
+  }
+  return '';
+};
+
+const toReadableText = (value) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        const parsedText = toReadableText(parsed);
+        return parsedText || trimmed;
+      } catch {
+        return trimmed;
+      }
+    }
+    return trimmed;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return value.map(toReadableText).filter(Boolean).join(', ');
+  }
+  if (typeof value === 'object') {
+    const picked = pickFirst(
+      value.full_name,
+      value.name,
+      value.username,
+      value.farm_name,
+      value.company_name,
+      value.address,
+      value.address_line,
+      [value.street, value.city, value.district, value.state, value.pincode].filter(Boolean).join(', ')
+    );
+    return picked ? toReadableText(picked) : '';
+  }
+  return '';
+};
+
+const normalizeParty = (entity, fallbackName, fallbackAddress, fallbackPhone) => {
+  const nestedUser = entity?.user || {};
+  const d = { ...nestedUser, ...(entity || {}) };
+
+  return {
+    name: toReadableText(pickFirst(d.full_name, d.name, d.username, fallbackName)),
+    phone: toReadableText(pickFirst(d.phone, d.mobile, d.mobile_number, d.phone_number, fallbackPhone)),
+    address: toReadableText(
+      pickFirst(
+        d.address,
+        d.address_line,
+        d.location,
+        d.city,
+        [d.street, d.city, d.district, d.state, d.pincode].filter(Boolean),
+        fallbackAddress
+      )
+    ),
+  };
+};
+
+const getPartyImage = (entity) => {
+  const nestedUser = entity?.user || {};
+  return pickFirst(
+    entity?.image,
+    entity?.image_url,
+    entity?.profile_image,
+    entity?.avatar,
+    nestedUser?.image,
+    nestedUser?.image_url,
+    nestedUser?.profile_image,
+    nestedUser?.avatar
+  ) || null;
+};
+
 /* ── Component ────────────────────────────────────────────── */
 const OrderDetail = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
@@ -76,9 +159,10 @@ const OrderDetail = ({ navigation, route }) => {
   const [order, setOrder] = useState(initialOrder || null);
   const [loading, setLoading] = useState(!initialOrder);
   const [refreshing, setRefreshing] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [assigningDP, setAssigningDP] = useState(false);
   const [deliveryPersons, setDeliveryPersons] = useState([]);
+  const [showNoPersonsModal, setShowNoPersonsModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
 
   const orderId = paramOrderId || order?.order_id || order?.id;
   const status = (order?.current_status || order?.status || 'PENDING').toUpperCase();
@@ -89,76 +173,171 @@ const OrderDetail = ({ navigation, route }) => {
   const fetchOrder = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [orderRes, personsRes] = await Promise.all([
-        orderId ? getOrderById(orderId) : Promise.resolve(null),
-        api.get('/transporters/delivery-persons').catch(() => ({ data: { data: [] } })),
-      ]);
+      console.log('[OrderDetail] Starting fetch...');
+      console.log('[OrderDetail] orderId:', orderId);
+      console.log('[OrderDetail] initialOrder:', initialOrder ? 'exists' : 'null');
+      
+      if (!orderId && !initialOrder) {
+        throw new Error('No order ID provided');
+      }
+      
+      let orderRes = initialOrder;
+      
+      // Try to fetch fresh data, but don't fail if it doesn't work
+      if (orderId) {
+        try {
+          console.log(`[OrderDetail] Trying GET /transporters/orders/${orderId}/track`);
+          const res = await api.get(`/transporters/orders/${orderId}/track`);
+          
+          // Check if response has data
+          if (res.data?.success && res.data?.data) {
+            console.log('[OrderDetail] Track response received');
+            const trackData = res.data.data;
+            const freshOrder = trackData.order || trackData;
+            
+            // Only use fresh data if it's valid
+            if (freshOrder && (freshOrder.order_id || freshOrder.id)) {
+              orderRes = freshOrder;
+              console.log('[OrderDetail] Using fresh order data from track endpoint');
+            } else {
+              console.log('[OrderDetail] Track response invalid, using initialOrder');
+            }
+          } else {
+            console.log('[OrderDetail] Track response has no data, using initialOrder');
+          }
+        } catch (err) {
+          console.log('[OrderDetail] Track endpoint error:', err.message);
+          console.log('[OrderDetail] Status:', err.response?.status);
+          console.log('[OrderDetail] Backend message:', err.response?.data?.message);
+          
+          // If it's a permission or not found error, the order might not belong to this transporter
+          if (err.response?.status === 403) {
+            console.log('[OrderDetail] Permission denied - order may not belong to this transporter');
+          } else if (err.response?.status === 404) {
+            console.log('[OrderDetail] Order not found in backend');
+          }
+          
+          console.log('[OrderDetail] Continuing with initialOrder (this is normal)');
+        }
+      }
+      
+      // Fetch delivery persons
+      const personsRes = await api.get('/transporters/delivery-persons').catch((err) => {
+        console.log('[OrderDetail] Delivery persons API error:', err.message);
+        return { data: { data: [] } };
+      });
+      
+      // Set the order (either fresh or initial)
       if (orderRes) {
         const o = orderRes?.data || orderRes?.order || orderRes;
+        console.log('[OrderDetail] Setting order with ID:', o?.order_id || o?.id);
         if (o) setOrder(o);
       }
+      
+      // Set delivery persons
       const persons = personsRes.data?.data || personsRes.data?.delivery_persons || personsRes.data || [];
-      setDeliveryPersons(Array.isArray(persons) ? persons : []);
+      const personsList = Array.isArray(persons) ? persons : [];
+      console.log('[OrderDetail] Loaded', personsList.length, 'delivery persons');
+      setDeliveryPersons(personsList);
+      
     } catch (e) {
-      if (!order) Alert.alert('Error', e.message || 'Failed to fetch order details');
+      console.error('[OrderDetail] Unexpected error:', e.message);
+      // Only show error if we have no order data at all
+      if (!order && !initialOrder) {
+        Alert.alert('Error', 'Unable to load order details. Please try again.');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [orderId]);
+  }, [orderId, initialOrder, order]);
 
   useEffect(() => {
     fetchOrder();
   }, [fetchOrder]);
 
-  /* ── Status update ──────────────────────────────────────── */
-  const handleStatusUpdate = (newStatus) => {
-    Alert.alert('Update Status', `Change to "${newStatus.replace(/_/g, ' ')}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Confirm',
-        onPress: async () => {
-          setUpdatingStatus(true);
-          try {
-            await api.put(`/transporters/orders/${orderId}/status`, { status: newStatus });
-            Alert.alert('Success', 'Status updated');
-            fetchOrder(true);
-          } catch (e) {
-            Alert.alert('Error', e.message || 'Failed to update');
-          } finally {
-            setUpdatingStatus(false);
-          }
-        },
-      },
-    ]);
+  const getNextStatusByScan = () => {
+    const current = status;
+    const role = (order?.transporter_role || '').toUpperCase();
+    if (role === 'PICKUP_SHIPPING' && current === 'ASSIGNED') return 'SHIPPED';
+    if (role === 'DELIVERY' && current === 'SHIPPED') return 'RECEIVED';
+    return null;
   };
 
   /* ── Assign ─────────────────────────────────────────────── */
-  const handleAssign = () => {
-    const available = deliveryPersons.filter((p) => p.is_available !== false);
-    if (available.length === 0) {
-      Alert.alert('No Available Persons', 'Add delivery persons first.');
-      return;
+  const handleAssign = async () => {
+    setAssigningDP(true);
+    try {
+      const personsRes = await api.get('/transporters/delivery-persons');
+      const persons = personsRes.data?.data || personsRes.data?.delivery_persons || personsRes.data || [];
+      const personsList = Array.isArray(persons) ? persons : [];
+      
+      console.log('[OrderDetail] Fetched delivery persons:', personsList);
+      
+      if (personsList.length === 0) {
+        setShowNoPersonsModal(true);
+        return;
+      }
+      
+      setDeliveryPersons(personsList);
+      setShowAssignModal(true);
+    } catch (err) {
+      console.error('[OrderDetail] Error fetching delivery persons:', err);
+      Alert.alert('Error', 'Failed to fetch delivery persons. Please try again.');
+    } finally {
+      setAssigningDP(false);
     }
-    const options = available.map((p) => ({
-      text: p.full_name || p.name || 'Person',
-      onPress: async () => {
-        setAssigningDP(true);
-        try {
-          await api.put(`/transporters/orders/${orderId}/assign`, {
-            delivery_person_id: p.id || p.delivery_person_id,
-          });
-          Alert.alert('Success', `Assigned ${p.full_name || p.name}`);
-          fetchOrder(true);
-        } catch (e) {
-          Alert.alert('Error', e.message);
-        } finally {
-          setAssigningDP(false);
-        }
-      },
-    }));
-    options.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert('Assign Delivery Person', 'Choose:', options);
+  };
+
+  const assignDeliveryPerson = async (person) => {
+    setAssigningDP(true);
+    setShowAssignModal(false);
+    try {
+      const deliveryPersonId = person.delivery_person_id || person.id;
+      console.log('[OrderDetail] Assigning person:', deliveryPersonId, 'to order:', orderId);
+      
+      const payload = { 
+        order_id: orderId,
+        delivery_person_id: deliveryPersonId,
+        permanent_vehicle_id: person.permanent_vehicle_id || null
+      };
+      
+      console.log('[OrderDetail] Calling POST /transporters/manual-receive-order');
+      const response = await api.post('/transporters/manual-receive-order', payload);
+      
+      console.log('[OrderDetail] Assignment successful:', response.data);
+      Alert.alert('Success', `Assigned ${person.name || person.full_name}`);
+      await fetchOrder(true);
+    } catch (e) {
+      console.error('[OrderDetail] Assignment error:', e);
+      console.error('[OrderDetail] Error response:', e.response?.data);
+      
+      const errorMessage = e.response?.data?.message || e.message;
+      
+      if (errorMessage.includes('already assigned')) {
+        Alert.alert(
+          'Already Assigned',
+          'This order is already assigned to a delivery person. You cannot reassign it.'
+        );
+      } else if (errorMessage.includes('not assigned to this transporter')) {
+        Alert.alert(
+          'Permission Denied',
+          'This order is not assigned to your company. Please contact support.'
+        );
+      } else if (errorMessage.includes('maximum capacity')) {
+        Alert.alert(
+          'Capacity Full',
+          errorMessage
+        );
+      } else {
+        Alert.alert(
+          'Assignment Failed',
+          errorMessage || 'Failed to assign delivery person. Please try again.'
+        );
+      }
+    } finally {
+      setAssigningDP(false);
+    }
   };
 
   /* ── Product image ──────────────────────────────────────── */
@@ -198,11 +377,99 @@ const OrderDetail = ({ navigation, route }) => {
     );
   }
 
-  const items = order.items || order.order_items || (order.product ? [{ product: order.product, quantity: order.quantity || 1 }] : []);
-  const farmer = order.farmer || {};
-  const customer = order.customer || {};
-  const dp = order.delivery_person || order.deliveryPerson || {};
-  const hasDP = !!(dp?.id || dp?.full_name || order.delivery_person_id);
+  const items = order.items || order.order_items || (order.product || order.Product ? [{ product: order.product || order.Product, quantity: order.quantity || 1 }] : []);
+  const firstItem = items[0] || {};
+  const firstProduct = firstItem?.product || firstItem || {};
+  
+  // Resolve party objects from different backend shapes
+  const farmerRaw =
+    order.farmer ||
+    order.Farmer ||
+    order.farmer_details ||
+    order.farmerDetails ||
+    order.pickup_farmer ||
+    order.Product?.farmer ||
+    order.product?.farmer ||
+    firstProduct?.farmer ||
+    {};
+  const farmer = {
+    ...normalizeParty(
+      farmerRaw,
+      order.farmer_name || order.farmerName || firstProduct?.farmer_name || firstProduct?.farm_name,
+      order.pickup_address || order.farm_address || order.farmer_address || firstProduct?.farmer_address || firstProduct?.farm_address,
+      order.farmer_phone || order.farmer_mobile || firstProduct?.farmer_phone || firstProduct?.farmer_mobile
+    ),
+    image: getPartyImage(farmerRaw),
+  };
+
+  const customerRaw =
+    order.customer ||
+    order.Customer ||
+    order.customer_details ||
+    order.customerDetails ||
+    {};
+  const customer = {
+    ...normalizeParty(
+      customerRaw,
+      order.customer_name || order.customerName,
+      order.delivery_address || order.customer_address,
+      order.customer_phone || order.customer_mobile
+    ),
+    image: getPartyImage(customerRaw),
+  };
+
+  const dpRaw =
+    order.delivery_person ||
+    order.deliveryPerson ||
+    order.DeliveryPerson ||
+    order.delivery_person_details ||
+    order.deliveryPersonDetails ||
+    order.delivery_person_info ||
+    order.deliveryPartner ||
+    order.delivery_partner ||
+    order.assignment?.delivery_person ||
+    order.delivery_assignment?.delivery_person ||
+    order.assigned_delivery_person ||
+    {};
+  const dp = {
+    ...normalizeParty(
+      dpRaw,
+      order.delivery_person_name || order.deliveryPersonName || order.assigned_delivery_person_name,
+      order.delivery_person_address || order.delivery_address,
+      order.delivery_person_phone || order.delivery_person_mobile || order.assigned_delivery_person_phone
+    ),
+    vehicle: toReadableText(
+      pickFirst(
+        dpRaw.vehicle,
+        dpRaw.vehicle_number,
+        dpRaw.vehicleNo,
+        order.delivery_vehicle_number,
+        order.vehicle_number
+      )
+    ),
+    vehicleType: toReadableText(
+      pickFirst(
+        dpRaw.vehicleType,
+        dpRaw.vehicle_type,
+        order.delivery_vehicle_type,
+        order.vehicle_type
+      )
+    ),
+    image: getPartyImage(dpRaw),
+  };
+  
+  const hasDP = !!(
+    order.delivery_person_id ||
+    order.assigned_delivery_person_id ||
+    dpRaw?.id ||
+    dpRaw?.delivery_person_id ||
+    dp.name ||
+    dp.phone ||
+    dp.address ||
+    dp.vehicle ||
+    dp.vehicleType
+  );
+  const nextStatusByScan = getNextStatusByScan();
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -214,7 +481,9 @@ const OrderDetail = ({ navigation, route }) => {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Order #{orderId}</Text>
+          <Text style={styles.headerTitle}>
+            {items.length > 0 ? (items[0].product?.name || items[0].name || `Order #${orderId}`) : `Order #${orderId}`}
+          </Text>
           <Text style={styles.headerSub}>{formatDate(order.created_at)}</Text>
         </View>
         <View style={[styles.headerBadge, { backgroundColor: getStatusColor(status) + '30' }]}>
@@ -230,122 +499,167 @@ const OrderDetail = ({ navigation, route }) => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchOrder(true); }} colors={['#1B5E20']} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* Status Timeline */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Order Timeline</Text>
-          {isCancelled ? (
-            <View style={styles.cancelledRow}>
-              <Ionicons name="close-circle" size={22} color="#F44336" />
-              <Text style={styles.cancelledText}>Order Cancelled</Text>
-            </View>
-          ) : (
-            TIMELINE_STAGES.map((stage, idx) => {
-              const isCompleted = idx <= stageIdx;
-              const isActive = idx === stageIdx;
-              return (
-                <View key={stage.key} style={styles.timelineRow}>
-                  <View style={styles.timelineLeft}>
-                    <View
-                      style={[
-                        styles.timelineDot,
-                        isCompleted && { backgroundColor: stage.color },
-                        isActive && { borderWidth: 3, borderColor: stage.color + '40' },
-                      ]}
-                    >
-                      <Ionicons
-                        name={isCompleted ? stage.icon : `${stage.icon}-outline`}
-                        size={16}
-                        color={isCompleted ? '#fff' : '#ccc'}
-                      />
-                    </View>
-                    {idx < TIMELINE_STAGES.length - 1 && (
-                      <View
-                        style={[
-                          styles.timelineConnector,
-                          isCompleted && idx < stageIdx && { backgroundColor: stage.color },
-                        ]}
-                      />
-                    )}
-                  </View>
-                  <View style={styles.timelineContent}>
-                    <Text style={[styles.timelineLabel, isActive && { color: stage.color, fontWeight: '700' }]}>
-                      {stage.label}
-                    </Text>
-                    <Text style={styles.timelineStatus}>
-                      {isActive ? 'Current' : isCompleted ? 'Completed' : 'Pending'}
-                    </Text>
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </View>
-
         {/* Products */}
         {items.length > 0 && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Products</Text>
             {items.map((item, idx) => {
               const product = item.product || item;
               const imgUrl = getProductImage(item);
               return (
-                <View key={idx} style={styles.productRow}>
+                <View key={idx} style={styles.productDetailRow}>
                   {imgUrl ? (
-                    <Image source={{ uri: imgUrl }} style={styles.productImg} />
+                    <Image source={{ uri: imgUrl }} style={styles.productDetailImg} />
                   ) : (
-                    <View style={[styles.productImg, styles.productImgPlaceholder]}>
-                      <Ionicons name="cube-outline" size={20} color="#aaa" />
+                    <View style={[styles.productDetailImg, styles.productImgPlaceholder]}>
+                      <Ionicons name="cube-outline" size={40} color="#aaa" />
                     </View>
                   )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.productName} numberOfLines={2}>{product.name || 'Product'}</Text>
-                    <Text style={styles.productMeta}>
-                      Qty: {item.quantity || 1}
-                      {product.price ? ` • ${formatCurrency(product.price)}` : ''}
-                    </Text>
+                  <View style={styles.productDetailInfo}>
+                    <Text style={styles.productDetailName}>{product.name || 'Product'}</Text>
+                    <View style={styles.productMetaRow}>
+                      <View style={styles.productMetaItem}>
+                        <Ionicons name="cube-outline" size={16} color="#666" />
+                        <Text style={styles.productMetaText}>Qty: {item.quantity || 1}</Text>
+                      </View>
+                      {product.price && (
+                        <View style={styles.productMetaItem}>
+                          <Ionicons name="pricetag-outline" size={16} color="#666" />
+                          <Text style={styles.productMetaText}>{formatCurrency(product.price)}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {order.total_amount && (
+                      <View style={styles.productTotalRow}>
+                        <Text style={styles.productTotalLabel}>Total Amount</Text>
+                        <Text style={styles.productTotalValue}>{formatCurrency(order.total_amount)}</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               );
             })}
-            {order.total_amount && (
-              <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Total Amount</Text>
-                <Text style={styles.totalValue}>{formatCurrency(order.total_amount)}</Text>
-              </View>
-            )}
           </View>
         )}
 
         {/* Farmer Info */}
-        <InfoCard
-          title="Farmer"
-          icon="leaf-outline"
-          iconColor="#4CAF50"
-          name={farmer.full_name || farmer.name || order.farmer_name || 'N/A'}
-          phone={farmer.phone || farmer.mobile}
-          address={farmer.address || farmer.address_line || order.pickup_address}
-        />
+        <View style={styles.card}>
+          <View style={styles.infoHeader}>
+            <View style={[styles.infoIconWrap, { backgroundColor: '#4CAF5015' }]}>
+              <Ionicons name="leaf" size={20} color="#4CAF50" />
+            </View>
+            <Text style={styles.cardTitle}>Farmer Details</Text>
+          </View>
+          <View style={styles.profileCard}>
+            {farmer.image ? (
+              <Image source={{ uri: optimizeImageUrl(farmer.image, { width: 80, height: 80 }) }} style={styles.profileAvatarImg} />
+            ) : (
+              <View style={styles.profileAvatar}>
+                <Ionicons name="person" size={32} color="#4CAF50" />
+              </View>
+            )}
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileName}>{farmer.name || 'N/A'}</Text>
+              {farmer.address && (
+                <View style={styles.profileDetailRow}>
+                  <Ionicons name="location" size={16} color="#4CAF50" />
+                  <Text style={styles.profileDetailText}>{farmer.address}</Text>
+                </View>
+              )}
+              {farmer.phone && (
+                <TouchableOpacity 
+                  style={[styles.callBtn, { backgroundColor: '#4CAF5015' }]} 
+                  onPress={() => Linking.openURL(`tel:${farmer.phone}`)}
+                >
+                  <Ionicons name="call" size={16} color="#4CAF50" />
+                  <Text style={[styles.callBtnText, { color: '#4CAF50' }]}>Call Farmer</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
 
         {/* Customer Info */}
-        <InfoCard
-          title="Customer"
-          icon="person-outline"
-          iconColor="#2196F3"
-          name={customer.full_name || customer.name || order.customer_name || 'N/A'}
-          phone={customer.phone || customer.mobile}
-          address={customer.address || customer.address_line || order.delivery_address}
-        />
+        {(customer.name || customer.address || customer.phone) && (
+          <View style={styles.card}>
+            <View style={styles.infoHeader}>
+              <View style={[styles.infoIconWrap, { backgroundColor: '#2196F315' }]}>
+                <Ionicons name="location" size={20} color="#2196F3" />
+              </View>
+              <Text style={styles.cardTitle}>Customer Details</Text>
+            </View>
+            <View style={styles.profileCard}>
+              {customer.image ? (
+                <Image source={{ uri: optimizeImageUrl(customer.image, { width: 80, height: 80 }) }} style={styles.profileAvatarImg} />
+              ) : (
+                <View style={styles.profileAvatar}>
+                  <Ionicons name="person" size={32} color="#2196F3" />
+                </View>
+              )}
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{customer.name || 'N/A'}</Text>
+                {customer.address && (
+                  <View style={styles.profileDetailRow}>
+                    <Ionicons name="location" size={16} color="#2196F3" />
+                    <Text style={styles.profileDetailText}>{customer.address}</Text>
+                  </View>
+                )}
+                {customer.phone && (
+                  <TouchableOpacity
+                    style={[styles.callBtn, { backgroundColor: '#2196F315' }]}
+                    onPress={() => Linking.openURL(`tel:${customer.phone}`)}
+                  >
+                    <Ionicons name="call" size={16} color="#2196F3" />
+                    <Text style={[styles.callBtnText, { color: '#2196F3' }]}>Call Customer</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Delivery Person Info */}
         {hasDP && (
-          <InfoCard
-            title="Delivery Person"
-            icon="bicycle-outline"
-            iconColor="#9C27B0"
-            name={dp.full_name || dp.name || 'N/A'}
-            phone={dp.phone || dp.mobile}
-            extra={dp.vehicle_number ? `Vehicle: ${dp.vehicle_number}` : null}
-          />
+          <View style={styles.card}>
+            <View style={styles.infoHeader}>
+              <View style={[styles.infoIconWrap, { backgroundColor: '#9C27B015' }]}>
+                <Ionicons name="bicycle" size={20} color="#9C27B0" />
+              </View>
+              <Text style={styles.cardTitle}>Delivery Person Details</Text>
+            </View>
+            <View style={styles.profileCard}>
+              {dp.image ? (
+                <Image source={{ uri: optimizeImageUrl(dp.image, { width: 80, height: 80 }) }} style={styles.profileAvatarImg} />
+              ) : (
+                <View style={styles.profileAvatar}>
+                  <Ionicons name="person" size={32} color="#9C27B0" />
+                </View>
+              )}
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{dp.name || 'N/A'}</Text>
+                {dp.address && (
+                  <View style={styles.profileDetailRow}>
+                    <Ionicons name="location" size={16} color="#9C27B0" />
+                    <Text style={styles.profileDetailText}>{dp.address}</Text>
+                  </View>
+                )}
+                {dp.vehicle && (
+                  <View style={styles.profileDetailRow}>
+                    <Ionicons name="car" size={16} color="#9C27B0" />
+                    <Text style={styles.profileDetailText}>{dp.vehicle} • {dp.vehicleType || 'Vehicle'}</Text>
+                  </View>
+                )}
+                {dp.phone && (
+                  <TouchableOpacity 
+                    style={[styles.callBtn, { backgroundColor: '#9C27B015' }]} 
+                    onPress={() => Linking.openURL(`tel:${dp.phone}`)}
+                  >
+                    <Ionicons name="call" size={16} color="#9C27B0" />
+                    <Text style={[styles.callBtnText, { color: '#9C27B0' }]}>Call Delivery Person</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
         )}
 
         {/* QR Code */}
@@ -364,12 +678,12 @@ const OrderDetail = ({ navigation, route }) => {
         )}
 
         {/* Action Buttons */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Actions</Text>
-          <View style={styles.actionsWrap}>
-            {!hasDP && (
+        <View style={styles.actionsGrid}>
+          {!hasDP ? (
+            // Show all 4 buttons when no delivery person assigned
+            <>
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#9C27B0' }]}
+                style={[styles.actionCard, { backgroundColor: '#9C27B0' }]}
                 onPress={handleAssign}
                 disabled={assigningDP}
               >
@@ -377,61 +691,185 @@ const OrderDetail = ({ navigation, route }) => {
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <>
-                    <Ionicons name="person-add-outline" size={18} color="#fff" />
-                    <Text style={styles.actionBtnText}>Assign Delivery Person</Text>
+                    <View style={styles.actionIconWrap}>
+                      <Ionicons name="person-add" size={28} color="#fff" />
+                    </View>
+                    <Text style={styles.actionCardText}>Assign Delivery Person</Text>
                   </>
                 )}
               </TouchableOpacity>
-            )}
 
-            {status === 'ASSIGNED' && (
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#3F51B5' }]}
-                onPress={() => handleStatusUpdate('SHIPPED')}
-                disabled={updatingStatus}
+                style={[styles.actionCard, { backgroundColor: '#00BCD4' }]}
+                onPress={() => navigation.navigate('QRScan', {
+                  orderId,
+                  order,
+                  updateStatusOnScan: true,
+                  expectedOrderId: orderId,
+                })}
               >
-                {updatingStatus ? <ActivityIndicator size="small" color="#fff" /> : (
-                  <>
-                    <Ionicons name="airplane-outline" size={18} color="#fff" />
-                    <Text style={styles.actionBtnText}>Mark as Shipped</Text>
-                  </>
-                )}
+                <View style={styles.actionIconWrap}>
+                  <Ionicons name="qr-code" size={28} color="#fff" />
+                </View>
+                <Text style={styles.actionCardText}>Scan QR Code</Text>
               </TouchableOpacity>
-            )}
 
-            {status === 'SHIPPED' && (
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#00BCD4' }]}
-                onPress={() => handleStatusUpdate('OUT_FOR_DELIVERY')}
-                disabled={updatingStatus}
+                style={[styles.actionCard, { backgroundColor: '#1B5E20' }]}
+                onPress={() => navigation.navigate('TransporterOrderTracking', { orderId, order })}
               >
-                {updatingStatus ? <ActivityIndicator size="small" color="#fff" /> : (
-                  <>
-                    <Ionicons name="bicycle-outline" size={18} color="#fff" />
-                    <Text style={styles.actionBtnText}>Out for Delivery</Text>
-                  </>
-                )}
+                <View style={styles.actionIconWrap}>
+                  <Ionicons name="navigate" size={28} color="#fff" />
+                </View>
+                <Text style={styles.actionCardText}>Track Order</Text>
               </TouchableOpacity>
-            )}
 
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#1B5E20' }]}
-              onPress={() => navigation.navigate('TransporterOrderTracking', { orderId, order })}
-            >
-              <Ionicons name="navigate-outline" size={18} color="#fff" />
-              <Text style={styles.actionBtnText}>Track Order</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionCard, { backgroundColor: '#FF9800' }]}
+                onPress={() => navigation.navigate('BillPreview', { orderId, order })}
+              >
+                <View style={styles.actionIconWrap}>
+                  <Ionicons name="receipt" size={28} color="#fff" />
+                </View>
+                <Text style={styles.actionCardText}>View Bill</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            // Show only 3 actions when delivery person is assigned (no assign button)
+            <View style={styles.actionList}>
+              <TouchableOpacity
+                style={[styles.actionRowBtn, { backgroundColor: '#00BCD4' }]}
+                onPress={() => navigation.navigate('QRScan', {
+                  orderId,
+                  order,
+                  updateStatusOnScan: true,
+                  expectedOrderId: orderId,
+                })}
+              >
+                <View style={styles.actionRowContent}>
+                  <View style={styles.actionRowIconWrap}>
+                    <Ionicons name="qr-code" size={22} color="#fff" />
+                  </View>
+                  <Text style={styles.actionRowText}>Scan QR Code</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#fff" />
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#FF9800' }]}
-              onPress={() => navigation.navigate('BillPreview', { orderId, order })}
-            >
-              <Ionicons name="receipt-outline" size={18} color="#fff" />
-              <Text style={styles.actionBtnText}>View Bill</Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                style={[styles.actionRowBtn, { backgroundColor: '#1B5E20' }]}
+                onPress={() => navigation.navigate('TransporterOrderTracking', { orderId, order })}
+              >
+                <View style={styles.actionRowContent}>
+                  <View style={styles.actionRowIconWrap}>
+                    <Ionicons name="navigate" size={22} color="#fff" />
+                  </View>
+                  <Text style={styles.actionRowText}>Track Order</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#fff" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionRowBtn, { backgroundColor: '#FF9800' }]}
+                onPress={() => navigation.navigate('BillPreview', { orderId, order })}
+              >
+                <View style={styles.actionRowContent}>
+                  <View style={styles.actionRowIconWrap}>
+                    <Ionicons name="receipt" size={22} color="#fff" />
+                  </View>
+                  <Text style={styles.actionRowText}>View Bill</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </ScrollView>
+
+      {/* No Delivery Persons Modal */}
+      <Modal visible={showNoPersonsModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>No Delivery Persons</Text>
+            <Text style={styles.modalMessage}>
+              You have not added any delivery persons yet. Please add delivery persons first.
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity onPress={() => setShowNoPersonsModal(false)}>
+                <Text style={styles.modalBtnCancel}>CANCEL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowNoPersonsModal(false); navigation.navigate('AddDeliveryPerson'); }}>
+                <Text style={styles.modalBtnAdd}>ADD NOW</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Assign Delivery Person Modal */}
+      <Modal visible={showAssignModal} transparent animationType="slide">
+        <View style={styles.assignModalOverlay}>
+          <TouchableOpacity 
+            style={styles.assignModalBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setShowAssignModal(false)}
+          />
+          <View style={styles.assignModalSheet}>
+            <View style={styles.assignModalHandle} />
+            <View style={styles.assignModalHeader}>
+              <Text style={styles.assignModalTitle}>Select Delivery Person</Text>
+              <TouchableOpacity onPress={() => setShowAssignModal(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.assignModalScroll} showsVerticalScrollIndicator={false}>
+              {deliveryPersons.filter(p => p.is_available !== false && p.is_available !== 0).map((person) => (
+                <TouchableOpacity
+                  key={person.delivery_person_id}
+                  style={styles.personCard}
+                  onPress={() => assignDeliveryPerson(person)}
+                  disabled={assigningDP}
+                >
+                  <View style={styles.personAvatar}>
+                    {person.image_url ? (
+                      <Image source={{ uri: person.image_url }} style={styles.personAvatarImg} />
+                    ) : (
+                      <Ionicons name="person" size={24} color="#1B5E20" />
+                    )}
+                  </View>
+                  <View style={styles.personInfo}>
+                    <Text style={styles.personName}>{person.name || person.full_name || 'Delivery Person'}</Text>
+                    {person.mobile_number && (
+                      <View style={styles.personDetail}>
+                        <Ionicons name="call-outline" size={14} color="#666" />
+                        <Text style={styles.personDetailText}>{person.mobile_number}</Text>
+                      </View>
+                    )}
+                    {person.vehicle_number && (
+                      <View style={styles.personDetail}>
+                        <Ionicons name="car-outline" size={14} color="#666" />
+                        <Text style={styles.personDetailText}>{person.vehicle_number} • {person.vehicle_type || 'Vehicle'}</Text>
+                      </View>
+                    )}
+                    {person.total_deliveries !== undefined && (
+                      <View style={styles.personDetail}>
+                        <Ionicons name="checkmark-circle-outline" size={14} color="#4CAF50" />
+                        <Text style={styles.personDetailText}>{person.total_deliveries} deliveries</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                </TouchableOpacity>
+              ))}
+              {deliveryPersons.filter(p => p.is_available !== false && p.is_available !== 0).length === 0 && (
+                <View style={styles.emptyState}>
+                  <Ionicons name="people-outline" size={48} color="#ccc" />
+                  <Text style={styles.emptyText}>No available delivery persons</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -486,35 +924,40 @@ const styles = StyleSheet.create({
   cancelledRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: '#FFEBEE', borderRadius: 10 },
   cancelledText: { fontSize: 15, fontWeight: '600', color: '#F44336' },
 
-  // Timeline
-  timelineRow: { flexDirection: 'row', minHeight: 56 },
-  timelineLeft: { alignItems: 'center', width: 40, marginRight: 12 },
-  timelineDot: {
-    width: 34, height: 34, borderRadius: 17, backgroundColor: '#E0E0E0',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  timelineConnector: { width: 2, flex: 1, backgroundColor: '#E0E0E0', marginVertical: 2 },
-  timelineContent: { flex: 1, paddingBottom: 16 },
-  timelineLabel: { fontSize: 14, color: '#333' },
-  timelineStatus: { fontSize: 11, color: '#999', marginTop: 2 },
-
   // Products
-  productRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  productImg: { width: 56, height: 56, borderRadius: 10 },
+  productDetailRow: { flexDirection: 'column', alignItems: 'center' },
+  productDetailImg: { width: '100%', height: 200, borderRadius: 12, marginBottom: 16 },
   productImgPlaceholder: { backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
-  productName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  productMeta: { fontSize: 12, color: '#888', marginTop: 2 },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#EEE', paddingTop: 12, marginTop: 4 },
-  totalLabel: { fontSize: 14, fontWeight: '600', color: '#333' },
-  totalValue: { fontSize: 16, fontWeight: '700', color: '#1B5E20' },
+  productDetailInfo: { width: '100%' },
+  productDetailName: { fontSize: 20, fontWeight: '700', color: '#1B5E20', marginBottom: 12 },
+  productMetaRow: { flexDirection: 'row', gap: 16, marginBottom: 12 },
+  productMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  productMetaText: { fontSize: 14, color: '#666', fontWeight: '500' },
+  productTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E8F5E9', padding: 12, borderRadius: 8, marginTop: 8 },
+  productTotalLabel: { fontSize: 15, fontWeight: '600', color: '#333' },
+  productTotalValue: { fontSize: 18, fontWeight: '700', color: '#1B5E20' },
 
   // Info
-  infoHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  infoHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   infoIconWrap: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   infoName: { fontSize: 15, fontWeight: '600', color: '#333', marginBottom: 4 },
   infoDetail: { fontSize: 13, color: '#666', marginBottom: 2 },
   callBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#E8F5E9', borderRadius: 10, alignSelf: 'flex-start' },
   callBtnText: { color: '#1B5E20', fontSize: 13, fontWeight: '600' },
+
+  // Details Card
+  detailsCard: { backgroundColor: '#F8F9FA', borderRadius: 10, padding: 14 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  detailText: { flex: 1, fontSize: 14, color: '#333', fontWeight: '500' },
+
+  // Profile Card
+  profileCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  profileAvatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+  profileAvatarImg: { width: 70, height: 70, borderRadius: 35 },
+  profileInfo: { flex: 1 },
+  profileName: { fontSize: 17, fontWeight: '700', color: '#1B5E20', marginBottom: 8 },
+  profileDetailRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  profileDetailText: { fontSize: 14, color: '#666', flex: 1 },
 
   // QR
   qrImage: { width: 180, height: 180, alignSelf: 'center', marginVertical: 8 },
@@ -522,12 +965,62 @@ const styles = StyleSheet.create({
   qrText: { fontSize: 14, color: '#333', fontFamily: 'monospace' },
 
   // Actions
-  actionsWrap: { gap: 10 },
-  actionBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    paddingVertical: 13, borderRadius: 12,
+  actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16, marginBottom: 16 },
+  actionCard: { flex: 1, minWidth: '45%', aspectRatio: 1.2, borderRadius: 16, padding: 16, justifyContent: 'center', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 },
+  actionIconWrap: { marginBottom: 8 },
+  actionCardText: { color: '#fff', fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  actionList: { width: '100%', gap: 10 },
+  actionRowBtn: {
+    width: '100%',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
   },
-  actionBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  actionRowContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  actionRowIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionRowText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
+  modalContent: { backgroundColor: '#fff', borderRadius: 8, padding: 24, width: '100%', maxWidth: 400 },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 12 },
+  modalMessage: { fontSize: 14, color: '#666', lineHeight: 20, marginBottom: 24 },
+  modalButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 24 },
+  modalBtnCancel: { fontSize: 14, fontWeight: '600', color: '#666', paddingVertical: 8, paddingHorizontal: 4 },
+  modalBtnAdd: { fontSize: 14, fontWeight: '600', color: '#1B5E20', paddingVertical: 8, paddingHorizontal: 4 },
+
+  // Assign Modal
+  assignModalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  assignModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  assignModalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '80%', paddingBottom: 20 },
+  assignModalHandle: { width: 40, height: 4, backgroundColor: '#ddd', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
+  assignModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  assignModalTitle: { fontSize: 18, fontWeight: '700', color: '#1B5E20' },
+  assignModalScroll: { paddingHorizontal: 16, paddingTop: 8 },
+  personCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E8F5E9', elevation: 1, shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
+  personAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginRight: 12, overflow: 'hidden' },
+  personAvatarImg: { width: 50, height: 50 },
+  personInfo: { flex: 1 },
+  personName: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 4 },
+  personDetail: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  personDetailText: { fontSize: 13, color: '#666' },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: 14, color: '#999', marginTop: 12 },
 });
 
 export default OrderDetail;

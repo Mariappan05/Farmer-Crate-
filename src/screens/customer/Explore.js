@@ -1,25 +1,25 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-  Dimensions,
-  StatusBar,
-  Keyboard,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../../services/api';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Dimensions,
+    FlatList,
+    Image,
+    Keyboard,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../context/CartContext';
+import api from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -520,7 +520,7 @@ export default function Explore({ navigation }) {
 // Styles
 // ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F8E9' },
+  container: { flex: 1, backgroundColor: '#EDF6EE' },
 
   /* Header */
   header: { paddingHorizontal: 16, paddingBottom: 14 },
@@ -579,6 +579,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
     borderRadius: 14,
     padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5EFE6',
     elevation: 4,
     shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
@@ -623,6 +625,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E3ECE4',
     elevation: 3,
     shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
@@ -670,6 +674,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 10,
     marginHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E3ECE4',
     elevation: 3,
     shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },

@@ -12,37 +12,40 @@
  *   - Camera permissions
  */
 
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Vibration,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  StatusBar,
-  Modal,
-  Dimensions,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    Vibration,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
-import { getOrderById } from '../../services/orderService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SCAN_SIZE = SCREEN_WIDTH * 0.7;
 
-// Valid statuses
-const VALID_PICKUP_STATUSES = ['ASSIGNED', 'CONFIRMED'];
-const VALID_DELIVERY_STATUSES = ['SHIPPED', 'PICKED_UP', 'OUT_FOR_DELIVERY'];
+const REQUIRED_STATUS_BY_ROLE = {
+  PICKUP_SHIPPING: 'ASSIGNED',
+  DELIVERY: 'SHIPPED',
+};
 
-const QRScan = ({ navigation }) => {
+const QRScan = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
+  const params = route?.params || {};
+  const updateStatusOnScan = !!params.updateStatusOnScan;
+  const expectedOrderId = params.expectedOrderId;
   const [permission, requestPermission] = useCameraPermissions();
   const [isProcessing, setIsProcessing] = useState(false);
   const [scanned, setScanned] = useState(false);
@@ -92,19 +95,10 @@ const QRScan = ({ navigation }) => {
   /* ── Fetch and validate order ───────────────────────────── */
   const fetchAndValidateOrder = async (orderId) => {
     try {
-      // Fetch from transporter's allocated orders
       let order = null;
-      try {
-        const res = await api.get(`/orders/${orderId}`);
-        order = res.data?.data || res.data;
-      } catch {
-        // Try transporter-specific endpoint
-        const res2 = await api.get('/transporters/orders/active');
-        const allOrders = res2.data?.data || res2.data?.orders || res2.data || [];
-        order = (Array.isArray(allOrders) ? allOrders : []).find(
-          (o) => (o.order_id || o.id) == orderId
-        );
-      }
+      const allocatedRes = await api.get('/orders/transporter/allocated');
+      const allOrders = allocatedRes.data?.data || allocatedRes.data?.orders || allocatedRes.data || [];
+      order = (Array.isArray(allOrders) ? allOrders : []).find((o) => (o.order_id || o.id) == orderId);
 
       if (!order) {
         Alert.alert('Order Not Found', `Order #${orderId} was not found or is not assigned to you.`, [
@@ -113,17 +107,30 @@ const QRScan = ({ navigation }) => {
         return;
       }
 
-      const status = (order.current_status || order.status || '').toUpperCase();
-
-      // Validate for pickup
-      if (VALID_PICKUP_STATUSES.includes(status)) {
-        navigateToOrder(order, 'pickup');
+      if (expectedOrderId && Number(orderId) !== Number(expectedOrderId)) {
+        Alert.alert('Wrong QR', `Please scan QR for order #${expectedOrderId}.`, [
+          { text: 'Rescan', onPress: resetScanner },
+        ]);
         return;
       }
 
-      // Validate for delivery
-      if (VALID_DELIVERY_STATUSES.includes(status)) {
-        navigateToOrder(order, 'delivery');
+      const status = (order.current_status || order.status || '').toUpperCase();
+      const role = (order.transporter_role || '').toUpperCase();
+      const requiredStatus = REQUIRED_STATUS_BY_ROLE[role];
+
+      if (!requiredStatus) {
+        Alert.alert('Invalid Transporter Role', `Order #${orderId} has unsupported transporter role: ${role || 'UNKNOWN'}.`, [
+          { text: 'Scan Another', onPress: resetScanner },
+        ]);
+        return;
+      }
+
+      if (status !== requiredStatus) {
+        Alert.alert(
+          'Invalid Status',
+          `Cannot scan QR for role ${role}. Required status: ${requiredStatus}, current status: ${status}.`,
+          [{ text: 'OK', onPress: resetScanner }]
+        );
         return;
       }
 
@@ -136,14 +143,65 @@ const QRScan = ({ navigation }) => {
         return;
       }
 
-      // Invalid status
-      Alert.alert(
-        'Invalid Status',
-        `Order #${orderId} has status "${status}" which is not valid for scanning.`,
-        [{ text: 'OK', onPress: resetScanner }]
-      );
+      if (updateStatusOnScan) {
+        await updateStatusAfterScan(order);
+        return;
+      }
+
+      navigateToOrder(order, role === 'PICKUP_SHIPPING' ? 'pickup' : 'delivery');
     } catch (e) {
       Alert.alert('Error', e.message || 'Failed to fetch order', [
+        { text: 'Retry', onPress: resetScanner },
+      ]);
+    }
+  };
+
+  const getNextStatusAfterScan = (order) => {
+    const role = (order?.transporter_role || '').toUpperCase();
+    const current = (order?.current_status || order?.status || '').toUpperCase();
+    if (role === 'PICKUP_SHIPPING' && current === 'ASSIGNED') return 'SHIPPED';
+    if (role === 'DELIVERY' && current === 'SHIPPED') return 'RECEIVED';
+    return null;
+  };
+
+  const updateStatusAfterScan = async (order) => {
+    const orderId = order.order_id || order.id;
+    const nextStatus = getNextStatusAfterScan(order);
+
+    if (!nextStatus) {
+      Alert.alert('No Next Status', 'This order cannot be advanced by QR scan right now.', [
+        { text: 'OK', onPress: resetScanner },
+      ]);
+      return;
+    }
+
+    try {
+      try {
+        await api.put('/orders/status', { order_id: orderId, status: nextStatus });
+      } catch {
+        await api.put(`/transporters/orders/${orderId}/status`, { status: nextStatus });
+      }
+
+      Alert.alert(
+        'Status Updated',
+        `Order #${orderId} marked as ${nextStatus.replace(/_/g, ' ')}.`,
+        [
+          {
+            text: 'View Order',
+            onPress: () => navigation.replace('OrderDetail', {
+              orderId,
+              order: {
+                ...order,
+                current_status: nextStatus,
+                status: nextStatus,
+              },
+            }),
+          },
+          { text: 'Scan Another', onPress: resetScanner },
+        ]
+      );
+    } catch (e) {
+      Alert.alert('Update Failed', e.message || 'Could not update order status', [
         { text: 'Retry', onPress: resetScanner },
       ]);
     }

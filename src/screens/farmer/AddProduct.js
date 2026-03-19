@@ -1,24 +1,24 @@
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  Modal,
-  ActivityIndicator,
-  StatusBar,
-  KeyboardAvoidingView,
-  Platform,
-  FlatList,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
+import { useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    FlatList,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 import { pickImage, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import ToastMessage from '../../utils/Toast';
 
@@ -553,6 +553,11 @@ const styles = StyleSheet.create({
     color: '#333',
     borderWidth: 1,
     borderColor: '#E0E0E0',
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
   row: { flexDirection: 'row' },
@@ -568,12 +573,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   dropdownText: { fontSize: 15, color: '#333' },
   dropdownList: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#DDE8DD',
     borderRadius: 12,
     marginTop: 4,
     overflow: 'hidden',
@@ -631,7 +641,16 @@ const styles = StyleSheet.create({
   addImageText: { fontSize: 12, color: '#4CAF50', marginTop: 4 },
 
   /* Submit */
-  submitBtn: { marginTop: 24, borderRadius: 14, overflow: 'hidden' },
+  submitBtn: {
+    marginTop: 24,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   submitGradient: { paddingVertical: 15, alignItems: 'center', justifyContent: 'center' },
   submitRow: { flexDirection: 'row', alignItems: 'center' },
   submitText: { color: '#fff', fontSize: 17, fontWeight: '800', marginLeft: 8 },
@@ -646,6 +665,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   dateInputText: { flex: 1, fontSize: 15, color: '#333' },
 });

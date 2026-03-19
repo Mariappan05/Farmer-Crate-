@@ -81,7 +81,31 @@ export const updateDeliveryOrderStatus = async (orderId, status) => {
 // ─── Transporter orders ─────────────────────────────────────────────────────
 
 export const getTransporterOrders = async () => {
-  const { data } = await api.get('/transporter/orders');
+  const { data } = await api.get('/transporters/orders');
+  return data;
+};
+
+export const getTransporterActiveOrders = async () => {
+  const { data } = await api.get('/transporters/orders/active');
+  return data;
+};
+
+export const getTransporterOrderTracking = async (orderId) => {
+  const { data } = await api.get(`/transporters/orders/${orderId}/track`);
+  return data;
+};
+
+export const getTransporterOrderUpdates = async (orderId) => {
+  const { data } = await api.get(`/transporters/orders/${orderId}/updates`);
+  return data;
+};
+
+export const manualReceiveOrder = async (orderId, deliveryPersonId, vehicleId) => {
+  const { data } = await api.post('/transporters/manual-receive-order', {
+    order_id: orderId,
+    delivery_person_id: deliveryPersonId,
+    permanent_vehicle_id: vehicleId,
+  });
   return data;
 };
 

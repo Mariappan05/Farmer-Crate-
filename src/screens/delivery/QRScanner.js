@@ -1,23 +1,23 @@
-import React, { useState, useRef } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Vibration,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  StatusBar,
-  Modal,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    Vibration,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import api from '../../services/api';
-import { getOrderById } from '../../services/orderService';
+import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
 
 // Valid statuses for QR scanning
 const VALID_PICKUP_STATUSES = ['ASSIGNED', 'CONFIRMED'];
@@ -372,38 +372,55 @@ const SCAN_BOX_SIZE = 250;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   centerContent: { justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#fff', marginTop: 12, fontSize: 14 },
+  loadingText: { color: Colors.textOnDark, marginTop: 12, fontSize: Font.base },
 
   // Header
   header: {
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    backgroundColor: 'rgba(16,58,18,0.74)',
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     zIndex: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.glassBorder,
   },
   backBtn: { padding: 6 },
-  headerTitle: { flex: 1, fontSize: 18, fontWeight: 'bold', color: '#fff', marginLeft: 12 },
+  headerTitle: {
+    flex: 1,
+    fontSize: Font.xl,
+    fontWeight: Font.weightBold,
+    color: Colors.textOnDark,
+    marginLeft: 12,
+    letterSpacing: Font.trackTight,
+  },
   headerActions: { flexDirection: 'row', gap: 12 },
   headerActionBtn: { padding: 6 },
-  rescanText: { color: '#A5D6A7', fontWeight: '700', fontSize: 15 },
+  rescanText: { color: Colors.primaryGlow, fontWeight: Font.weightBold, fontSize: Font.md },
 
   // Overlay
   overlay: { ...StyleSheet.absoluteFillObject },
-  overlayTop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  overlayTop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.58)' },
   overlayMiddle: { flexDirection: 'row' },
-  overlaySide: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  overlaySide: { flex: 1, backgroundColor: 'rgba(0,0,0,0.58)' },
   overlayBottom: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.58)',
     alignItems: 'center',
     paddingTop: 30,
   },
 
   // Scan box
-  scanBox: { width: SCAN_BOX_SIZE, height: SCAN_BOX_SIZE, position: 'relative' },
-  corner: { position: 'absolute', width: CORNER, height: CORNER, borderColor: '#4CAF50' },
+  scanBox: {
+    width: SCAN_BOX_SIZE,
+    height: SCAN_BOX_SIZE,
+    position: 'relative',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  corner: { position: 'absolute', width: CORNER, height: CORNER, borderColor: Colors.primaryLight },
   topLeft: { top: 0, left: 0, borderTopWidth: BORDER_W, borderLeftWidth: BORDER_W, borderTopLeftRadius: 6 },
   topRight: { top: 0, right: 0, borderTopWidth: BORDER_W, borderRightWidth: BORDER_W, borderTopRightRadius: 6 },
   bottomLeft: { bottom: 0, left: 0, borderBottomWidth: BORDER_W, borderLeftWidth: BORDER_W, borderBottomLeftRadius: 6 },
@@ -414,16 +431,16 @@ const styles = StyleSheet.create({
     left: 10,
     right: 10,
     height: 2,
-    backgroundColor: '#4CAF50',
+    backgroundColor: Colors.primaryLight,
     opacity: 0.8,
   },
 
   // Processing
   processingBox: { alignItems: 'center', gap: 12 },
-  processingText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  processingText: { color: Colors.textOnDark, fontSize: Font.md, fontWeight: Font.weightSemiBold },
   scanInstructions: {
-    color: '#ccc',
-    fontSize: 14,
+    color: '#E0E0E0',
+    fontSize: Font.base,
     textAlign: 'center',
     paddingHorizontal: 40,
     lineHeight: 20,
@@ -438,11 +455,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-evenly',
     paddingTop: 16,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(8,28,10,0.75)',
+    borderTopWidth: 1,
+    borderTopColor: Colors.glassBorder,
   },
-  controlBtn: { alignItems: 'center', gap: 6, padding: 12 },
+  controlBtn: {
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+  },
   controlBtnActive: { opacity: 1 },
-  controlBtnText: { color: '#fff', fontSize: 12, fontWeight: '500' },
+  controlBtnText: { color: Colors.textOnDark, fontSize: Font.sm, fontWeight: Font.weightMedium },
 
   // Permission
   permissionContainer: {
@@ -450,29 +478,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    backgroundColor: '#F1F8E9',
+    backgroundColor: Colors.background,
   },
   permIconContainer: {
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: Colors.primaryXSoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
   },
-  permTitle: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 12, textAlign: 'center' },
-  permText: { fontSize: 15, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 30 },
+  permTitle: { fontSize: Font.xxxl, fontWeight: Font.weightBold, color: Colors.textPrimary, marginBottom: 12, textAlign: 'center' },
+  permText: { fontSize: Font.md, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 30 },
   permBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#388E3C',
-    borderRadius: 14,
+    backgroundColor: Colors.primaryMid,
+    borderRadius: Radius.lg,
     paddingHorizontal: 28,
     paddingVertical: 14,
+    ...shadowStyle('sm'),
   },
-  permBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  permBtnText: { color: Colors.textOnDark, fontWeight: Font.weightBold, fontSize: Font.lg },
   manualEntryLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -480,7 +509,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     padding: 10,
   },
-  manualEntryLinkText: { color: '#388E3C', fontSize: 15, fontWeight: '600' },
+  manualEntryLinkText: { color: Colors.primaryMid, fontSize: Font.md, fontWeight: Font.weightSemiBold },
 
   // Modal
   modalOverlay: {
@@ -489,11 +518,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: Radius.xxl,
+    borderTopRightRadius: Radius.xxl,
     padding: 24,
     paddingBottom: 40,
+    ...shadowStyle('lg'),
   },
   modalHeader: {
     flexDirection: 'row',
@@ -501,18 +531,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
-  modalSubtext: { fontSize: 14, color: '#888', marginBottom: 20, lineHeight: 20 },
+  modalTitle: { fontSize: Font.xxl, fontWeight: Font.weightBold, color: Colors.textPrimary },
+  modalSubtext: { fontSize: Font.base, color: Colors.textMuted, marginBottom: 20, lineHeight: 20 },
   manualInput: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 14,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: Radius.lg,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: Font.xl,
+    fontWeight: Font.weightSemiBold,
     borderWidth: 1.5,
-    borderColor: '#e0e0e0',
-    color: '#333',
+    borderColor: Colors.border,
+    color: Colors.textPrimary,
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -521,11 +551,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: '#388E3C',
-    borderRadius: 14,
+    backgroundColor: Colors.primaryMid,
+    borderRadius: Radius.lg,
     paddingVertical: 16,
+    ...shadowStyle('sm'),
   },
-  manualSubmitText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  manualSubmitText: { color: Colors.textOnDark, fontSize: Font.lg, fontWeight: Font.weightBold },
 });
 
 export default QRScanner;

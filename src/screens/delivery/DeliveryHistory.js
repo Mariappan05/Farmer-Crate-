@@ -1,18 +1,19 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  StatusBar,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+    ActivityIndicator,
+    FlatList,
+    RefreshControl,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
+import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
 
 const STATUS_COLORS = {
   DELIVERED: '#4CAF50',
@@ -235,7 +236,7 @@ const DeliveryHistory = ({ navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor="#103A12" />
 
       {/* Header */}
-      <LinearGradient colors={['#103A12', '#1B5E20', '#2E7D32']} style={styles.header}>
+      <LinearGradient colors={Colors.gradientHeroDark} style={styles.header}>
         <Text style={styles.headerTitle}>Delivery History</Text>
         <Text style={styles.headerSub}>{stats.total} total orders</Text>
       </LinearGradient>
@@ -313,22 +314,27 @@ const DeliveryHistory = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  container: { flex: 1, backgroundColor: Colors.background },
 
   // Header
-  header: { paddingHorizontal: 20, paddingVertical: 16 },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
-  headerSub: { fontSize: 13, color: '#C8E6C9', marginTop: 2 },
+  header: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.base,
+    borderBottomLeftRadius: Radius.xxl,
+    borderBottomRightRadius: Radius.xxl,
+  },
+  headerTitle: { fontSize: Font.xxxl, fontWeight: Font.weightExtraBold, color: Colors.textOnDark, letterSpacing: 0.2 },
+  headerSub: { fontSize: Font.sm, color: Colors.textOnDarkSoft, marginTop: 2 },
 
   // Stats
   statsRow: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: Colors.card,
     paddingHorizontal: 12,
     paddingVertical: 14,
     gap: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: Colors.divider,
   },
   statCard: {
     flex: 1,
@@ -336,23 +342,23 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     gap: 4,
   },
-  statVal: { fontSize: 14, fontWeight: '800', color: '#1A1A1A' },
-  statLabel: { fontSize: 10, color: '#888', fontWeight: '500' },
+  statVal: { fontSize: Font.base, fontWeight: Font.weightExtraBold, color: Colors.textPrimary },
+  statLabel: { fontSize: 10, color: Colors.textMuted, fontWeight: Font.weightMedium },
 
   // Chips
-  chipRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, backgroundColor: '#fff' },
+  chipRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, backgroundColor: Colors.card },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F4F8F4',
+    backgroundColor: Colors.primaryXSoft,
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 6,
   },
-  chipActive: { backgroundColor: '#1B5E20' },
-  chipText: { fontSize: 13, color: '#666', fontWeight: '600' },
-  chipTextActive: { color: '#fff', fontWeight: '700' },
+  chipActive: { backgroundColor: Colors.primary },
+  chipText: { fontSize: Font.sm, color: Colors.textSecondary, fontWeight: Font.weightSemiBold },
+  chipTextActive: { color: Colors.textOnDark, fontWeight: Font.weightBold },
   chipCount: {
     backgroundColor: 'rgba(255,255,255,0.25)',
     borderRadius: 10,
@@ -363,15 +369,11 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
     padding: 16,
     marginBottom: 10,
-    shadowColor: '#1B5E20',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 4,
+    ...shadowStyle('sm'),
   },
   cardTop: {
     flexDirection: 'row',
@@ -387,20 +389,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  orderId: { fontSize: 14, fontWeight: '700', color: '#1A1A1A' },
-  typeLabel: { fontSize: 11, color: '#888', marginTop: 1, fontWeight: '500' },
+  orderId: { fontSize: Font.base, fontWeight: Font.weightBold, color: Colors.textPrimary },
+  typeLabel: { fontSize: Font.xs, color: Colors.textMuted, marginTop: 1, fontWeight: Font.weightMedium },
   badge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
+  badgeText: { fontSize: 10, fontWeight: Font.weightExtraBold, textTransform: 'uppercase', letterSpacing: 0.3 },
 
   // Addresses
   addressSection: { marginBottom: 10, gap: 6 },
   addressRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   addressDot: { width: 8, height: 8, borderRadius: 4 },
-  addressText: { flex: 1, fontSize: 12, color: '#666' },
+  addressText: { flex: 1, fontSize: Font.sm, color: Colors.textSecondary },
 
   // Person
   personRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  personName: { fontSize: 13, color: '#555', flex: 1, fontWeight: '500' },
+  personName: { fontSize: Font.sm, color: Colors.textSecondary, flex: 1, fontWeight: Font.weightMedium },
 
   // Bottom
   cardBottom: {
@@ -408,20 +410,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: Colors.divider,
     paddingTop: 10,
   },
-  date: { fontSize: 11, color: '#aaa' },
-  earnings: { fontSize: 16, fontWeight: '800', color: '#1B5E20' },
+  date: { fontSize: Font.xs, color: Colors.textMuted },
+  earnings: { fontSize: Font.lg, fontWeight: Font.weightExtraBold, color: Colors.primary },
 
   // Loading
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { fontSize: 14, color: '#888', marginTop: 10 },
+  loadingText: { fontSize: Font.base, color: Colors.textSecondary, marginTop: 10 },
 
   // Empty
   emptyContainer: { alignItems: 'center', paddingVertical: 50, gap: 8 },
-  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#1A1A1A' },
-  emptyMsg: { fontSize: 14, color: '#888', textAlign: 'center', paddingHorizontal: 40 },
+  emptyTitle: { fontSize: Font.xl, fontWeight: Font.weightExtraBold, color: Colors.textPrimary },
+  emptyMsg: { fontSize: Font.base, color: Colors.textMuted, textAlign: 'center', paddingHorizontal: 40 },
 });
 
 export default DeliveryHistory;

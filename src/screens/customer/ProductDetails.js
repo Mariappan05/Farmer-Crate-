@@ -1,26 +1,25 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  Alert,
-  Modal,
-  RefreshControl,
-  StatusBar,
-  Dimensions,
-  ActivityIndicator,
-  Share,
-  FlatList,
-  Platform,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    Share,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../context/CartContext';
+import api from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 import ToastMessage from '../../utils/Toast';
 
@@ -710,7 +709,7 @@ export default function ProductDetails({ navigation, route }) {
 // Styles
 // ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: '#F2F7F3' },
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -730,7 +729,7 @@ const styles = StyleSheet.create({
   carouselContainer: {
     width: SCREEN_WIDTH,
     height: IMAGE_HEIGHT,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#EEF3EF',
   },
   carouselImage: { width: SCREEN_WIDTH, height: IMAGE_HEIGHT },
   noImage: {
@@ -833,15 +832,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 14,
-    borderWidth: 1,
-    borderColor: '#E8F5E9',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07,
-    shadowRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#DDE8DF',
+    elevation: 3,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
   },
   farmerAvatarWrap: { marginRight: 14, position: 'relative' },
   farmerAvatarGrad: {
@@ -932,14 +931,16 @@ const styles = StyleSheet.create({
   relatedCard: {
     width: RELATED_CARD_WIDTH,
     marginRight: 12,
-    borderRadius: 12,
+    borderRadius: 16,
     backgroundColor: '#fff',
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowRadius: 5,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E3ECE4',
   },
   relatedImage: { width: RELATED_CARD_WIDTH, height: 110 },
   noImageSmall: {
@@ -967,13 +968,13 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#E8F5E9',
     gap: 12,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+    elevation: 12,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
   },
   addToCartBtn: {
     flex: 1,

@@ -1,25 +1,24 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  Dimensions,
-  Animated,
-  StatusBar,
-  Image,
-  ActivityIndicator,
-} from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../services/api';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    FlatList,
+    Image,
+    RefreshControl,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { getFarmerOrders } from '../../services/orderService';
+import api from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
+import { getFarmerOrders } from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -1157,8 +1156,8 @@ const FarmerHome = ({ navigation }) => {
 export default FarmerHome;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#F4F8F4' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F8F4' },
   loadingText: { marginTop: 12, color: '#666', fontSize: 14 },
 
   /* Header */
@@ -1209,17 +1208,19 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
     elevation: 3,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   prodImageBox: { position: 'relative', marginRight: 12 },
   prodImage: {
     width: 70,
     height: 70,
     borderRadius: 12,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#EEF4EE',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1267,10 +1268,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     alignItems: 'center',
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   actionIcon: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   actionLabel: { fontSize: 14, fontWeight: '600', color: '#333' },
@@ -1284,10 +1287,12 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 10,
     elevation: 3,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   orderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   orderId: { fontSize: 15, fontWeight: '700', color: '#333' },
@@ -1343,6 +1348,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 10,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
   recImgContainer: { width: '100%', height: 150, position: 'relative' },
   recImg: { width: '100%', height: '100%' },
@@ -1472,10 +1479,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#DDE8DD',
     marginTop: 6,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#1B5E20',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.07,
     shadowRadius: 4,
@@ -1591,6 +1598,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.10,
     shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E3ECF7',
   },
   ppRow: {
     flexDirection: 'row',

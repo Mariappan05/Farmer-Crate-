@@ -1,19 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-  StatusBar,
-  Animated,
-  ScrollView,
-} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import ToastMessage from '../../utils/Toast';
 
@@ -364,10 +363,10 @@ export default PricePredictionScreen;
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const ss = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F0F4F8' },
+  root: { flex: 1, backgroundColor: '#F4F8F4' },
 
   // Loading
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F4F8', gap: 12 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F8F4', gap: 12 },
   loadingText:    { fontSize: 16, fontWeight: '600', color: '#1565C0', marginTop: 8 },
   loadingSubText: { fontSize: 12, color: '#78909C' },
 
@@ -396,6 +395,8 @@ const ss = StyleSheet.create({
   summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 16, marginTop: 8 },
   summaryCard: {
     flex: 1, borderRadius: 12, padding: 10, alignItems: 'center', gap: 4,
+    borderWidth: 1,
+    borderColor: '#E3ECF7',
   },
   summaryCount: { fontSize: 20, fontWeight: '800' },
   summaryLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
@@ -404,6 +405,11 @@ const ss = StyleSheet.create({
   filterTab: {
     paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
     borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   filterTabText: { fontSize: 12, fontWeight: '700' },
 
@@ -413,7 +419,9 @@ const ss = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     elevation: 3,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E6EFE6',
   },
 
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
@@ -436,7 +444,7 @@ const ss = StyleSheet.create({
   // Prices
   priceRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#F5F5F5', borderRadius: 10, padding: 12, marginBottom: 10,
+    backgroundColor: '#F0F6F0', borderRadius: 10, padding: 12, marginBottom: 10,
   },
   priceBox: { alignItems: 'center', flex: 1 },
   priceArrow: { alignItems: 'center' },
@@ -469,7 +477,7 @@ const ss = StyleSheet.create({
 
   // Sales breakdown
   salesRow: {
-    flexDirection: 'row', backgroundColor: '#F5F7FA', borderRadius: 8,
+    flexDirection: 'row', backgroundColor: '#F4F8F4', borderRadius: 8,
     paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8,
   },
   salesItem: { flex: 1, alignItems: 'center' },
