@@ -354,7 +354,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
   }, [progress]);
 
   const items = order?.items || order?.order_items || [];
-  const productName = items[0]?.product?.name || items[0]?.product_name || items[0]?.name || order?.product?.name || order?.Product?.name || 'Product';
+  const productName = order?.product_name || order?.product?.name || items[0]?.product?.name || items[0]?.product_name || 'Product';
   const farmer = order?.farmer || order?.Farmer || items[0]?.farmer || items[0]?.product?.farmer || {};
   const customer = order?.customer || order?.Customer || order?.buyer || {};
   const deliveryPerson = order?.delivery_person || order?.DeliveryPerson || order?.assigned_delivery_person || {};
