@@ -7,6 +7,7 @@ import {
     Animated,
     Image,
     KeyboardAvoidingView,
+  Modal,
     Platform,
     ScrollView,
     StatusBar,
@@ -43,6 +44,7 @@ const OrderUpdatePage = ({ navigation, route }) => {
   const [photoUrl, setPhotoUrl] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const orderId = paramOrderId || order?.order_id || order?.id;
 
   // Success animation
@@ -113,55 +115,46 @@ const OrderUpdatePage = ({ navigation, route }) => {
   };
 
   // ─── Submit update ────────────────────────────────────────────────────
+  const performStatusUpdate = async () => {
+    setConfirmModalVisible(false);
+    setIsUpdating(true);
+    try {
+      const payload = {
+        status: selectedStatus,
+        remarks: remarks.trim() || undefined,
+        proof_image_url: photoUrl || undefined,
+      };
+
+      await updateDeliveryOrderStatus(orderId, selectedStatus);
+
+      // If there's a photo or remarks, try to send them separately
+      if (photoUrl || remarks.trim()) {
+        try {
+          await api.put(`/delivery-persons/orders/${orderId}/update`, payload);
+        } catch {
+          // Not critical if this fails
+        }
+      }
+
+      playSuccessAnimation();
+    } catch (e) {
+      // Fallback
+      try {
+        await api.put(`/orders/${orderId}/status`, { status: selectedStatus });
+        playSuccessAnimation();
+      } catch {
+        Alert.alert('Error', e.message || 'Failed to update order status');
+        setIsUpdating(false);
+      }
+    }
+  };
+
   const handleUpdate = async () => {
     if (!selectedStatus) {
       Alert.alert('Select Status', 'Please select the new status for this order.');
       return;
     }
-
-    Alert.alert(
-      'Confirm Update',
-      `Update order to "${selectedStatus.replace(/_/g, ' ')}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: async () => {
-            setIsUpdating(true);
-            try {
-              const payload = {
-                status: selectedStatus,
-                remarks: remarks.trim() || undefined,
-                proof_image_url: photoUrl || undefined,
-              };
-
-              await updateDeliveryOrderStatus(orderId, selectedStatus);
-
-              // If there's a photo or remarks, try to send them separately
-              if (photoUrl || remarks.trim()) {
-                try {
-                  await api.put(`/delivery-persons/orders/${orderId}/update`, payload);
-                } catch {
-                  // Not critical if this fails
-                }
-              }
-
-              // Show success animation
-              playSuccessAnimation();
-            } catch (e) {
-              // Fallback
-              try {
-                await api.put(`/orders/${orderId}/status`, { status: selectedStatus });
-                playSuccessAnimation();
-              } catch {
-                Alert.alert('Error', e.message || 'Failed to update order status');
-                setIsUpdating(false);
-              }
-            }
-          },
-        },
-      ]
-    );
+    setConfirmModalVisible(true);
   };
 
   // ─── Success animation ────────────────────────────────────────────────
@@ -391,6 +384,37 @@ const OrderUpdatePage = ({ navigation, route }) => {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={confirmModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmModalVisible(false)}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIconWrap}>
+              <Ionicons name="shield-checkmark-outline" size={28} color="#1B5E20" />
+            </View>
+            <Text style={styles.confirmTitle}>Confirm Status Update</Text>
+            <Text style={styles.confirmText}>You are about to update this order to:</Text>
+            <View style={styles.confirmStatusPill}>
+              <Text style={styles.confirmStatusText}>{selectedStatus?.replace(/_/g, ' ')}</Text>
+            </View>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setConfirmModalVisible(false)}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmUpdateBtn} onPress={performStatusUpdate}>
+                <Text style={styles.confirmUpdateText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -565,6 +589,59 @@ const styles = StyleSheet.create({
   successCircle: { marginBottom: 24 },
   successTitle: { fontSize: 28, fontWeight: Font.weightBold, color: Colors.textPrimary, marginBottom: 8 },
   successSubtext: { fontSize: Font.lg, color: Colors.textMuted, textAlign: 'center' },
+
+  // Confirm modal
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  confirmCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
+    padding: 22,
+    ...shadowStyle('md'),
+  },
+  confirmIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.primaryXSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 10,
+  },
+  confirmTitle: { textAlign: 'center', fontSize: Font.lg, fontWeight: Font.weightExtraBold, color: Colors.textPrimary },
+  confirmText: { textAlign: 'center', fontSize: Font.sm, color: Colors.textMuted, marginTop: 8 },
+  confirmStatusPill: {
+    marginTop: 12,
+    alignSelf: 'center',
+    backgroundColor: Colors.primaryXSoft,
+    borderRadius: Radius.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  confirmStatusText: { color: Colors.primaryMid, fontSize: Font.sm, fontWeight: Font.weightBold, textTransform: 'uppercase' },
+  confirmActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  confirmCancelBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  confirmCancelText: { color: Colors.textSecondary, fontSize: Font.sm, fontWeight: Font.weightSemiBold },
+  confirmUpdateBtn: {
+    flex: 1,
+    backgroundColor: Colors.primaryMid,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  confirmUpdateText: { color: Colors.textOnDark, fontSize: Font.sm, fontWeight: Font.weightBold },
 });
 
 export default OrderUpdatePage;

@@ -149,6 +149,11 @@ const DeliveryProfile = ({ navigation }) => {
 
   const confirmLogout = async () => {
     setLogoutModalVisible(false);
+    try {
+      await updateDeliveryAvailability(false, authState?.token);
+    } catch (e) {
+      console.log('Availability off on logout failed:', e.message);
+    }
     try { await clearSession(); } catch (e) { console.log('Logout error:', e.message); }
   };
 

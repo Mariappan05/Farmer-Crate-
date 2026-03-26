@@ -34,6 +34,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import api from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 import { getOrderById } from '../../services/orderService';
 
@@ -44,27 +45,30 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
  * ------------------------------------------------------------------------ */
 
 const TRACKING_STAGES = [
-  { key: 'pending',              label: 'Order Placed',           icon: 'cart',                  mcIcon: null,                    color: '#FF9800', emoji: '\uD83D\uDED2' },
-  { key: 'confirmed',            label: 'Farmer Accepted',        icon: 'checkmark-circle',      mcIcon: null,                    color: '#2196F3', emoji: '\u2705' },
-  { key: 'assigned',             label: 'Transporters Assigned',  icon: null,                    mcIcon: 'truck-check',           color: '#9C27B0', emoji: '\uD83D\uDE9A' },
-  { key: 'pickup_assigned',      label: 'Pickup Person Assigned', icon: 'person',                mcIcon: null,                    color: '#FF5722', emoji: '\uD83D\uDC64' },
-  { key: 'picked_up',            label: 'Picked Up from Farmer',  icon: null,                    mcIcon: 'store-check-outline',   color: '#00897B', emoji: '\uD83D\uDCE6' },
-  { key: 'in_transit',           label: 'In Transit',             icon: 'airplane',              mcIcon: null,                    color: '#3F51B5', emoji: '\uD83D\uDE9A' },
-  { key: 'reached_destination',  label: 'Reached Destination',    icon: null,                    mcIcon: 'warehouse',             color: '#673AB7', emoji: '\uD83C\uDFED' },
-  { key: 'out_for_delivery',     label: 'Out for Delivery',       icon: 'bicycle',               mcIcon: null,                    color: '#00BCD4', emoji: '\uD83D\uDEB4' },
-  { key: 'delivered',            label: 'Delivered',              icon: 'checkmark-done-circle', mcIcon: null,                    color: '#4CAF50', emoji: '\uD83C\uDF89' },
+  { key: 'pending',              label: 'Order Placed',                                icon: 'cart',                  mcIcon: null,                    color: '#FF9800', emoji: '\uD83D\uDED2' },
+  { key: 'assigned',             label: 'Farmer Accepted + Transporters Assigned',     icon: null,                    mcIcon: 'truck-check',           color: '#9C27B0', emoji: '\uD83D\uDE9A' },
+  { key: 'pickup_assigned',      label: 'Pickup Person Assigned',                       icon: 'person',                mcIcon: null,                    color: '#FF5722', emoji: '\uD83D\uDC64' },
+  { key: 'picked_up',            label: 'Picked Up from Farmer',                        icon: null,                    mcIcon: 'store-check-outline',   color: '#00897B', emoji: '\uD83D\uDCE6' },
+  { key: 'received',             label: 'Received at Source Office',                    icon: null,                    mcIcon: 'package-variant-closed', color: '#00897B', emoji: '\uD83C\uDFE2' },
+  { key: 'shipped',              label: 'Shipped from Source',                          icon: null,                    mcIcon: 'cube-send',             color: '#3F51B5', emoji: '\uD83D\uDE9A' },
+  { key: 'in_transit',           label: 'In Transit to Destination',                    icon: 'airplane',              mcIcon: null,                    color: '#3F51B5', emoji: '\uD83D\uDE9A' },
+  { key: 'reached_destination',  label: 'Reached Destination',                          icon: null,                    mcIcon: 'warehouse',             color: '#673AB7', emoji: '\uD83C\uDFED' },
+  { key: 'out_for_delivery',     label: 'Out for Delivery',                             icon: 'bicycle',               mcIcon: null,                    color: '#00BCD4', emoji: '\uD83D\uDEB4' },
+  { key: 'delivered',            label: 'Delivered to Customer',                        icon: 'checkmark-done-circle', mcIcon: null,                    color: '#4CAF50', emoji: '\uD83C\uDF89' },
 ];
 
 const STATUS_MAP = {
   pending: 0, placed: 0,
-  confirmed: 1, accepted: 1,
-  assigned: 2,
-  pickup_assigned: 3,
-  picked_up: 4,
-  in_transit: 5, shipped: 5,
-  reached_destination: 6,
-  out_for_delivery: 7,
-  delivered: 8, completed: 8,
+  confirmed: 1, accepted: 1, assigned: 1,
+  pickup_assigned: 2,
+  pickup_in_progress: 2,
+  picked_up: 3,
+  received: 4,
+  shipped: 5,
+  in_transit: 6,
+  reached_destination: 7,
+  out_for_delivery: 8,
+  delivered: 9, completed: 9,
   cancelled: -1,
 };
 
@@ -115,6 +119,49 @@ const computeItemTotal = (item) => {
   return unit * qty;
 };
 
+const getTrackingProductTitle = (items) => {
+  if (!Array.isArray(items) || items.length === 0) return 'Product';
+  const first = items[0];
+  const firstName = first?.product_name || first?.product?.name || first?.name || 'Product';
+  if (items.length === 1) return firstName;
+  return `${firstName} +${items.length - 1} more`;
+};
+
+const formatDeliveryAddressLines = (rawAddress) => {
+  if (!rawAddress) return [];
+
+  let parsed = rawAddress;
+  if (typeof rawAddress === 'string') {
+    const trimmed = rawAddress.trim();
+    if (!trimmed) return [];
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      // Plain text address from backend.
+      return [trimmed];
+    }
+  }
+
+  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return [String(parsed)];
+  }
+
+  const name = parsed.full_name || parsed.name || parsed.customer_name;
+  const phone = parsed.phone || parsed.mobile_number || parsed.mobile || parsed.phone_number;
+  const line1 = parsed.address_line || parsed.address || parsed.street;
+  const line2 = [parsed.city, parsed.district, parsed.state].filter(Boolean).join(', ');
+  const pin = parsed.pincode || parsed.postal_code || parsed.zip || parsed.zipcode;
+
+  const lines = [];
+  if (name) lines.push(String(name));
+  if (phone) lines.push(`Phone: ${phone}`);
+  if (line1) lines.push(String(line1));
+  if (line2) lines.push(line2);
+  if (pin) lines.push(`PIN: ${pin}`);
+
+  return lines;
+};
+
 /* --------------------------------------------------------------------------
  * ANIMATED VEHICLE
  * ------------------------------------------------------------------------ */
@@ -127,8 +174,8 @@ const AnimatedVehicle = ({ progress }) => {
     Animated.timing(slideAnim, { toValue: progress, duration: 800, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
     Animated.loop(
       Animated.sequence([
-        Animated.timing(bounceAnim, { toValue: -3, duration: 400, useNativeDriver: true }),
-        Animated.timing(bounceAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(bounceAnim, { toValue: -3, duration: 400, useNativeDriver: false }),
+        Animated.timing(bounceAnim, { toValue: 0, duration: 400, useNativeDriver: false }),
       ]),
     ).start();
   }, [progress]);
@@ -165,8 +212,8 @@ const TimelineStep = ({ stage, index, currentIndex, isLast, animValue }) => {
     if (isActive) {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(scaleAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
-          Animated.timing(scaleAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(scaleAnim, { toValue: 1.15, duration: 600, useNativeDriver: false }),
+          Animated.timing(scaleAnim, { toValue: 1, duration: 600, useNativeDriver: false }),
         ]),
       ).start();
     }
@@ -320,6 +367,8 @@ const CustomerOrderTracking = ({ navigation, route }) => {
     sourceTransporter &&
     destinationTransporter &&
     sourceTransporter.transporter_id !== destinationTransporter.transporter_id;
+  const productTitle = getTrackingProductTitle(items);
+  const deliveryAddressLines = formatDeliveryAddressLines(order?.delivery_address || order?.shipping_address);
 
   /* -- Loading state ----------------------------------------- */
   if (loading && !order) {
@@ -406,7 +455,7 @@ const CustomerOrderTracking = ({ navigation, route }) => {
         <View style={trackStyles.orderCard}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <View>
-              <Text style={trackStyles.orderIdText}>Order #{order?.order_id || order?.id}</Text>
+              <Text style={trackStyles.orderIdText}>{productTitle}</Text>
               <Text style={trackStyles.orderDateText}>{formatDate(order?.created_at || order?.order_date)}</Text>
             </View>
             <View style={[trackStyles.statusChip, { backgroundColor: isCancelled ? '#FFEBEE' : (TRACKING_STAGES[currentIndex]?.color || '#4CAF50') + '20' }]}>
@@ -443,7 +492,7 @@ const CustomerOrderTracking = ({ navigation, route }) => {
         {/* Timeline */}
         {!isCancelled && (
           <View style={trackStyles.timelineCard}>
-            <Text style={trackStyles.sectionTitle}>Order Timeline</Text>
+            <Text style={trackStyles.sectionTitle}>Order Timeline (10 Steps)</Text>
             {TRACKING_STAGES.map((stage, idx) => (
               <TimelineStep
                 key={stage.key}
@@ -454,6 +503,35 @@ const CustomerOrderTracking = ({ navigation, route }) => {
                 animValue={progressAnim}
               />
             ))}
+          </View>
+        )}
+
+        {/* Packing Proof Images */}
+        {(order?.packing_image_url || order?.bill_paste_image_url) && (
+          <View style={trackStyles.sectionCard}>
+            <Text style={trackStyles.sectionTitle}>📸 Packing Proof</Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+              {order?.packing_image_url && (
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <Image
+                    source={{ uri: order.packing_image_url }}
+                    style={{ width: '100%', height: 160, borderRadius: 12, backgroundColor: '#f0f0f0' }}
+                    resizeMode="cover"
+                  />
+                  <Text style={{ fontSize: 11, color: '#888', marginTop: 4, fontWeight: '600' }}>Packing Image</Text>
+                </View>
+              )}
+              {order?.bill_paste_image_url && (
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <Image
+                    source={{ uri: order.bill_paste_image_url }}
+                    style={{ width: '100%', height: 160, borderRadius: 12, backgroundColor: '#f0f0f0' }}
+                    resizeMode="cover"
+                  />
+                  <Text style={{ fontSize: 11, color: '#888', marginTop: 4, fontWeight: '600' }}>Bill Image</Text>
+                </View>
+              )}
+            </View>
           </View>
         )}
 
@@ -544,12 +622,14 @@ const CustomerOrderTracking = ({ navigation, route }) => {
         )}
 
         {/* Delivery address */}
-        {(order?.delivery_address || order?.shipping_address) && (
+        {deliveryAddressLines.length > 0 && (
           <View style={trackStyles.addressCard}>
             <Ionicons name="location-outline" size={20} color="#1B5E20" />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={trackStyles.addressTitle}>Delivery Address</Text>
-              <Text style={trackStyles.addressText}>{order.delivery_address || order.shipping_address}</Text>
+              {deliveryAddressLines.map((line, idx) => (
+                <Text key={`addr-${idx}`} style={trackStyles.addressText}>{line}</Text>
+              ))}
             </View>
           </View>
         )}

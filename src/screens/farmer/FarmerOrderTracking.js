@@ -8,6 +8,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
   StatusBar,
   RefreshControl,
 } from 'react-native';
@@ -17,15 +18,12 @@ import * as orderService from '../../services/orderService';
 
 const STAGES = [
   { key: 'PENDING',             label: 'Order Placed',           icon: 'receipt-outline',               iconLib: 'Ionicons' },
-  { key: 'PLACED',              label: 'Order Placed',           icon: 'receipt-outline',               iconLib: 'Ionicons' },
-  { key: 'CONFIRMED',           label: 'Farmer Accepted',        icon: 'checkmark-circle-outline',      iconLib: 'Ionicons' },
-  { key: 'ASSIGNED',            label: 'Transporters Assigned',  icon: 'truck-check-outline',           iconLib: 'Material' },
+  { key: 'ASSIGNED',            label: 'Farmer Accepted + Transporters Assigned', icon: 'truck-check-outline', iconLib: 'Material' },
   { key: 'PICKUP_ASSIGNED',     label: 'Pickup Person Assigned', icon: 'person-outline',                iconLib: 'Ionicons' },
-  { key: 'PICKUP_IN_PROGRESS',  label: 'Pickup In Progress',     icon: 'bike-fast',                     iconLib: 'Material' },
   { key: 'PICKED_UP',           label: 'Picked Up from Farmer',  icon: 'store-check-outline',           iconLib: 'Material' },
-  { key: 'RECEIVED',            label: 'Received at Source Office', icon: 'package-check',               iconLib: 'Material' },
-  { key: 'SHIPPED',             label: 'Shipped to Destination', icon: 'cube-send',                     iconLib: 'Material' },
-  { key: 'IN_TRANSIT',          label: 'In Transit',             icon: 'truck-fast-outline',            iconLib: 'Material' },
+  { key: 'RECEIVED',            label: 'Received at Source Office', icon: 'package-variant-closed',      iconLib: 'Material' },
+  { key: 'SHIPPED',             label: 'Shipped from Source',    icon: 'cube-send',                     iconLib: 'Material' },
+  { key: 'IN_TRANSIT',          label: 'In Transit to Destination', icon: 'truck-fast-outline',         iconLib: 'Material' },
   { key: 'REACHED_DESTINATION', label: 'Reached Destination',    icon: 'warehouse',                     iconLib: 'Material' },
   { key: 'OUT_FOR_DELIVERY',    label: 'Out for Delivery',       icon: 'truck-delivery-outline',        iconLib: 'Material' },
   { key: 'DELIVERED',           label: 'Delivered to Customer',  icon: 'checkmark-done-circle-outline', iconLib: 'Ionicons' },
@@ -303,18 +301,17 @@ const FarmerOrderTracking = ({ navigation, route }) => {
     const status = (order.current_status || order.status || '').toUpperCase();
     const STATUS_INDEX = {
       PENDING: 0, PLACED: 0,
-      CONFIRMED: 2, ACCEPTED: 2,
-      ASSIGNED: 3,
-      PICKUP_ASSIGNED: 4,
-      PICKUP_IN_PROGRESS: 5,
-      PICKED_UP: 6,
-      RECEIVED: 7,
-      SHIPPED: 8,
-      IN_TRANSIT: 9,
-      REACHED_DESTINATION: 10,
-      OUT_FOR_DELIVERY: 11,
-      DELIVERED: 12,
-      COMPLETED: 12,
+      CONFIRMED: 1, ACCEPTED: 1, ASSIGNED: 1,
+      PICKUP_ASSIGNED: 2,
+      PICKUP_IN_PROGRESS: 2,
+      PICKED_UP: 3,
+      RECEIVED: 4,
+      SHIPPED: 5,
+      IN_TRANSIT: 6,
+      REACHED_DESTINATION: 7,
+      OUT_FOR_DELIVERY: 8,
+      DELIVERED: 9,
+      COMPLETED: 9,
     };
     return STATUS_INDEX[status] ?? 0;
   };
@@ -477,7 +474,7 @@ const FarmerOrderTracking = ({ navigation, route }) => {
               </View>
             ) : (
               <Text style={styles.summaryTotal}>
-                ₹{parseFloat(order?.total_amount || order?.total || 0).toLocaleString('en-IN')}
+                ₹{parseFloat(order?.total_price || order?.total_amount || order?.total || 0).toLocaleString('en-IN')}
               </Text>
             )}
           </View>
@@ -515,7 +512,7 @@ const FarmerOrderTracking = ({ navigation, route }) => {
 
         {/* Timeline */}
         <View style={styles.timelineCard}>
-          <Text style={styles.cardTitle}>Tracking Timeline</Text>
+          <Text style={styles.cardTitle}>Tracking Timeline (10 Steps)</Text>
           {STAGES.map((stage, idx) => renderTimelineStage(stage, idx))}
         </View>
 
@@ -544,14 +541,43 @@ const FarmerOrderTracking = ({ navigation, route }) => {
                 Quantity: {order?.quantity || 1} units
               </Text>
               <Text style={styles.productDetailMeta}>
-                Price: ₹{parseFloat(order?.Product?.current_price || order?.product?.price || order?.unit_price || 0).toFixed(2)} per unit
+                Price: ₹{parseFloat(order?.Product?.current_price || order?.product?.current_price || order?.product?.price || order?.unit_price || 0).toFixed(2)} per unit
               </Text>
               <Text style={styles.productDetailTotal}>
-                Total: ₹{parseFloat(order?.total_amount || order?.total_price || order?.total || 0).toLocaleString('en-IN')}
+                Total: ₹{parseFloat(order?.total_price || order?.total_amount || order?.total || 0).toLocaleString('en-IN')}
               </Text>
             </View>
           </View>
         </View>
+
+        {/* Packing Proof Images */}
+        {(order?.packing_image_url || order?.bill_paste_image_url) && (
+          <View style={styles.infoCard}>
+            <Text style={styles.cardTitle}>📸 Packing Proof</Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+              {order?.packing_image_url && (
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <Image 
+                    source={{ uri: order.packing_image_url }} 
+                    style={{ width: '100%', height: 160, borderRadius: 12, backgroundColor: '#f0f0f0' }}
+                    resizeMode="cover"
+                  />
+                  <Text style={{ fontSize: 11, color: '#888', marginTop: 4, fontWeight: '600' }}>Packing Image</Text>
+                </View>
+              )}
+              {order?.bill_paste_image_url && (
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <Image 
+                    source={{ uri: order.bill_paste_image_url }} 
+                    style={{ width: '100%', height: 160, borderRadius: 12, backgroundColor: '#f0f0f0' }}
+                    resizeMode="cover"
+                  />
+                  <Text style={{ fontSize: 11, color: '#888', marginTop: 4, fontWeight: '600' }}>Bill Image</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Source Transporter Info */}
         {(order?.source_transporter_id || order?.source_transporter) && (

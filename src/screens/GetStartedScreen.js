@@ -157,7 +157,7 @@ const GetStartedScreen = ({ navigation }) => {
     ]).start();
 
     Animated.loop(
-      Animated.timing(shimmer, { toValue: width * 1.5, duration: 2000, delay: 1800, easing: Easing.linear, useNativeDriver: true })
+      Animated.timing(shimmer, { toValue: width * 1.5, duration: 2000, delay: 1800, easing: Easing.linear, useNativeDriver: false })
     ).start();
   }, []);
 

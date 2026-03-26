@@ -38,6 +38,18 @@ const VEHICLE_TYPES = ['Bike', 'Auto', 'Van', 'Truck'];
 const AddDeliveryPerson = ({ navigation }) => {
   const insets = useSafeAreaInsets();
 
+  const normalizeVehicleNumber = (value = '') =>
+    value
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .trim();
+
+  const normalizeLicenseNumber = (value = '') =>
+    value
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .trim();
+
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -57,25 +69,66 @@ const AddDeliveryPerson = ({ navigation }) => {
   const [profileImageUri, setProfileImageUri] = useState('');
 
   const updateField = (field, value) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    let nextValue = value;
+    if (field === 'phone' || field === 'mobile_number') {
+      nextValue = String(value || '').replace(/\D/g, '').slice(0, 10);
+    }
+    if (field === 'vehicle_number') {
+      nextValue = normalizeVehicleNumber(value);
+    }
+    if (field === 'license_number') {
+      nextValue = normalizeLicenseNumber(value);
+    }
+
+    setForm((prev) => ({ ...prev, [field]: nextValue }));
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: null }));
   };
 
   /* ── Validation ─────────────────────────────────────────── */
   const validate = () => {
     const errs = {};
-    if (!form.name.trim()) errs.name = 'Name is required';
-    if (!form.email.trim()) errs.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errs.email = 'Invalid email';
-    if (!form.phone.trim()) errs.phone = 'Phone is required';
-    else if (!/^\d{10}$/.test(form.phone.trim())) errs.phone = 'Phone must be 10 digits';
-    if (!form.mobile_number.trim()) errs.mobile_number = 'Mobile number is required';
-    else if (!/^\d{10}$/.test(form.mobile_number.trim())) errs.mobile_number = 'Mobile number must be 10 digits';
+
+    const name = form.name.trim();
+    const email = form.email.trim().toLowerCase();
+    const phone = String(form.phone || '').replace(/\D/g, '');
+    const mobile = String(form.mobile_number || '').replace(/\D/g, '');
+    const vehicleNumber = normalizeVehicleNumber(form.vehicle_number);
+    const licenseNumber = normalizeLicenseNumber(form.license_number);
+    const location = form.current_location.trim();
+
+    if (!name) errs.name = 'Name is required';
+    else if (name.length < 3) errs.name = 'Name must be at least 3 characters';
+
+    if (!email) errs.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Invalid email';
+
+    if (!phone) errs.phone = 'Phone is required';
+    else if (!/^\d{10}$/.test(phone)) errs.phone = 'Phone must be exactly 10 digits';
+
+    if (!mobile) errs.mobile_number = 'Mobile number is required';
+    else if (!/^\d{10}$/.test(mobile)) errs.mobile_number = 'Mobile number must be exactly 10 digits';
+
     if (!form.password) errs.password = 'Password is required';
     else if (form.password.length < 6) errs.password = 'Password must be at least 6 characters';
+
     if (!form.vehicle_type) errs.vehicle_type = 'Select vehicle type';
-    if (!form.vehicle_number.trim()) errs.vehicle_number = 'Vehicle number is required';
-    if (!form.license_number.trim()) errs.license_number = 'License number is required';
+
+    if (!vehicleNumber) errs.vehicle_number = 'Vehicle number is required';
+    else if (!/^[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,4}$/.test(vehicleNumber)) {
+      errs.vehicle_number = 'Vehicle number format is invalid';
+    }
+
+    if (!licenseNumber) errs.license_number = 'License number is required';
+    else if (licenseNumber.length < 8 || licenseNumber.length > 20) {
+      errs.license_number = 'License number must be 8 to 20 characters';
+    } else if (!/[A-Z]/.test(licenseNumber) || !/\d/.test(licenseNumber)) {
+      errs.license_number = 'License number must contain letters and numbers';
+    }
+
+    if (location && location.length < 3) {
+      errs.current_location = 'Location must be at least 3 characters';
+    }
+
     if (!licenseImageUri) errs.license_image = 'License image is required';
     if (!profileImageUri) errs.profile_image = 'Profile image is required';
     setErrors(errs);
@@ -108,12 +161,12 @@ const AddDeliveryPerson = ({ navigation }) => {
         full_name: form.name.trim(),
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
-        phone: form.phone.trim(),
-        mobile_number: form.mobile_number.trim(),
+        phone: String(form.phone || '').replace(/\D/g, ''),
+        mobile_number: String(form.mobile_number || '').replace(/\D/g, ''),
         password: form.password,
         vehicle_type: form.vehicle_type.toLowerCase(),
-        vehicle_number: form.vehicle_number.trim().toUpperCase(),
-        license_number: form.license_number.trim().toUpperCase(),
+        vehicle_number: normalizeVehicleNumber(form.vehicle_number),
+        license_number: normalizeLicenseNumber(form.license_number),
         license_url: licenseUrl,
         image_url: profileUrl,
         current_location: form.current_location.trim(),
@@ -151,6 +204,7 @@ const AddDeliveryPerson = ({ navigation }) => {
           placeholder={opts.placeholder || `Enter ${label.toLowerCase()}`}
           placeholderTextColor="#aaa"
           keyboardType={opts.keyboardType || 'default'}
+          maxLength={opts.maxLength}
           autoCapitalize={opts.autoCapitalize || 'none'}
           secureTextEntry={field === 'password' && !showPassword}
           editable={!loading}
@@ -196,8 +250,8 @@ const AddDeliveryPerson = ({ navigation }) => {
 
             {renderInput('Full Name', 'name', { icon: 'person-outline', autoCapitalize: 'words', placeholder: 'Enter full name' })}
             {renderInput('Email', 'email', { icon: 'mail-outline', keyboardType: 'email-address', placeholder: 'Enter email address' })}
-            {renderInput('Phone', 'phone', { icon: 'call-outline', keyboardType: 'phone-pad', placeholder: 'Enter 10-digit phone number' })}
-            {renderInput('Mobile Number', 'mobile_number', { icon: 'call-outline', keyboardType: 'phone-pad', placeholder: 'Enter 10-digit mobile number' })}
+            {renderInput('Phone', 'phone', { icon: 'call-outline', keyboardType: 'phone-pad', maxLength: 10, placeholder: 'Enter 10-digit phone number' })}
+            {renderInput('Mobile Number', 'mobile_number', { icon: 'call-outline', keyboardType: 'phone-pad', maxLength: 10, placeholder: 'Enter 10-digit mobile number' })}
             {renderInput('Password', 'password', { icon: 'lock-closed-outline', placeholder: 'Minimum 6 characters' })}
           </View>
 

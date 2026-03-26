@@ -8,7 +8,7 @@
  *   - Use Current Location (expo-location)
  *   - South Indian states & districts dropdown
  *   - Price breakdown (subtotal, admin commission 3%, delivery 10% or ₹40)
- *   - COD / Online payment selection
+ *   - Online payment selection (default)
  *   - QR code generation (react-native-qrcode-svg)
  *   - Upload QR to Cloudinary → create order
  *   - Processing overlay animation
@@ -17,6 +17,7 @@
 
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -47,7 +48,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import api from '../../services/api';
 import { uploadImageToCloudinary } from '../../services/cloudinaryService';
-import { createOrder, updateQRImage } from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -123,6 +123,63 @@ const generateQRCode = () => {
   let code = 'FC-';
   for (let i = 0; i < 10; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
   return code;
+};
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const PENDING_PAYMENT_SYNC_KEY = 'fc_pending_payment_sync_v1';
+
+const normalizeOrderList = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.orders)) return payload.orders;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.data?.orders)) return payload.data.orders;
+  return [];
+};
+
+const loadPendingPaymentSync = async () => {
+  try {
+    const raw = await AsyncStorage.getItem(PENDING_PAYMENT_SYNC_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const savePendingPaymentSync = async (items) => {
+  try {
+    await AsyncStorage.setItem(PENDING_PAYMENT_SYNC_KEY, JSON.stringify(items || []));
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const getOrderProductId = (item) => {
+  const direct = item?.product_id || item?.productId;
+  if (direct) return direct;
+
+  if (typeof item?.product === 'number' || typeof item?.product === 'string') {
+    return item.product;
+  }
+
+  return item?.product?.product_id || item?.product?.id || item?.id;
+};
+
+const logPaymentApiError = (stage, error) => {
+  const status = error?.status || error?.response?.status;
+  const message =
+    error?.response?.data?.message ||
+    error?.response?.data?.error ||
+    error?.message ||
+    'Unknown error';
+
+  console.error(`[Payment] ${stage} failed:`, message);
+  console.error(`[Payment] ${stage} status:`, status);
+  try {
+    console.error(`[Payment] ${stage} response:`, JSON.stringify(error?.response?.data, null, 2));
+  } catch {
+    console.error(`[Payment] ${stage} response:`, error?.response?.data);
+  }
 };
 
 const calculatePricing = (subtotal) => {
@@ -297,7 +354,7 @@ const Payment = ({ navigation, route }) => {
   const [zoneModalVisible, setZoneModalVisible] = useState(false);
 
   // ── Payment ──
-  const [paymentMethod, setPaymentMethod] = useState('COD');
+  const paymentMethod = 'ONLINE';
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
 
@@ -329,7 +386,7 @@ const Payment = ({ navigation, route }) => {
       if (user.city) setCity(user.city);
       if (user.state) setState(user.state);
       if (user.district) setDistrict(user.district);
-      if (user.pincode) setPincode(String(user.pincode || ''));
+      if (user.pincode) setPincode(String(user.pincode || '').replace(/\D/g, '').slice(0, 6));
       if (user.zone) setZone(user.zone);
     }
   }, [authState?.user]);
@@ -362,13 +419,54 @@ const Payment = ({ navigation, route }) => {
         toastRef.current?.show('Location permission is required.', 'warning');
         return;
       }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const resp = await axios.get(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.coords.latitude}&lon=${loc.coords.longitude}`,
-        { headers: { 'User-Agent': 'FarmerCrate/1.0' } },
-      );
-      if (resp.data?.address) {
-        const a = resp.data.address;
+      let loc;
+      try {
+        loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      } catch {
+        loc = await Location.getLastKnownPositionAsync();
+      }
+
+      if (!loc?.coords) {
+        toastRef.current?.show('Unable to get your GPS location. Please try again outdoors.', 'warning');
+        return;
+      }
+
+      let address = null;
+      try {
+        const geocoded = await Location.reverseGeocodeAsync({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+        if (Array.isArray(geocoded) && geocoded[0]) {
+          const g = geocoded[0];
+          address = {
+            house_number: '',
+            road: g.street || g.name || '',
+            neighbourhood: '',
+            suburb: g.subregion || '',
+            city: g.city || g.district || g.subregion || '',
+            state: g.region || '',
+            state_district: g.district || g.subregion || '',
+            county: g.district || '',
+            postcode: g.postalCode || '',
+          };
+        }
+      } catch {
+        // Fall through to HTTP reverse-geocode fallback.
+      }
+
+      if (!address) {
+        const resp = await axios.get(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.coords.latitude}&lon=${loc.coords.longitude}`,
+          { timeout: 15000 },
+        );
+        if (resp.data?.address) {
+          address = resp.data.address;
+        }
+      }
+
+      if (address) {
+        const a = address;
 
         // Address line
         const parts = [a.house_number, a.road, a.neighbourhood, a.suburb].filter(Boolean);
@@ -400,7 +498,7 @@ const Payment = ({ navigation, route }) => {
         }
 
         // Pincode
-        if (a.postcode) setPincode(a.postcode);
+        if (a.postcode) setPincode(String(a.postcode).replace(/\D/g, '').slice(0, 6));
 
         // Zone — try to match suburb/neighbourhood to cardinal direction
         const zoneHint = (a.suburb || a.neighbourhood || a.village || '').toLowerCase();
@@ -440,7 +538,7 @@ const Payment = ({ navigation, route }) => {
   // ── Build shared delivery address & pricing ──
   const buildOrderPayload = (qrString = '', qrImageUrl = '') => ({
     items: effectiveCartItems.map((item) => ({
-      product_id: item.product_id || item.id,
+      product_id: getOrderProductId(item),
       quantity: item.quantity || 1,
       price: item.price || item.current_price || 0,
       name: item.product?.name || item.product?.product_name || item.product_name || item.name || '',
@@ -462,6 +560,159 @@ const Payment = ({ navigation, route }) => {
     qr_code: qrString,
     qr_image_url: qrImageUrl,
   });
+
+  const findPersistedPaidOrder = async ({ orderId, qrCode, razorpayPaymentId }) => {
+    if (orderId) {
+      try {
+        const byIdRes = await api.get(`/orders/${orderId}`);
+        const byIdData = byIdRes?.data?.data || byIdRes?.data || {};
+        if (byIdData?.order_id || byIdData?.id) {
+          return byIdData;
+        }
+      } catch {
+        // Continue with list-based lookup.
+      }
+    }
+
+    const lookupEndpoints = ['/orders/my-orders', '/orders'];
+    for (const endpoint of lookupEndpoints) {
+      try {
+        const listRes = await api.get(endpoint);
+        const listPayload = listRes?.data?.data || listRes?.data || [];
+        const orders = normalizeOrderList(listPayload);
+
+        const matched = orders.find((o) => {
+          const byQr =
+            qrCode &&
+            String(o?.qr_code || '').trim() &&
+            String(o?.qr_code || '').trim() === String(qrCode).trim();
+
+          const byPaymentId =
+            razorpayPaymentId &&
+            String(o?.razorpay_payment_id || o?.payment_id || '').trim() &&
+            String(o?.razorpay_payment_id || o?.payment_id || '').trim() === String(razorpayPaymentId).trim();
+
+          const byOrderId =
+            orderId &&
+            String(o?.order_id || o?.id || '').trim() === String(orderId).trim();
+
+          return byQr || byPaymentId || byOrderId;
+        });
+
+        if (matched) return matched;
+      } catch {
+        // Try next endpoint.
+      }
+    }
+
+    return null;
+  };
+
+  const persistPaidOrderFallback = async ({ payload, rzpResponse }) => {
+    // Keep fallback lightweight: only verify whether order already exists.
+    // Posting /orders here can trigger another payment-init path and cause long waits.
+
+    // Secondary verification fallback: retry reads with short delay for eventual consistency.
+    for (let i = 0; i < 3; i++) {
+      const matched = await findPersistedPaidOrder({
+        orderId: null,
+        qrCode: payload?.qr_code,
+        razorpayPaymentId: rzpResponse?.razorpay_payment_id,
+      });
+      if (matched) return matched;
+      await wait(1200);
+    }
+
+    return null;
+  };
+
+  const enqueuePendingSync = async (entry) => {
+    const existing = await loadPendingPaymentSync();
+    const deduped = existing.filter((e) => String(e?.qr_code || '') !== String(entry?.qr_code || ''));
+    deduped.unshift(entry);
+    await savePendingPaymentSync(deduped.slice(0, 20));
+  };
+
+  const tryPendingSyncEntry = async (entry) => {
+    if (!entry?.payload || !entry?.paymentDetails || !entry?.rzpResponse) return false;
+
+    const orderId = entry?.orderId || entry?.orderData?.order_id || entry?.orderData?.id;
+    const completePayload = {
+      order_id: orderId,
+      razorpay_order_id: entry.paymentDetails?.razorpay_order_id,
+      razorpay_payment_id: entry.rzpResponse?.razorpay_payment_id,
+      razorpay_signature: entry.rzpResponse?.razorpay_signature,
+      order_data: {
+        items: entry.payload?.items,
+        delivery_address: entry.payload?.delivery_address,
+        total_amount: entry.payload?.total_amount,
+        subtotal: entry.payload?.subtotal,
+        admin_commission: entry.payload?.admin_commission,
+        delivery_charges: entry.payload?.delivery_charges,
+        qr_code: entry.payload?.qr_code,
+        qr_image_url: entry.payload?.qr_image_url,
+      },
+    };
+
+    try {
+      await completePaidOrder({ completePayload, orderId });
+    } catch {
+      // keep trying fallback below
+    }
+
+    let persisted = await findPersistedPaidOrder({
+      orderId,
+      qrCode: entry?.payload?.qr_code,
+      razorpayPaymentId: entry?.rzpResponse?.razorpay_payment_id,
+    });
+
+    if (persisted) return true;
+
+    persisted = await persistPaidOrderFallback({
+      payload: entry.payload,
+      rzpResponse: entry.rzpResponse,
+    });
+
+    return !!persisted;
+  };
+
+  const flushPendingPaymentSync = async () => {
+    const pending = await loadPendingPaymentSync();
+    if (!pending.length) return;
+
+    const remaining = [];
+    for (const entry of pending) {
+      try {
+        const ok = await tryPendingSyncEntry(entry);
+        if (!ok) remaining.push(entry);
+      } catch {
+        remaining.push(entry);
+      }
+    }
+    await savePendingPaymentSync(remaining);
+  };
+
+  const completePaidOrder = async ({ completePayload, orderId }) => {
+    const attempts = [
+      { method: 'post', endpoint: '/orders/complete' },
+      // Backend currently exposes only POST /api/orders/complete.
+    ];
+
+    let lastErr = null;
+    for (const attempt of attempts) {
+      try {
+        const res = await api[attempt.method](attempt.endpoint, completePayload);
+        const payload = res?.data?.data || res?.data || {};
+        return {
+          order_id: payload?.order_id || payload?.order?.order_id || payload?.order?.id || null,
+          response: payload,
+        };
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error('Unable to complete payment sync');
+  };
 
   // ── Razorpay Online Payment ──
   const handleOnlinePayment = async () => {
@@ -490,14 +741,20 @@ const Payment = ({ navigation, route }) => {
       // Step 2: create order on backend (returns payment_details for Razorpay)
       const payload = buildOrderPayload(qrString, qrImageUrl);
       console.log('[Payment] Creating order with payload:', JSON.stringify(payload, null, 2));
-      const res = await api.post('/orders', payload);
+      let res;
+      try {
+        res = await api.post('/orders', payload);
+      } catch (createErr) {
+        logPaymentApiError('Create order', createErr);
+        throw createErr;
+      }
       const data = res.data?.data || res.data;
       const paymentDetails = data?.payment_details;
       const orderData = data?.order_data || data;
 
       if (!paymentDetails?.key_id || !paymentDetails?.razorpay_order_id) {
         // Backend doesn't support Razorpay orders yet — show graceful message
-        toastRef.current?.show('Payment gateway not configured. Please use COD.', 'warning', 3500);
+        toastRef.current?.show('Payment gateway is not configured right now. Please try again later.', 'warning', 3500);
         setIsProcessing(false);
         return;
       }
@@ -531,22 +788,123 @@ const Payment = ({ navigation, route }) => {
         qr_image_url: payload.qr_image_url,
       };
       const completePayload = {
+        order_id: orderData?.order_id || orderData?.id,
         razorpay_order_id: paymentDetails.razorpay_order_id,
         razorpay_payment_id: rzpResponse.razorpay_payment_id,
         razorpay_signature: rzpResponse.razorpay_signature,
         order_data: completeOrderData,
       };
       console.log('[Payment] Completing payment with payload:', JSON.stringify(completePayload, null, 2));
-      await api.post('/orders/complete', completePayload);
+      let completionWarning = null;
+      let finalOrderData = orderData;
+      let completedOrderId = orderData?.order_id || orderData?.id || null;
+      try {
+        const completeResult = await completePaidOrder({
+          completePayload,
+          orderId: orderData?.order_id || orderData?.id,
+        });
+        if (completeResult?.order_id) {
+          completedOrderId = completeResult.order_id;
+          finalOrderData = {
+            ...finalOrderData,
+            order_id: completeResult.order_id,
+          };
+        }
+      } catch (completeErr) {
+        logPaymentApiError('Complete order', completeErr);
+        const statusCode = completeErr?.status || completeErr?.response?.status;
+        const backendMsg =
+          completeErr?.response?.data?.message ||
+          completeErr?.response?.data?.error ||
+          completeErr?.message ||
+          '';
+
+        // Known backend sync issues after payment capture.
+        const msgLower = String(backendMsg).toLowerCase();
+        const isKnownSyncIssue =
+          statusCode === 404 ||
+          msgLower.includes('for update cannot be applied to the nullable side of an outer join') ||
+          msgLower.includes('error fetching order') ||
+          msgLower.includes('cannot put /api/orders/complete') ||
+          msgLower.includes('cannot post /api/orders/complete') ||
+          msgLower.includes('request failed with status code 404');
+
+        if (isKnownSyncIssue) {
+          const persisted = await persistPaidOrderFallback({
+            payload,
+            rzpResponse,
+          });
+          if (persisted) {
+            finalOrderData = persisted;
+            completedOrderId = persisted?.order_id || persisted?.id || completedOrderId;
+            completionWarning = 'Payment successful. Your order was saved using fallback sync.';
+          } else {
+            await enqueuePendingSync({
+              payload,
+              paymentDetails,
+              rzpResponse,
+              orderData,
+              orderId: orderData?.order_id || orderData?.id,
+              qr_code: payload?.qr_code,
+              createdAt: Date.now(),
+            });
+            completionWarning = 'Payment succeeded. Order sync is taking longer than expected and will retry automatically.';
+          }
+          console.warn('[Payment] /orders/complete sync issue:', backendMsg);
+        } else {
+          throw completeErr;
+        }
+      }
+
+      // Mandatory persistence verification before showing success.
+      let verifiedOrder = finalOrderData;
+      let persistedVerified = false;
+      for (let i = 0; i < 5; i++) {
+        const persisted = await findPersistedPaidOrder({
+          orderId: verifiedOrder?.order_id || verifiedOrder?.id || completedOrderId,
+          qrCode: payload?.qr_code,
+          razorpayPaymentId: rzpResponse?.razorpay_payment_id,
+        });
+        if (persisted) {
+          verifiedOrder = persisted;
+          persistedVerified = true;
+          break;
+        }
+        await wait(1200);
+      }
+
+      if (!persistedVerified) {
+        console.error('[Payment] Persistence verification failed after retries:', {
+          completedOrderId,
+          qr_code: payload?.qr_code,
+          razorpay_payment_id: rzpResponse?.razorpay_payment_id,
+        });
+        await enqueuePendingSync({
+          payload,
+          paymentDetails,
+          rzpResponse,
+          orderData,
+          orderId: orderData?.order_id || orderData?.id,
+          qr_code: payload?.qr_code,
+          createdAt: Date.now(),
+        });
+        toastRef.current?.show(
+          completionWarning || 'Payment succeeded. Order sync is delayed on server. Please check My Orders shortly.',
+          'warning',
+          4200
+        );
+        return;
+      }
 
       // Step 5: clear cart & navigate
       try { await clearCart(); } catch (_) {}
       navigation.replace('OrderConfirm', {
         order: {
-          ...orderData,
-          order_id: orderData?.order_id || orderData?.id,
+          ...verifiedOrder,
+          order_id: verifiedOrder?.order_id || verifiedOrder?.id || orderData?.order_id || orderData?.id,
           total_amount: pricing.total,
           payment_method: 'ONLINE',
+          payment_status: 'PAID',
           delivery_address: payload.delivery_address,
           items: payload.items,
           subtotal: pricing.subtotal,
@@ -556,18 +914,33 @@ const Payment = ({ navigation, route }) => {
           qr_image_url: qrImageUrl,
         },
       });
+      if (completionWarning) {
+        toastRef.current?.show(completionWarning, 'warning', 3500);
+      }
+
+      // Best-effort background sync for previously failed paid orders.
+      flushPendingPaymentSync().catch(() => {});
     } catch (e) {
       // Razorpay SDK throws a specific error when user cancels
       if (e?.code === 'PAYMENT_CANCELLED' || e?.description === 'Payment cancelled by user.') {
         toastRef.current?.show('Payment cancelled.', 'info');
       } else {
         const msg = e?.description || e?.message || 'Payment failed. Please try again.';
-        console.error('[Payment] Online payment error:', msg);
-        console.error('[Payment] Error code:', e?.code);
-        console.error('[Payment] HTTP status:', e?.response?.status);
-        console.error('[Payment] Response data:', JSON.stringify(e?.response?.data, null, 2));
-        console.error('[Payment] Full error:', e);
-        toastRef.current?.show(msg, 'error', 4000);
+        const isDelayedSyncNotice =
+          String(msg).toLowerCase().includes('order sync is delayed') ||
+          String(msg).toLowerCase().includes('order sync is taking longer');
+
+        if (isDelayedSyncNotice) {
+          console.error('[Payment] Delayed sync notice:', msg);
+          toastRef.current?.show(msg, 'warning', 4200);
+        } else {
+          console.error('[Payment] Online payment error:', msg);
+          console.error('[Payment] Error code:', e?.code);
+          console.error('[Payment] HTTP status:', e?.response?.status);
+          console.error('[Payment] Response data:', JSON.stringify(e?.response?.data, null, 2));
+          console.error('[Payment] Full error:', e);
+          toastRef.current?.show(msg, 'error', 4000);
+        }
       }
     } finally {
       setIsProcessing(false);
@@ -578,100 +951,13 @@ const Payment = ({ navigation, route }) => {
   // ── Place Order ──
   const handlePlaceOrder = async () => {
     if (!validateForm()) return;
-    if (paymentMethod === 'ONLINE') { handleOnlinePayment(); return; }
-
-    setIsProcessing(true);
-
-    try {
-      // 1. Generate QR code string
-      const qrString = generateQRCode();
-      setQrCode(qrString);
-      setShowQR(true);
-
-      // 2. Wait briefly for QR to render, then capture
-      await new Promise((resolve) => setTimeout(resolve, 600));
-
-      let qrImageUrl = '';
-      try {
-        if (qrRef.current) {
-          const uri = await captureRef(qrRef, { format: 'png', quality: 0.9 });
-          const uploadedUrl = await uploadImageToCloudinary(uri);
-          if (uploadedUrl) qrImageUrl = uploadedUrl;
-        }
-      } catch (qrErr) {
-        console.log('QR capture/upload error:', qrErr);
-      }
-
-      // 3. Build order payload
-      const orderPayload = {
-        items: effectiveCartItems.map((item) => ({
-          product_id: item.product_id || item.id,
-          quantity: item.quantity || 1,
-          price: item.price || item.current_price || 0,
-        })),
-        delivery_address: {
-          full_name: fullName.trim(),
-          phone: phone.trim(),
-          address_line: addressLine.trim(),
-          city: city.trim(),
-          state,
-          district,
-          pincode: pincode.trim(),
-          zone,
-        },
-        payment_method: paymentMethod,
-        subtotal: pricing.subtotal,
-        admin_commission: pricing.adminCommission,
-        delivery_charges: pricing.deliveryCharges,
-        total_amount: pricing.total,
-        qr_code: qrString,
-        qr_image_url: qrImageUrl,
-      };
-
-      // 4. Create order
-      console.log('[Payment] COD order payload:', JSON.stringify(orderPayload, null, 2));
-      const order = await createOrder(orderPayload);
-
-      // 5. If QR image was uploaded, update the order
-      if (qrImageUrl && order?.order_id) {
-        try {
-          await updateQRImage(qrString, qrImageUrl);
-        } catch (e) {
-          console.log('QR image update error:', e);
-        }
-      }
-
-      // 6. Clear cart
-      try { await clearCart(); } catch (e) { console.log('Clear cart error:', e); }
-
-      // 7. Navigate to success
-      navigation.replace('OrderConfirm', {
-        order: {
-          ...order,
-          order_id: order?.order_id || order?.data?.order_id || order?.id,
-          total_amount: pricing.total,
-          payment_method: paymentMethod,
-          qr_code: qrString,
-          qr_image_url: qrImageUrl,
-          delivery_address: orderPayload.delivery_address,
-          items: orderPayload.items,
-          subtotal: pricing.subtotal,
-          admin_commission: pricing.adminCommission,
-          delivery_charges: pricing.deliveryCharges,
-        },
-      });
-    } catch (e) {
-      const msg = e.response?.data?.message || e.message || 'Failed to place order. Please try again.';
-      console.error('[Payment] COD order error:', msg);
-      console.error('[Payment] HTTP status:', e?.response?.status);
-      console.error('[Payment] Response data:', JSON.stringify(e?.response?.data, null, 2));
-      console.error('[Payment] Full error:', e);
-      toastRef.current?.show(msg, 'error', 4000);
-    } finally {
-      setIsProcessing(false);
-      setShowQR(false);
-    }
+    handleOnlinePayment();
   };
+
+  useEffect(() => {
+    // Retry stale payment sync records whenever checkout opens.
+    flushPendingPaymentSync().catch(() => {});
+  }, []);
 
   /* ─── RENDER ─── */
   return (
@@ -881,36 +1167,7 @@ const Payment = ({ navigation, route }) => {
                 <Text style={styles.cardTitle}>Payment Method</Text>
               </View>
 
-              {/* COD */}
-              <TouchableOpacity
-                style={[styles.payOption, paymentMethod === 'COD' && styles.payOptionActive]}
-                onPress={() => setPaymentMethod('COD')}
-              >
-                <View style={[styles.payIconCircle, paymentMethod === 'COD' && { backgroundColor: '#1B5E20' }]}>
-                  <MaterialCommunityIcons
-                    name="cash-multiple"
-                    size={22}
-                    color={paymentMethod === 'COD' ? '#fff' : '#666'}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.payLabel, paymentMethod === 'COD' && styles.payLabelActive]}>
-                    Cash on Delivery
-                  </Text>
-                  <Text style={styles.payDesc}>Pay when you receive the order</Text>
-                </View>
-                <Ionicons
-                  name={paymentMethod === 'COD' ? 'radio-button-on' : 'radio-button-off'}
-                  size={22}
-                  color={paymentMethod === 'COD' ? '#1B5E20' : '#ccc'}
-                />
-              </TouchableOpacity>
-
-              {/* Online Payment */}
-              <TouchableOpacity
-                style={[styles.payOption, paymentMethod === 'ONLINE' && styles.payOptionActive]}
-                onPress={() => setPaymentMethod('ONLINE')}
-              >
+              <View style={[styles.payOption, styles.payOptionActive]}>
                 <View style={[styles.payIconCircle, paymentMethod === 'ONLINE' && { backgroundColor: '#1B5E20' }]}>
                   <MaterialCommunityIcons
                     name="credit-card-outline"
@@ -929,7 +1186,7 @@ const Payment = ({ navigation, route }) => {
                   size={22}
                   color={paymentMethod === 'ONLINE' ? '#1B5E20' : '#ccc'}
                 />
-              </TouchableOpacity>
+              </View>
             </View>
 
             {/* ── Trust Indicators ── */}
@@ -943,7 +1200,7 @@ const Payment = ({ navigation, route }) => {
             <TouchableOpacity
               style={[
                 styles.placeOrderBtn,
-                (isProcessing || paymentMethod === 'ONLINE') && { opacity: 0.65 },
+                isProcessing && { opacity: 0.65 },
               ]}
               onPress={handlePlaceOrder}
               disabled={isProcessing}
@@ -951,16 +1208,11 @@ const Payment = ({ navigation, route }) => {
             >
               {isProcessing ? (
                 <ActivityIndicator color="#fff" />
-              ) : paymentMethod === 'ONLINE' ? (
-                <View style={styles.placeOrderInner}>
-                  <MaterialCommunityIcons name="clock-outline" size={20} color="#fff" />
-                  <Text style={styles.placeOrderText}>Online Payment — Coming Soon</Text>
-                </View>
               ) : (
                 <View style={styles.placeOrderInner}>
-                  <Ionicons name="bag-check-outline" size={20} color="#fff" />
+                  <MaterialCommunityIcons name="credit-card-check-outline" size={20} color="#fff" />
                   <Text style={styles.placeOrderText}>
-                    Place Order — ₹{pricing.total.toFixed(2)}
+                    Pay Online — ₹{pricing.total.toFixed(2)}
                   </Text>
                 </View>
               )}

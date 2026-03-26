@@ -45,7 +45,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const STAGES = [
   { key: 'placed',              label: 'Order Placed',         icon: 'receipt-outline',      emoji: '\uD83D\uDCE5', color: '#FF9800', desc: 'Your order has been placed successfully.' },
-  { key: 'assigned',            label: 'Transporter Assigned', icon: 'person-outline',       emoji: '\uD83D\uDE9A', color: '#9C27B0', desc: 'A transporter has been assigned.' },
+  { key: 'assigned',            label: 'Farmer Accepted + Transporters Assigned', icon: 'person-outline', emoji: '\uD83D\uDE9A', color: '#9C27B0', desc: 'Farmer accepted and transporters are assigned.' },
   { key: 'pickup_assigned',     label: 'Pickup Assigned',      icon: 'car-outline',          emoji: '\uD83D\uDE97', color: '#FF5722', desc: 'A pickup delivery person has been assigned.' },
   { key: 'picked_up',           label: 'Picked Up',            icon: 'cube-outline',         emoji: '\uD83D\uDCE6', color: '#2196F3', desc: 'Your order has been picked up from the farmer.' },
   { key: 'received',            label: 'Received at Hub',      icon: 'business-outline',     emoji: '\uD83C\uDFE2', color: '#00897B', desc: 'The order has reached the transporter hub.' },
@@ -59,8 +59,8 @@ const STAGES = [
 const STATUS_MAP = {
   pending: 0,
   placed: 0,
-  accepted: 0,
-  confirmed: 0,
+  accepted: 1,
+  confirmed: 1,
   assigned: 1,
   pickup_assigned: 2,
   pickup_in_progress: 2,

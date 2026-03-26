@@ -1,17 +1,18 @@
 /**
  * TransporterOrderTracking.js
- * Full 9-step order tracking for transporter view.
+ * Full 10-step order tracking for transporter view.
  *
  * Steps:
  *  1. PENDING           - Customer ordered
- *  2. CONFIRMED         - Farmer accepted
- *  3. ASSIGNED          - Transporters assigned (source + destination)
- *  4. PICKUP_ASSIGNED   - Source transporter assigned pickup delivery person
- *  5. PICKED_UP         - Package received at source transporter office (QR by source)
- *  6. IN_TRANSIT        - Vehicle assigned, sent to destination (QR by source)
- *  7. REACHED_DESTINATION - Destination transporter received (QR by destination)
- *  8. OUT_FOR_DELIVERY  - Destination transporter assigned delivery person
- *  9. DELIVERED         - Customer received (QR by destination delivery person)
+ *  2. ASSIGNED          - Farmer accepted and transporters assigned
+ *  3. PICKUP_ASSIGNED   - Source transporter assigned pickup delivery person
+ *  4. PICKED_UP         - Pickup delivery person picked up from farmer
+ *  5. RECEIVED          - Source transporter received at source office
+ *  6. SHIPPED           - Source transporter assigned vehicle and shipped
+ *  7. IN_TRANSIT        - Package moving to destination transporter
+ *  8. REACHED_DESTINATION - Destination transporter received package
+ *  9. OUT_FOR_DELIVERY  - Destination transporter assigned final delivery person
+ * 10. DELIVERED         - Delivery person delivered to customer
  */
 
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -40,14 +41,12 @@ import { getOrderById } from '../../services/orderService';
 
 const TRACKING_STAGES = [
   { key: 'PENDING',              label: 'Order Placed',            icon: 'cart-outline',                  mc: null,                    color: '#FF9800' },
-  { key: 'CONFIRMED',            label: 'Farmer Accepted',         icon: 'checkmark-circle-outline',      mc: null,                    color: '#2196F3' },
-  { key: 'ASSIGNED',             label: 'Transporters Assigned',   icon: null,                            mc: 'truck-check-outline',   color: '#9C27B0' },
+  { key: 'ASSIGNED',             label: 'Farmer Accepted + Transporters Assigned', icon: null,           mc: 'truck-check-outline',   color: '#9C27B0' },
   { key: 'PICKUP_ASSIGNED',      label: 'Pickup Person Assigned',  icon: 'person-outline',                mc: null,                    color: '#FF5722' },
-  { key: 'PICKUP_IN_PROGRESS',   label: 'Pickup In Progress',      icon: 'bicycle-outline',               mc: null,                    color: '#00BCD4' },
   { key: 'PICKED_UP',            label: 'Picked Up from Farmer',   icon: null,                            mc: 'store-check-outline',   color: '#00897B' },
-  { key: 'RECEIVED',             label: 'Received at Source Office', icon: null,                           mc: 'package-check',         color: '#00897B' },
-  { key: 'SHIPPED',              label: 'Shipped to Destination',  icon: null,                            mc: 'cube-send',             color: '#3F51B5' },
-  { key: 'IN_TRANSIT',           label: 'In Transit to Dest.',     icon: null,                            mc: 'truck-fast-outline',    color: '#3F51B5' },
+  { key: 'RECEIVED',             label: 'Received at Source Office', icon: null,                           mc: 'package-variant-closed', color: '#00897B' },
+  { key: 'SHIPPED',              label: 'Shipped from Source',     icon: null,                            mc: 'cube-send',             color: '#3F51B5' },
+  { key: 'IN_TRANSIT',           label: 'In Transit to Destination', icon: null,                           mc: 'truck-fast-outline',    color: '#3F51B5' },
   { key: 'REACHED_DESTINATION',  label: 'Reached Destination',     icon: null,                            mc: 'warehouse',             color: '#673AB7' },
   { key: 'OUT_FOR_DELIVERY',     label: 'Out for Delivery',        icon: 'bicycle-outline',               mc: null,                    color: '#00BCD4' },
   { key: 'DELIVERED',            label: 'Delivered to Customer',   icon: 'checkmark-done-circle-outline', mc: null,                    color: '#4CAF50' },
@@ -55,18 +54,17 @@ const TRACKING_STAGES = [
 
 const STATUS_INDEX = {
   PENDING: 0, PLACED: 0,
-  CONFIRMED: 1, ACCEPTED: 1,
-  ASSIGNED: 2,
-  PICKUP_ASSIGNED: 3,
-  PICKUP_IN_PROGRESS: 4,
-  PICKED_UP: 5,
-  RECEIVED: 6,
-  SHIPPED: 7,
-  IN_TRANSIT: 8,
-  REACHED_DESTINATION: 9,
-  OUT_FOR_DELIVERY: 10,
-  DELIVERED: 11,
-  COMPLETED: 11,
+  CONFIRMED: 1, ACCEPTED: 1, ASSIGNED: 1,
+  PICKUP_ASSIGNED: 2,
+  PICKUP_IN_PROGRESS: 2,
+  PICKED_UP: 3,
+  RECEIVED: 4,
+  SHIPPED: 5,
+  IN_TRANSIT: 6,
+  REACHED_DESTINATION: 7,
+  OUT_FOR_DELIVERY: 8,
+  DELIVERED: 9,
+  COMPLETED: 9,
   CANCELLED: -1,
 };
 
@@ -120,6 +118,24 @@ const getProductImage = (item) => {
   return p.image_url || p.image || null;
 };
 
+const getPackingProofImages = (order) => ({
+  packing:
+    order?.packing_image_url ||
+    order?.packing_photo_url ||
+    order?.package_image_url ||
+    order?.package_photo_url ||
+    order?.packing?.packing_image_url ||
+    null,
+  bill:
+    order?.bill_paste_image_url ||
+    order?.bill_image_url ||
+    order?.bill_photo_url ||
+    order?.bill_copy_url ||
+    order?.packing?.bill_image_url ||
+    order?.packing?.bill_paste_image_url ||
+    null,
+});
+
 /* --------------------------------------------------------------------------
  * ANIMATED VEHICLE
  * ------------------------------------------------------------------------ */
@@ -134,8 +150,8 @@ const AnimatedVehicle = ({ progress }) => {
     }).start();
     Animated.loop(
       Animated.sequence([
-        Animated.timing(bounceAnim, { toValue: -3, duration: 400, useNativeDriver: true }),
-        Animated.timing(bounceAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(bounceAnim, { toValue: -3, duration: 400, useNativeDriver: false }),
+        Animated.timing(bounceAnim, { toValue: 0, duration: 400, useNativeDriver: false }),
       ])
     ).start();
   }, [progress]);
@@ -164,8 +180,8 @@ const TimelineStep = ({ stage, index, currentIndex, isLast }) => {
     if (isActive) {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(scaleAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
-          Animated.timing(scaleAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(scaleAnim, { toValue: 1.15, duration: 600, useNativeDriver: false }),
+          Animated.timing(scaleAnim, { toValue: 1, duration: 600, useNativeDriver: false }),
         ])
       ).start();
     }
@@ -203,14 +219,18 @@ const TimelineStep = ({ stage, index, currentIndex, isLast }) => {
 };
 
 /* ── Info Card ────────────────────────────────────────────── */
-const InfoCard = ({ icon, mc, title, name, details, phone }) => (
+const InfoCard = ({ icon, mc, title, name, details, phone, image, iconColor }) => (
   <View style={s.infoCard}>
-    <View style={s.infoIconWrap}>
-      {mc
-        ? <MaterialCommunityIcons name={mc} size={22} color="#1B5E20" />
-        : <Ionicons name={icon} size={22} color="#1B5E20" />
-      }
-    </View>
+    {image ? (
+      <Image source={{ uri: optimizeImageUrl(image, { width: 44, height: 44 }) }} style={s.infoAvatarImg} />
+    ) : (
+      <View style={[s.infoIconWrap, iconColor ? { backgroundColor: iconColor + '15' } : null]}>
+        {mc
+          ? <MaterialCommunityIcons name={mc} size={22} color={iconColor || '#1B5E20'} />
+          : <Ionicons name={icon} size={22} color={iconColor || '#1B5E20'} />
+        }
+      </View>
+    )}
     <View style={{ flex: 1 }}>
       <Text style={s.infoTitle}>{title}</Text>
       <Text style={s.infoName}>{name || 'N/A'}</Text>
@@ -218,7 +238,7 @@ const InfoCard = ({ icon, mc, title, name, details, phone }) => (
     </View>
     {phone && (
       <TouchableOpacity style={s.callBtn} onPress={() => Linking.openURL('tel:' + phone)}>
-        <Ionicons name="call-outline" size={18} color="#1B5E20" />
+        <Ionicons name="call-outline" size={18} color={iconColor || '#1B5E20'} />
       </TouchableOpacity>
     )}
   </View>
@@ -231,7 +251,6 @@ const TransporterOrderTracking = ({ navigation, route }) => {
   const [order, setOrder] = useState(initialOrder || null);
   const [loading, setLoading] = useState(!initialOrder);
   const [refreshing, setRefreshing] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [error, setError] = useState(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const intervalRef = useRef(null);
@@ -240,9 +259,9 @@ const TransporterOrderTracking = ({ navigation, route }) => {
   const isCancelled = (order?.current_status || order?.status || '').toUpperCase() === 'CANCELLED';
   const progress = isCancelled ? 0 : Math.min(1, currentIndex / (TRACKING_STAGES.length - 1));
   const nextStatusMap = {
-    ASSIGNED: 'SHIPPED',
     RECEIVED: 'SHIPPED',
-    SHIPPED: 'OUT_FOR_DELIVERY',
+    SHIPPED: 'IN_TRANSIT',
+    IN_TRANSIT: 'REACHED_DESTINATION',
     REACHED_DESTINATION: 'OUT_FOR_DELIVERY',
   };
   const nextStatus = nextStatusMap[(order?.current_status || order?.status || '').toUpperCase()] || null;
@@ -253,14 +272,50 @@ const TransporterOrderTracking = ({ navigation, route }) => {
       const id = orderId || order?.order_id || order?.id;
       if (!id) return;
 
-      // Try transporter-specific endpoint first, fallback to general
-      let o;
-      try {
-        const res = await api.get(`/transporters/orders/${id}/track`);
-        o = res.data?.data || res.data?.order || res.data;
-      } catch {
+      // Try stable order endpoints first, keep /track as optional fallback.
+      let o = null;
+      const endpoints = [
+        `/transporters/orders/${id}`,
+        `/transporters/orders/${id}/track`,
+        `/orders/${id}`,
+      ];
+      for (const endpoint of endpoints) {
+        try {
+          const res = await api.get(endpoint);
+          const payload = res.data?.data || res.data?.order || res.data;
+          const candidate = payload?.order || payload;
+          if (candidate && (candidate.order_id || candidate.id)) {
+            // Merge carefully to not lose nested objects from initialOrder
+            o = { 
+              ...(initialOrder || {}), 
+              ...candidate,
+              farmer: candidate.farmer || candidate.Farmer || initialOrder?.farmer || initialOrder?.Farmer,
+              customer: candidate.customer || candidate.Customer || initialOrder?.customer || initialOrder?.Customer,
+              delivery_person: candidate.delivery_person || candidate.DeliveryPerson || initialOrder?.delivery_person || initialOrder?.DeliveryPerson,
+              source_transporter: candidate.source_transporter || initialOrder?.source_transporter,
+              destination_transporter: candidate.destination_transporter || initialOrder?.destination_transporter
+            };
+            break;
+          }
+        } catch (_) {
+          // continue fallback chain
+        }
+      }
+
+      if (!o) {
         const data = await getOrderById(id);
-        o = data?.data || data?.order || data;
+        const candidate = data?.data || data?.order || data;
+        if (candidate) {
+          o = { 
+            ...(initialOrder || {}), 
+            ...candidate,
+            farmer: candidate.farmer || candidate.Farmer || initialOrder?.farmer || initialOrder?.Farmer,
+            customer: candidate.customer || candidate.Customer || initialOrder?.customer || initialOrder?.Customer,
+            delivery_person: candidate.delivery_person || candidate.DeliveryPerson || initialOrder?.delivery_person || initialOrder?.DeliveryPerson,
+            source_transporter: candidate.source_transporter || initialOrder?.source_transporter,
+            destination_transporter: candidate.destination_transporter || initialOrder?.destination_transporter
+          };
+        }
       }
 
       if (o) setOrder(o);
@@ -298,24 +353,14 @@ const TransporterOrderTracking = ({ navigation, route }) => {
     }).start();
   }, [progress]);
 
-  const handleUpdateStatus = async () => {
-    const id = orderId || order?.order_id || order?.id;
-    if (!id || !nextStatus) return;
-    setUpdatingStatus(true);
-    try {
-      await api.put(`/transporters/orders/${id}/status`, { status: nextStatus });
-      await fetchOrder(true);
-    } catch (e) {
-      Alert.alert('Error', e?.response?.data?.message || e.message || 'Failed to update status');
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
   const items = order?.items || order?.order_items || [];
-  const farmer = order?.farmer || items[0]?.farmer || items[0]?.product?.farmer;
-  const customer = order?.customer || order?.buyer;
-  const deliveryPerson = order?.delivery_person;
+  const productName = items[0]?.product?.name || items[0]?.product_name || items[0]?.name || order?.product?.name || order?.Product?.name || 'Product';
+  const farmer = order?.farmer || order?.Farmer || items[0]?.farmer || items[0]?.product?.farmer || {};
+  const customer = order?.customer || order?.Customer || order?.buyer || {};
+  const deliveryPerson = order?.delivery_person || order?.DeliveryPerson || order?.assigned_delivery_person || {};
+  const srcTransporter = order?.source_transporter || order?.sourceTransporter || {};
+  const dstTransporter = order?.destination_transporter || order?.destinationTransporter || {};
+  const packingProof = getPackingProofImages(order);
 
   /* -- Loading state ----------------------------------------- */
   if (loading && !order) {
@@ -368,7 +413,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Track Order #{order?.order_id || order?.id}</Text>
+        <Text style={s.headerTitle}>{productName}</Text>
         <TouchableOpacity onPress={() => fetchOrder(true)}>
           <Ionicons name="refresh-outline" size={22} color="#fff" />
         </TouchableOpacity>
@@ -389,7 +434,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
         <View style={s.orderCard}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <View>
-              <Text style={s.orderIdText}>Order #{order?.order_id || order?.id}</Text>
+              <Text style={s.orderIdText}>{productName}</Text>
               <Text style={s.orderDateText}>{formatDate(order?.created_at)}</Text>
             </View>
             <View style={[s.statusChip, {
@@ -428,28 +473,10 @@ const TransporterOrderTracking = ({ navigation, route }) => {
           </View>
         )}
 
-        {/* Transporter status update button */}
-        {!isCancelled && nextStatus && (
-          <TouchableOpacity
-            style={[trackStyles.updateStatusBtn, updatingStatus && { opacity: 0.7 }]}
-            onPress={handleUpdateStatus}
-            disabled={updatingStatus}
-          >
-            {updatingStatus ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <>
-                <MaterialCommunityIcons name="truck-check" size={20} color="#fff" />
-                <Text style={trackStyles.updateStatusText}>Mark as {nextStatus.replace(/_/g, ' ')}</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-
         {/* Timeline */}
         {!isCancelled && (
           <View style={s.timelineCard}>
-            <Text style={s.sectionTitle}>Order Timeline (9 Steps)</Text>
+            <Text style={s.sectionTitle}>Order Timeline (10 Steps)</Text>
             {TRACKING_STAGES.map((stage, idx) => (
               <TimelineStep
                 key={stage.key}
@@ -459,6 +486,35 @@ const TransporterOrderTracking = ({ navigation, route }) => {
                 isLast={idx === TRACKING_STAGES.length - 1}
               />
             ))}
+          </View>
+        )}
+
+        {/* Packing Proof Images */}
+        {(order?.packing_image_url || order?.bill_paste_image_url) && (
+          <View style={s.sectionCard}>
+            <Text style={s.sectionTitle}>📸 Packing Proof</Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+              {order?.packing_image_url && (
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <Image
+                    source={{ uri: order.packing_image_url }}
+                    style={{ width: '100%', height: 160, borderRadius: 12, backgroundColor: '#f0f0f0' }}
+                    resizeMode="cover"
+                  />
+                  <Text style={{ fontSize: 11, color: '#888', marginTop: 4, fontWeight: '600' }}>Packing Image</Text>
+                </View>
+              )}
+              {order?.bill_paste_image_url && (
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <Image
+                    source={{ uri: order.bill_paste_image_url }}
+                    style={{ width: '100%', height: 160, borderRadius: 12, backgroundColor: '#f0f0f0' }}
+                    resizeMode="cover"
+                  />
+                  <Text style={{ fontSize: 11, color: '#888', marginTop: 4, fontWeight: '600' }}>Bill Image</Text>
+                </View>
+              )}
+            </View>
           </View>
         )}
 
@@ -492,36 +548,96 @@ const TransporterOrderTracking = ({ navigation, route }) => {
         )}
 
         {/* Farmer Info */}
-        {farmer && (
+        {(farmer?.name || farmer?.full_name || farmer?.phone || order?.farmer_name || order?.pickup_address) && (
           <InfoCard
             icon="leaf-outline"
+            iconColor="#4CAF50"
             title="Farmer"
-            name={farmer.name || farmer.full_name || farmer.username}
-            details={farmer.farm_name || farmer.location || farmer.city}
-            phone={farmer.phone}
+            name={farmer.name || farmer.full_name || farmer.username || order?.farmer_name}
+            details={farmer.farm_name || farmer.location || farmer.city || formatAddress(order?.pickup_address)}
+            phone={farmer.phone || farmer.mobile || farmer.mobile_number || order?.farmer_phone}
+            image={farmer.image_url || farmer.image || farmer.profile_image || null}
           />
         )}
 
         {/* Customer Info */}
-        {customer && (
+        {(customer?.name || customer?.full_name || order?.customer_name || order?.delivery_address) && (
           <InfoCard
             icon="person-outline"
+            iconColor="#2196F3"
             title="Customer"
-            name={customer.name || customer.full_name || customer.username}
-            details={customer.city || customer.address}
-            phone={customer.phone}
+            name={customer.name || customer.full_name || customer.username || order?.customer_name}
+            details={formatAddress(order?.delivery_address) || customer.city || formatAddress(customer.address)}
+            phone={customer.phone || customer.mobile || customer.mobile_number || order?.customer_phone}
+            image={customer.image_url || customer.image || customer.profile_image || null}
           />
         )}
 
         {/* Delivery Person Info */}
-        {deliveryPerson && (
+        {(deliveryPerson?.name || deliveryPerson?.full_name || order?.delivery_person_name || order?.delivery_person_id) && (
           <InfoCard
             icon="bicycle-outline"
+            iconColor="#9C27B0"
             title="Delivery Person"
-            name={deliveryPerson.name || deliveryPerson.full_name || deliveryPerson.username}
-            details={deliveryPerson.vehicle_number}
-            phone={deliveryPerson.phone}
+            name={deliveryPerson.name || deliveryPerson.full_name || deliveryPerson.username || order?.delivery_person_name}
+            details={[deliveryPerson.vehicle_number, deliveryPerson.vehicle_type].filter(Boolean).join(' • ') || order?.vehicle_number}
+            phone={deliveryPerson.phone || deliveryPerson.mobile || deliveryPerson.mobile_number || order?.delivery_person_phone}
+            image={deliveryPerson.image_url || deliveryPerson.image || deliveryPerson.profile_image || null}
           />
+        )}
+
+        {/* Source Transporter */}
+        {(srcTransporter?.name || srcTransporter?.transporter_id || order?.source_transporter_id) && (
+          <InfoCard
+            mc="truck-delivery-outline"
+            iconColor="#FF5722"
+            title="Source Transporter"
+            name={srcTransporter.name || srcTransporter.full_name || `Transporter #${order?.source_transporter_id || srcTransporter?.transporter_id}`}
+            details={[srcTransporter.address, srcTransporter.zone, srcTransporter.district, srcTransporter.state].filter(Boolean).join(', ') || srcTransporter.email}
+            phone={srcTransporter.phone || srcTransporter.mobile_number}
+            image={srcTransporter.image_url || srcTransporter.image || null}
+          />
+        )}
+
+        {/* Destination Transporter */}
+        {(dstTransporter?.name || dstTransporter?.transporter_id || order?.destination_transporter_id) && (
+          <InfoCard
+            mc="truck-check-outline"
+            iconColor="#673AB7"
+            title="Destination Transporter"
+            name={dstTransporter.name || dstTransporter.full_name || `Transporter #${order?.destination_transporter_id || dstTransporter?.transporter_id}`}
+            details={[dstTransporter.address, dstTransporter.zone, dstTransporter.district, dstTransporter.state].filter(Boolean).join(', ') || dstTransporter.email}
+            phone={dstTransporter.phone || dstTransporter.mobile_number}
+            image={dstTransporter.image_url || dstTransporter.image || null}
+          />
+        )}
+
+        {(packingProof.packing || packingProof.bill) && (
+          <View style={s.sectionCard}>
+            <Text style={s.sectionTitle}>Packed Order Proof</Text>
+            <View style={{ gap: 12 }}>
+              <View>
+                <Text style={trackStyles.proofLabel}>Packed Parcel</Text>
+                {packingProof.packing ? (
+                  <Image source={{ uri: optimizeImageUrl(packingProof.packing, { width: 280 }) }} style={trackStyles.proofImage} />
+                ) : (
+                  <View style={[trackStyles.proofImage, trackStyles.proofEmpty]}>
+                    <Text style={trackStyles.proofEmptyText}>Not uploaded</Text>
+                  </View>
+                )}
+              </View>
+              <View>
+                <Text style={trackStyles.proofLabel}>Bill Pasted</Text>
+                {packingProof.bill ? (
+                  <Image source={{ uri: optimizeImageUrl(packingProof.bill, { width: 280 }) }} style={trackStyles.proofImage} />
+                ) : (
+                  <View style={[trackStyles.proofImage, trackStyles.proofEmpty]}>
+                    <Text style={trackStyles.proofEmptyText}>Not uploaded</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
         )}
 
         {/* Delivery address */}
@@ -530,7 +646,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
             <Ionicons name="location-outline" size={20} color="#1B5E20" />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={trackStyles.addressTitle}>Delivery Address</Text>
-              <Text style={trackStyles.addressText}>{order.delivery_address || order.shipping_address}</Text>
+              <Text style={trackStyles.addressText}>{formatAddress(order.delivery_address || order.shipping_address)}</Text>
             </View>
           </View>
         )}
@@ -548,13 +664,15 @@ const TransporterOrderTracking = ({ navigation, route }) => {
 
         {/* QR / Bill actions */}
         <View style={trackStyles.actionRow}>
-          <TouchableOpacity
-            style={trackStyles.actionBtn}
-            onPress={() => navigation.navigate('QRScan', { orderId: order?.order_id || order?.id })}
-          >
-            <Ionicons name="qr-code-outline" size={20} color="#1B5E20" />
-            <Text style={trackStyles.actionBtnText}>Scan QR</Text>
-          </TouchableOpacity>
+          {nextStatus && (
+            <TouchableOpacity
+              style={trackStyles.actionBtn}
+              onPress={() => navigation.navigate('QRScan', { orderId: order?.order_id || order?.id, expectedOrderId: order?.order_id || order?.id })}
+            >
+              <Ionicons name="qr-code-outline" size={20} color="#1B5E20" />
+              <Text style={trackStyles.actionBtnText}>Scan QR</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={trackStyles.actionBtn}
             onPress={() => navigation.navigate('BillPreview', { orderId: order?.order_id || order?.id, order })}
@@ -646,6 +764,7 @@ const s = StyleSheet.create({
     ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 }, android: { elevation: 2 } }),
   },
   infoIconWrap: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  infoAvatarImg: { width: 44, height: 44, borderRadius: 22, marginRight: 12, backgroundColor: '#f0f0f0', borderWidth: 1, borderColor: '#eee' },
   infoTitle: { fontSize: 11, color: '#888', fontWeight: '500', textTransform: 'uppercase' },
   infoName: { fontSize: 15, fontWeight: '600', color: '#333', marginTop: 2 },
   infoDetail: { fontSize: 12, color: '#666', marginTop: 2 },
@@ -689,6 +808,10 @@ const s = StyleSheet.create({
     gap: 8,
   },
   billBtnText: { fontSize: 15, fontWeight: '600', color: '#1B5E20' },
+  proofLabel: { fontSize: 13, fontWeight: '700', color: '#1B5E20', marginBottom: 8 },
+  proofImage: { width: '100%', height: 150, borderRadius: 10, backgroundColor: '#EEE' },
+  proofEmpty: { alignItems: 'center', justifyContent: 'center' },
+  proofEmptyText: { color: '#999', fontSize: 12 },
   refreshNote: { fontSize: 12, color: '#aaa', textAlign: 'center', marginTop: 8 },
 });
 

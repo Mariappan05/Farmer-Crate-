@@ -48,6 +48,42 @@ const getVehicleIcon = (type) => {
   return 'truck';
 };
 
+const normalizeVehiclePayload = (payload) => {
+  const data = payload?.data || payload || {};
+
+  const permanentRaw = Array.isArray(data?.permanent_vehicles)
+    ? data.permanent_vehicles
+    : Array.isArray(data?.permanentVehicles)
+      ? data.permanentVehicles
+      : [];
+
+  const temporaryRaw = Array.isArray(data?.temporary_vehicles)
+    ? data.temporary_vehicles
+    : Array.isArray(data?.temporaryVehicles)
+      ? data.temporaryVehicles
+      : [];
+
+  const allRaw = Array.isArray(data?.vehicles)
+    ? data.vehicles
+    : Array.isArray(data)
+      ? data
+      : [];
+
+  if (permanentRaw.length || temporaryRaw.length) {
+    const permanent = permanentRaw.map((v) => ({ ...v, _vehicleKind: 'permanent' }));
+    const temporary = temporaryRaw.map((v) => ({ ...v, _vehicleKind: 'temporary' }));
+    return [...permanent, ...temporary];
+  }
+
+  return allRaw.map((v) => {
+    const kind = (v?._vehicleKind || v?.vehicle_kind || '').toLowerCase();
+    return {
+      ...v,
+      _vehicleKind: kind.includes('temp') ? 'temporary' : 'permanent',
+    };
+  });
+};
+
 const VehiclePage = ({ navigation }) => {
   const insets = useSafeAreaInsets();
 
@@ -81,13 +117,18 @@ const VehiclePage = ({ navigation }) => {
   const fetchVehicles = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await api.get('/vehicles');
-      const d = res.data?.data || res.data || {};
-      const perm = (d.permanent_vehicles || []).map((v) => ({ ...v, _vehicleKind: 'permanent' }));
-      const temp = (d.temporary_vehicles || []).map((v) => ({ ...v, _vehicleKind: 'temporary' }));
-      setVehicles([...perm, ...temp]);
+      const res = await api
+        .get('/vehicles')
+        .catch((err) => {
+          console.error('[VehiclePage] /vehicles failed:', err.message);
+          return api.get('/transporters/vehicles').catch(() => ({ data: [] }));
+        });
+      console.log('[VehiclePage] Raw vehicle response:', JSON.stringify(res?.data).substring(0, 500));
+      const normalized = normalizeVehiclePayload(res?.data);
+      console.log('[VehiclePage] Normalized vehicles count:', normalized.length);
+      setVehicles(Array.isArray(normalized) ? normalized : []);
     } catch (e) {
-      console.error('Vehicles fetch error:', e.message);
+      console.error('[VehiclePage] Vehicles fetch error:', e.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -128,36 +169,135 @@ const VehiclePage = ({ navigation }) => {
 
   /* ── Add vehicle ────────────────────────────────────────── */
   const handleAddVehicle = async () => {
-    if (!form.vehicle_number.trim()) {
-      Alert.alert('Required', 'Vehicle number is required');
-      return;
+    const errors = [];
+
+    // --- Vehicle Number ---
+    const vNum = form.vehicle_number.trim();
+    if (!vNum) {
+      errors.push('Vehicle number is required');
+    } else if (vNum.length < 4) {
+      errors.push('Vehicle number must be at least 4 characters');
+    } else if (vNum.length > 15) {
+      errors.push('Vehicle number cannot exceed 15 characters');
+    } else {
+      const vNumRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{1,4}$/i;
+      if (!vNumRegex.test(vNum.replace(/[\s-]/g, ''))) {
+        errors.push('Invalid vehicle number format (e.g., TN01AB1234)');
+      }
     }
+
+    // --- Vehicle Type ---
     if (!form.vehicle_type) {
-      Alert.alert('Required', 'Select a vehicle type');
+      errors.push('Vehicle type is required');
+    }
+
+    // --- RC Book Number ---
+    const rcNum = form.rc_book_number.trim();
+    if (addType === 'permanent' && !rcNum) {
+      errors.push('RC Book Number is required for permanent vehicles');
+    } else if (rcNum && rcNum.length > 20) {
+      errors.push('RC Book Number cannot exceed 20 characters');
+    } else if (rcNum && rcNum.length < 3) {
+      errors.push('RC Book Number must be at least 3 characters');
+    }
+
+    // Temporary vehicles also need RC if provided
+    if (addType === 'temporary' && !rcNum) {
+      errors.push('RC Book Number is required for temporary vehicles');
+    }
+
+    // --- Capacity ---
+    const capStr = form.capacity.trim();
+    if (!capStr) {
+      errors.push('Capacity is required');
+    } else if (capStr.length > 10) {
+      errors.push('Capacity cannot exceed 10 characters');
+    } else {
+      const capNum = parseInt(capStr.replace(/[^0-9]/g, ''), 10);
+      if (isNaN(capNum) || capNum <= 0) {
+        errors.push('Capacity must be a valid positive number (e.g., 500)');
+      } else if (capNum > 99999) {
+        errors.push('Capacity cannot exceed 99,999 kg');
+      }
+    }
+
+    // --- Ownership Type ---
+    if (!form.ownership_type) {
+      errors.push('Ownership type is required');
+    }
+
+    // --- Documents ---
+    if (addType === 'permanent' && !documents.rc_copy) {
+      errors.push('RC Copy document is required for permanent vehicles');
+    }
+    if (addType === 'temporary' && !documents.insurance) {
+      errors.push('Insurance document is required for temporary vehicles');
+    }
+
+    // Show all errors at once
+    if (errors.length > 0) {
+      Alert.alert(
+        'Validation Errors',
+        errors.map((e, i) => `${i + 1}. ${e}`).join('\n'),
+        [{ text: 'OK' }]
+      );
       return;
     }
 
     setSaving(true);
     try {
       const payload = {
-        vehicle_number: form.vehicle_number.trim().toUpperCase(),
-        rc_book_number: form.rc_book_number.trim(),
+        vehicle_number: vNum.toUpperCase(),
+        rc_book_number: rcNum,
         vehicle_type: form.vehicle_type,
-        capacity: form.capacity.trim(),
+        capacity: capStr,
         ownership_type: form.ownership_type,
         rc_copy_url: documents.rc_copy,
         insurance_url: documents.insurance,
         permit_url: documents.permit,
       };
 
+      console.log('[VehiclePage] Adding vehicle:', addType, JSON.stringify(payload));
       const endpoint = addType === 'permanent' ? '/vehicles/permanent' : '/vehicles/temporary';
-      await api.post(endpoint, payload);
+      
+      let lastError = null;
+      let success = false;
 
-      Alert.alert('Success', 'Vehicle added successfully!');
-      setShowAddModal(false);
-      resetForm();
-      fetchVehicles(true);
+      // Try primary endpoint
+      try {
+        const res = await api.post(endpoint, payload);
+        console.log('[VehiclePage] Vehicle added via', endpoint, res.data);
+        success = true;
+      } catch (primaryErr) {
+        console.error('[VehiclePage] Primary endpoint failed:', endpoint, primaryErr.message, primaryErr?.response?.data);
+        lastError = primaryErr;
+      }
+
+      // Fallback only if primary failed
+      if (!success) {
+        try {
+          const res = await api.post('/vehicles', { ...payload, vehicle_category: addType });
+          console.log('[VehiclePage] Vehicle added via /vehicles fallback', res.data);
+          success = true;
+        } catch (fallbackErr) {
+          console.error('[VehiclePage] Fallback also failed:', fallbackErr.message, fallbackErr?.response?.data);
+          // Use the primary error for display (more relevant)
+        }
+      }
+
+      if (success) {
+        Alert.alert('Success', 'Vehicle added successfully!');
+        setShowAddModal(false);
+        resetForm();
+        fetchVehicles(true);
+      } else {
+        const errMsg = lastError?.response?.data?.message || lastError?.response?.data?.error || lastError?.message || 'Failed to add vehicle';
+        const errDetail = lastError?.response?.data?.errors ? 
+          '\n' + lastError.response.data.errors.map(e => e.msg || e.message).join('\n') : '';
+        Alert.alert('Error', errMsg + errDetail);
+      }
     } catch (e) {
+      console.error('[VehiclePage] Unexpected error:', e);
       Alert.alert('Error', e.message || 'Failed to add vehicle');
     } finally {
       setSaving(false);
@@ -411,25 +551,27 @@ const VehiclePage = ({ navigation }) => {
               </View>
 
               {/* Vehicle Number */}
-              <Text style={styles.formLabel}>Vehicle Number *</Text>
+              <Text style={styles.formLabel}>Vehicle Number * <Text style={styles.charLimit}>(max 15)</Text></Text>
               <TextInput
                 style={styles.formInput}
                 value={form.vehicle_number}
-                onChangeText={(v) => setForm((p) => ({ ...p, vehicle_number: v }))}
+                onChangeText={(v) => setForm((p) => ({ ...p, vehicle_number: v.replace(/[^A-Za-z0-9\s-]/g, '') }))}
                 placeholder="e.g., TN01AB1234"
                 placeholderTextColor="#aaa"
                 autoCapitalize="characters"
+                maxLength={15}
               />
 
               {/* RC Book Number */}
-              <Text style={styles.formLabel}>RC Book Number</Text>
+              <Text style={styles.formLabel}>RC Book Number {addType === 'permanent' ? '*' : '*'} <Text style={styles.charLimit}>(max 20)</Text></Text>
               <TextInput
                 style={styles.formInput}
                 value={form.rc_book_number}
-                onChangeText={(v) => setForm((p) => ({ ...p, rc_book_number: v }))}
+                onChangeText={(v) => setForm((p) => ({ ...p, rc_book_number: v.replace(/[^A-Za-z0-9\s-/]/g, '') }))}
                 placeholder="Enter RC book number"
                 placeholderTextColor="#aaa"
                 autoCapitalize="characters"
+                maxLength={20}
               />
 
               {/* Vehicle Type */}
@@ -441,13 +583,15 @@ const VehiclePage = ({ navigation }) => {
               </TouchableOpacity>
 
               {/* Capacity */}
-              <Text style={styles.formLabel}>Capacity</Text>
+              <Text style={styles.formLabel}>Capacity * <Text style={styles.charLimit}>(max 10, in kg)</Text></Text>
               <TextInput
                 style={styles.formInput}
                 value={form.capacity}
-                onChangeText={(v) => setForm((p) => ({ ...p, capacity: v }))}
-                placeholder="e.g., 500 kg"
+                onChangeText={(v) => setForm((p) => ({ ...p, capacity: v.replace(/[^0-9\s]/g, '') }))}
+                placeholder="e.g., 500"
                 placeholderTextColor="#aaa"
+                keyboardType="numeric"
+                maxLength={10}
               />
 
               {/* Ownership Type */}
@@ -608,6 +752,7 @@ const styles = StyleSheet.create({
   typeTabTextActive: { color: '#fff' },
 
   formLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6, marginTop: 12 },
+  charLimit: { fontSize: 11, fontWeight: '400', color: '#999' },
   formInput: {
     backgroundColor: '#F8F8F8', borderRadius: 12, borderWidth: 1, borderColor: '#E0E0E0',
     paddingHorizontal: 14, height: 48, justifyContent: 'center',

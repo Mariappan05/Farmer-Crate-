@@ -1,4 +1,6 @@
 import React, { useState, useRef } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import {
   View,
   Text,
@@ -15,7 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
-import { getOrderById } from '../../services/orderService';
+import { updateOrderStatusByQR } from '../../services/orderService';
 import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
 import { useAuth } from '../../context/AuthContext';
 
@@ -27,6 +29,13 @@ const BORDER_W = 4;
 const DELIVERY_TRANSITIONS = {
   REACHED_DESTINATION: 'OUT_FOR_DELIVERY',
   OUT_FOR_DELIVERY: 'DELIVERED',
+};
+
+// Pickup delivery person advances pickup-side statuses via QR scans.
+const PICKUP_TRANSITIONS = {
+  ASSIGNED: 'PICKUP_ASSIGNED',
+  PICKUP_ASSIGNED: 'PICKED_UP',
+  PICKUP_IN_PROGRESS: 'PICKED_UP',
 };
 
 const pickFirst = (...values) => values.find((value) => !!value);
@@ -67,7 +76,7 @@ const parseQRPayload = (qrData) => {
   return { orderId, qrCode };
 };
 
-const QRScanner = ({ navigation }) => {
+const QRScanner = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const { authState } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
@@ -80,6 +89,7 @@ const QRScanner = ({ navigation }) => {
 
   const myDeliveryPersonId =
     authState?.user?.delivery_person_id || authState?.user?.id;
+  const expectedOrderId = route?.params?.expectedOrderId;
 
   const processQR = async (qrData) => {
     if (isProcessing || scanned) return;
@@ -210,6 +220,15 @@ const QRScanner = ({ navigation }) => {
         return;
       }
 
+      if (expectedOrderId && String(expectedOrderId) !== String(resolvedOrderId)) {
+        Alert.alert(
+          'Wrong Order QR',
+          `This scanner is opened for order #${expectedOrderId}. Please scan the correct order QR.`,
+          [{ text: 'OK', onPress: resetScanner }]
+        );
+        return;
+      }
+
       if (!order) {
         Alert.alert('Not Found', 'Order was not found for this QR.', [
           { text: 'OK', onPress: resetScanner },
@@ -219,7 +238,6 @@ const QRScanner = ({ navigation }) => {
 
       const status = (order.current_status || order.status || '').toUpperCase();
 
-      // Condition 2: pickup delivery person cannot scan QR
       // pickup_delivery_person_id = assigned by source transporter for pickup
       // delivery_person_id = assigned by destination transporter for final delivery
       const pickupDPId = order.pickup_delivery_person_id;
@@ -233,18 +251,7 @@ const QRScanner = ({ navigation }) => {
       const isDestPerson =
         destDPId && String(destDPId) === String(myDeliveryPersonId);
 
-      // Condition 2: pickup delivery person blocked from QR
-      if (isPickupPerson && !isDestPerson) {
-        Alert.alert(
-          'QR Not Available',
-          'QR scanning is only available for the delivery person assigned by the destination transporter. Pickup persons do not use QR.',
-          [{ text: 'OK', onPress: resetScanner }]
-        );
-        return;
-      }
-
-      // Condition 3: only assigned destination delivery person can scan
-      if (!isDestPerson) {
+      if (!isPickupPerson && !isDestPerson) {
         Alert.alert(
           'Access Denied',
           'You are not the assigned delivery person for this order.',
@@ -253,10 +260,19 @@ const QRScanner = ({ navigation }) => {
         return;
       }
 
-      // Check valid transition
-      const nextStatus = DELIVERY_TRANSITIONS[status];
+      // Choose transitions by assignment and current stage.
+      const transitions =
+        isPickupPerson && !isDestPerson
+          ? PICKUP_TRANSITIONS
+          : isDestPerson && !isPickupPerson
+            ? DELIVERY_TRANSITIONS
+            : PICKUP_TRANSITIONS[status]
+              ? PICKUP_TRANSITIONS
+              : DELIVERY_TRANSITIONS;
+
+      const nextStatus = transitions[status];
       if (!nextStatus) {
-        const allowed = Object.keys(DELIVERY_TRANSITIONS)
+        const allowed = Object.keys(transitions)
           .map((s) => s.replace(/_/g, ' '))
           .join(', ');
         Alert.alert(
@@ -268,18 +284,18 @@ const QRScanner = ({ navigation }) => {
       }
 
       Alert.alert(
-        '🚚 Delivery Confirmation',
+        'Order Status Confirmation',
         `Confirm status update?\nNew status: ${nextStatus.replace(/_/g, ' ')}`,
         [
           { text: 'Cancel', style: 'cancel', onPress: resetScanner },
           {
-            text: 'Confirm Delivered',
+            text: 'Confirm Update',
             onPress: async () => {
               try {
                 await updateOrderStatusByQR(resolvedOrderId, nextStatus, 'delivery_person');
                 Alert.alert(
-                  '✅ Order Delivered!',
-                  'Order has been marked as DELIVERED.',
+                  'Update Successful',
+                  `Order status updated to ${nextStatus.replace(/_/g, ' ')}.`,
                   [
                     {
                       text: 'View Details',
@@ -457,10 +473,10 @@ const QRScanner = ({ navigation }) => {
             ) : (
               <>
                 <Text style={styles.scanInstructions}>
-                  Scan QR to confirm delivery to customer
+                  Scan QR to update pickup or delivery status
                 </Text>
                 <Text style={styles.scanNote}>
-                  Only destination delivery persons can use this scanner
+                  Only the assigned delivery person can use this scanner
                 </Text>
               </>
             )}

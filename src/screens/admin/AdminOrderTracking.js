@@ -4,7 +4,7 @@
  *
  * Features:
  *   - Receives: { orderId, order? }
- *   - 6-stage animated timeline: PLACED → CONFIRMED → ASSIGNED → SHIPPED → OUT_FOR_DELIVERY → DELIVERED
+ *   - 10-stage animated timeline aligned with transporter workflow
  *   - Auto-refresh every 40s
  *   - Product card, farmer card, customer card, transporter card, delivery person card
  *   - Navigation to FarmerDetails, CustomerDetails, TransporterDetails, DeliveryPersonDetails
@@ -45,21 +45,30 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 /* -------------------------------------------------------------------------- */
 
 const TRACKING_STAGES = [
-  { key: 'placed', label: 'Order Placed', icon: 'cart', mcIcon: null, color: '#FF9800', emoji: '🛒' },
-  { key: 'confirmed', label: 'Confirmed', icon: 'checkmark-circle', mcIcon: null, color: '#2196F3', emoji: '✅' },
-  { key: 'assigned', label: 'Transporter Assigned', icon: null, mcIcon: 'truck-check', color: '#9C27B0', emoji: '🚚' },
-  { key: 'shipped', label: 'Shipped', icon: 'airplane', mcIcon: null, color: '#3F51B5', emoji: '📦' },
-  { key: 'out_for_delivery', label: 'Out for Delivery', icon: 'bicycle', mcIcon: null, color: '#00BCD4', emoji: '🚴' },
-  { key: 'delivered', label: 'Delivered', icon: 'checkmark-done-circle', mcIcon: null, color: '#4CAF50', emoji: '🎉' },
+  { key: 'placed',              label: 'Order Placed',                            icon: 'cart',                  mcIcon: null,                  color: '#FF9800', emoji: '🛒' },
+  { key: 'assigned',            label: 'Farmer Accepted + Transporters Assigned', icon: null,                    mcIcon: 'truck-check',         color: '#9C27B0', emoji: '🚚' },
+  { key: 'pickup_assigned',     label: 'Pickup Person Assigned',                   icon: 'person',                mcIcon: null,                  color: '#FF5722', emoji: '👤' },
+  { key: 'picked_up',           label: 'Picked Up from Farmer',                    icon: null,                    mcIcon: 'store-check-outline', color: '#00897B', emoji: '📦' },
+  { key: 'received',            label: 'Received at Source Office',                icon: null,                    mcIcon: 'package-variant-closed', color: '#00897B', emoji: '🏢' },
+  { key: 'shipped',             label: 'Shipped from Source',                      icon: null,                    mcIcon: 'cube-send',           color: '#3F51B5', emoji: '🚚' },
+  { key: 'in_transit',          label: 'In Transit to Destination',                icon: 'airplane',              mcIcon: null,                  color: '#3F51B5', emoji: '🚚' },
+  { key: 'reached_destination', label: 'Reached Destination',                      icon: null,                    mcIcon: 'warehouse',           color: '#673AB7', emoji: '🏭' },
+  { key: 'out_for_delivery',    label: 'Out for Delivery',                         icon: 'bicycle',               mcIcon: null,                  color: '#00BCD4', emoji: '🚴' },
+  { key: 'delivered',           label: 'Delivered to Customer',                    icon: 'checkmark-done-circle', mcIcon: null,                  color: '#4CAF50', emoji: '🎉' },
 ];
 
 const STATUS_MAP = {
   pending: 0, placed: 0,
-  confirmed: 1,
-  assigned: 2, processing: 2,
-  shipped: 3,
-  out_for_delivery: 4,
-  delivered: 5,
+  confirmed: 1, accepted: 1, assigned: 1, processing: 1,
+  pickup_assigned: 2,
+  pickup_in_progress: 2,
+  picked_up: 3,
+  received: 4,
+  shipped: 5,
+  in_transit: 6,
+  reached_destination: 7,
+  out_for_delivery: 8,
+  delivered: 9, completed: 9,
   cancelled: -1,
 };
 
@@ -333,7 +342,7 @@ const AdminOrderTracking = ({ route, navigation }) => {
   };
 
   /* derived state ----------------------------------------------------- */
-  const status = (order?.status || 'pending').toLowerCase().replace(/\s+/g, '_');
+  const status = (order?.current_status || order?.status || 'pending').toLowerCase().replace(/\s+/g, '_');
   const isCancelled = status === 'cancelled';
   const stageIndex = getStageIndex(status);
   const progress = isCancelled ? 0 : stageIndex / (TRACKING_STAGES.length - 1);

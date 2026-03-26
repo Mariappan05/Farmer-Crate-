@@ -148,7 +148,7 @@ const SplashScreen = ({ navigation }) => {
 
     // Shimmer sweep on title
     Animated.loop(
-      Animated.timing(shimmer, { toValue: width * 1.5, duration: 2200, delay: 1200, easing: Easing.linear, useNativeDriver: true })
+      Animated.timing(shimmer, { toValue: width * 1.5, duration: 2200, delay: 1200, easing: Easing.linear, useNativeDriver: false })
     ).start();
 
     // Badge pop

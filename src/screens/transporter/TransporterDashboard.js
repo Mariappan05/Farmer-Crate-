@@ -64,6 +64,54 @@ const getOrderProductName = (order) => {
   );
 };
 
+const normalizeArray = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.orders)) return payload.orders;
+  if (Array.isArray(payload?.items)) return payload.items;
+  return [];
+};
+
+const parseVehicleBuckets = (payload) => {
+  const data = payload?.data || payload || {};
+  const permanent = Array.isArray(data?.permanent_vehicles)
+    ? data.permanent_vehicles
+    : Array.isArray(data?.permanentVehicles)
+      ? data.permanentVehicles
+      : [];
+  const temporary = Array.isArray(data?.temporary_vehicles)
+    ? data.temporary_vehicles
+    : Array.isArray(data?.temporaryVehicles)
+      ? data.temporaryVehicles
+      : [];
+
+  const all = Array.isArray(data?.vehicles)
+    ? data.vehicles
+    : Array.isArray(data)
+      ? data
+      : [];
+
+  if (permanent.length || temporary.length) {
+    return {
+      permanent,
+      temporary,
+    };
+  }
+
+  const derivedPermanent = [];
+  const derivedTemporary = [];
+  all.forEach((vehicle) => {
+    const kind = (vehicle?._vehicleKind || vehicle?.vehicle_kind || vehicle?.vehicle_type_label || '').toLowerCase();
+    if (kind.includes('temp')) derivedTemporary.push(vehicle);
+    else derivedPermanent.push(vehicle);
+  });
+
+  return {
+    permanent: derivedPermanent,
+    temporary: derivedTemporary,
+  };
+};
+
 /* ── Component ────────────────────────────────────────────── */
 const TransporterDashboard = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -87,28 +135,37 @@ const TransporterDashboard = ({ navigation }) => {
   const fetchDashboard = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [allocatedRes, personsRes, vehiclesRes] = await Promise.all([
-        api.get('/orders/transporter/allocated').catch(() => ({ data: { data: [] } })),
-        api.get('/transporters/delivery-persons').catch(() => ({ data: { data: [] } })),
-        api.get('/vehicles').catch(() => ({ data: { data: {} } })),
-      ]);
+      const allocatedRes = await api
+        .get('/orders/transporter/allocated')
+        .catch(() => api.get('/transporters/orders').catch(() => ({ data: [] })));
+      const personsRes = await api
+        .get('/transporters/delivery-persons')
+        .catch(() => ({ data: { data: [] } }));
+      const vehiclesRes = await api
+        .get('/vehicles')
+        .catch(() => api.get('/transporters/vehicles').catch(() => ({ data: { data: {} } })));
 
-      const allOrders = allocatedRes.data?.data || [];
-      const srcOrders = allOrders.filter(
-        (o) => o.transporter_role === 'PICKUP_SHIPPING' && o.current_status === 'PLACED'
-      );
-      const destOrders = allOrders.filter(
-        (o) => o.transporter_role === 'DELIVERY' && o.current_status === 'RECEIVED'
-      );
+      const allOrders = normalizeArray(allocatedRes?.data);
+      const srcOrders = allOrders.filter((o) => {
+        const role = (o.transporter_role || o.role || '').toUpperCase();
+        const status = (o.current_status || o.status || '').toUpperCase();
+        // Same transporter: backend already assigns correct role based on status
+        return role === 'PICKUP_SHIPPING' && status !== 'COMPLETED' && status !== 'CANCELLED';
+      });
+      const destOrders = allOrders.filter((o) => {
+        const role = (o.transporter_role || o.role || '').toUpperCase();
+        const status = (o.current_status || o.status || '').toUpperCase();
+        return role === 'DELIVERY' && status !== 'COMPLETED' && status !== 'CANCELLED';
+      });
       setSourceOrders(srcOrders);
       setDestinationOrders(destOrders);
 
       const persons = personsRes.data?.data || personsRes.data?.delivery_persons || personsRes.data || [];
       setDeliveryPersons(Array.isArray(persons) ? persons : []);
 
-      const fleetData = vehiclesRes.data?.data || {};
-      setPermanentVehicles(fleetData.permanent_vehicles || []);
-      setTemporaryVehicles(fleetData.temporary_vehicles || []);
+      const buckets = parseVehicleBuckets(vehiclesRes?.data);
+      setPermanentVehicles(Array.isArray(buckets.permanent) ? buckets.permanent : []);
+      setTemporaryVehicles(Array.isArray(buckets.temporary) ? buckets.temporary : []);
     } catch (e) {
       console.error('Dashboard fetch error:', e.message);
     } finally {
@@ -116,10 +173,6 @@ const TransporterDashboard = ({ navigation }) => {
       setRefreshing(false);
     }
   }, []);
-
-  useEffect(() => {
-    fetchDashboard();
-  }, [fetchDashboard]);
 
   useEffect(() => {
     fetchDashboard();
@@ -146,8 +199,57 @@ const TransporterDashboard = ({ navigation }) => {
 
   const canConfirmAssign = () => {
     if (!assignModal.order) return false;
-    if (assignModal.isSource) return selectedVehicleId !== null && selectedPersonId !== null;
-    return selectedPersonId !== null;
+    return selectedVehicleId !== null && selectedPersonId !== null;
+  };
+
+  const assignVehicle = async (orderId) => {
+    const payload = {
+      order_id: orderId,
+      vehicle_id: selectedVehicleId,
+      vehicle_type: selectedVehicleType,
+    };
+
+    const attempts = [
+      () => api.post('/transporters/assign-vehicle', payload),
+      () => api.put('/transporters/assign-vehicle', payload),
+      () => api.post(`/transporters/orders/${orderId}/assign-vehicle`, payload),
+      () => api.put(`/transporters/orders/${orderId}/assign-vehicle`, payload),
+    ];
+
+    let lastError = null;
+    for (const run of attempts) {
+      try {
+        await run();
+        return;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error('Unable to assign vehicle');
+  };
+
+  const assignDeliveryPerson = async (orderId) => {
+    const payload = {
+      order_id: orderId,
+      delivery_person_id: selectedPersonId,
+    };
+
+    const attempts = [
+      () => api.put(`/transporters/orders/${orderId}/assign`, payload),
+      () => api.post('/transporters/assign-order', payload),
+      () => api.put('/transporters/assign-order', payload),
+    ];
+
+    let lastError = null;
+    for (const run of attempts) {
+      try {
+        await run();
+        return;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error('Unable to assign delivery person');
   };
 
   const handleConfirmAssign = async () => {
@@ -155,12 +257,14 @@ const TransporterDashboard = ({ navigation }) => {
     if (!order || !canConfirmAssign()) return;
 
     const orderId = order.order_id || order.id;
-    setAssigningOrderId(orderId);
+    setAssigning(true);
     try {
-      await api.put(`/transporters/orders/${orderId}/assign`, {
-        delivery_person_id: person.id || person.delivery_person_id,
-      });
-      toastRef.current?.show(`Assigned ${person.full_name || person.name} successfully!`, 'success');
+      await Promise.all([assignVehicle(orderId), assignDeliveryPerson(orderId)]);
+      toastRef.current?.show('Vehicle and delivery person assigned successfully!', 'success');
+      setAssignModal({ visible: false, order: null, isSource: false });
+      setSelectedVehicleId(null);
+      setSelectedVehicleType(null);
+      setSelectedPersonId(null);
       fetchDashboard(true);
     } catch (e) {
       toastRef.current?.show(e.message || 'Assignment failed', 'error');
@@ -231,15 +335,37 @@ const TransporterDashboard = ({ navigation }) => {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.assignBtn}
-          onPress={() => openAssignModal(order)}
-        >
-          <Ionicons name="person-add-outline" size={16} color="#fff" />
-          <Text style={styles.assignBtnText}>
-            {order.transporter_role === 'PICKUP_SHIPPING' ? 'Assign Vehicle & Person' : 'Assign Delivery Person'}
-          </Text>
-        </TouchableOpacity>
+        {(() => {
+          const hasDP = !!(order.delivery_person_id || order.delivery_person);
+          const hasVehicle = !!(order.permanent_vehicle_id || order.temp_vehicle_id || order.vehicle_id);
+          const isFullyAssigned = hasDP && hasVehicle;
+
+          if (isFullyAssigned) {
+            return (
+              <View style={styles.assignedRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
+                <Text style={styles.assignedText}>
+                  Assigned · {order.delivery_person?.name || 'Delivery Person'}
+                </Text>
+              </View>
+            );
+          }
+          return (
+            <TouchableOpacity
+              style={styles.assignBtn}
+              onPress={() => openAssignModal(order)}
+            >
+              <Ionicons name="person-add-outline" size={16} color="#fff" />
+              <Text style={styles.assignBtnText}>
+                {!hasDP && !hasVehicle
+                  ? 'Assign Vehicle & Person'
+                  : !hasDP
+                    ? 'Assign Delivery Person'
+                    : 'Assign Vehicle'}
+              </Text>
+            </TouchableOpacity>
+          );
+        })()}
       </TouchableOpacity>
     );
   };
@@ -359,7 +485,7 @@ const TransporterDashboard = ({ navigation }) => {
 
         {/* Source Orders (Pickup & Shipping) */}
         <Text style={styles.sectionTitle}>
-          Pickup Orders — Need Assignment ({sourceOrders.length})
+          Pickup Orders ({sourceOrders.length})
         </Text>
         {sourceOrders.length === 0 ? (
           <View style={styles.emptyCard}>
@@ -372,7 +498,7 @@ const TransporterDashboard = ({ navigation }) => {
 
         {/* Destination Orders (Delivery) */}
         <Text style={styles.sectionTitle}>
-          Delivery Orders — Need Assignment ({destinationOrders.length})
+          Delivery Orders ({destinationOrders.length})
         </Text>
         {destinationOrders.length === 0 ? (
           <View style={styles.emptyCard}>
@@ -403,54 +529,58 @@ const TransporterDashboard = ({ navigation }) => {
             </View>
 
             <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
-              {/* Vehicle section — only for source / pickup orders */}
-              {assignModal.isSource && (
-                <>
-                  <Text style={styles.modalSection}>Select Vehicle</Text>
-                  {permanentVehicles.length > 0 && (
-                    <>
-                      <Text style={styles.modalSubSection}>Permanent Vehicles</Text>
-                      {permanentVehicles.map((v) => (
+              {/* Vehicle section */}
+              <>
+                <Text style={styles.modalSection}>Select Vehicle</Text>
+                {permanentVehicles.length > 0 && (
+                  <>
+                    <Text style={styles.modalSubSection}>Permanent Vehicles</Text>
+                    {permanentVehicles.map((v, index) => {
+                      const vehicleId = v.vehicle_id || v.id || `perm-${index}`;
+                      return (
                         <TouchableOpacity
-                          key={v.vehicle_id}
-                          style={[styles.selectCard, selectedVehicleId === v.vehicle_id && styles.selectCardActive]}
-                          onPress={() => { setSelectedVehicleId(v.vehicle_id); setSelectedVehicleType('permanent'); }}
+                          key={vehicleId}
+                          style={[styles.selectCard, selectedVehicleId === vehicleId && styles.selectCardActive]}
+                          onPress={() => { setSelectedVehicleId(vehicleId); setSelectedVehicleType('permanent'); }}
                         >
-                          <MaterialCommunityIcons name="truck" size={24} color={selectedVehicleId === v.vehicle_id ? '#1B5E20' : '#888'} />
+                          <MaterialCommunityIcons name="truck" size={24} color={selectedVehicleId === vehicleId ? '#1B5E20' : '#888'} />
                           <View style={{ flex: 1, marginLeft: 10 }}>
                             <Text style={styles.selectCardTitle}>{v.vehicle_number || 'N/A'}</Text>
-                            <Text style={styles.selectCardSub}>{(v.vehicle_type || '').toUpperCase()} · {v.capacity || 0} tons</Text>
+                            <Text style={styles.selectCardSub}>{(v.vehicle_type || '').toUpperCase()} · {v.capacity || 0}</Text>
                           </View>
-                          {selectedVehicleId === v.vehicle_id && <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />}
+                          {selectedVehicleId === vehicleId && <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />}
                         </TouchableOpacity>
-                      ))}
-                    </>
-                  )}
-                  {temporaryVehicles.length > 0 && (
-                    <>
-                      <Text style={styles.modalSubSection}>Temporary Vehicles</Text>
-                      {temporaryVehicles.map((v) => (
+                      );
+                    })}
+                  </>
+                )}
+                {temporaryVehicles.length > 0 && (
+                  <>
+                    <Text style={styles.modalSubSection}>Temporary Vehicles</Text>
+                    {temporaryVehicles.map((v, index) => {
+                      const vehicleId = v.vehicle_id || v.id || `temp-${index}`;
+                      return (
                         <TouchableOpacity
-                          key={v.vehicle_id}
-                          style={[styles.selectCard, selectedVehicleId === v.vehicle_id && styles.selectCardActive]}
-                          onPress={() => { setSelectedVehicleId(v.vehicle_id); setSelectedVehicleType('temporary'); }}
+                          key={vehicleId}
+                          style={[styles.selectCard, selectedVehicleId === vehicleId && styles.selectCardActive]}
+                          onPress={() => { setSelectedVehicleId(vehicleId); setSelectedVehicleType('temporary'); }}
                         >
-                          <MaterialCommunityIcons name="car" size={24} color={selectedVehicleId === v.vehicle_id ? '#1B5E20' : '#888'} />
+                          <MaterialCommunityIcons name="car" size={24} color={selectedVehicleId === vehicleId ? '#1B5E20' : '#888'} />
                           <View style={{ flex: 1, marginLeft: 10 }}>
                             <Text style={styles.selectCardTitle}>{v.vehicle_number || 'N/A'}</Text>
-                            <Text style={styles.selectCardSub}>{(v.vehicle_type || '').toUpperCase()} · {v.capacity || 0} tons</Text>
+                            <Text style={styles.selectCardSub}>{(v.vehicle_type || '').toUpperCase()} · {v.capacity || 0}</Text>
                           </View>
-                          {selectedVehicleId === v.vehicle_id && <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />}
+                          {selectedVehicleId === vehicleId && <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />}
                         </TouchableOpacity>
-                      ))}
-                    </>
-                  )}
-                  {permanentVehicles.length === 0 && temporaryVehicles.length === 0 && (
-                    <Text style={styles.emptyModalText}>No vehicles available. Add vehicles first.</Text>
-                  )}
-                  <View style={styles.divider} />
-                </>
-              )}
+                      );
+                    })}
+                  </>
+                )}
+                {permanentVehicles.length === 0 && temporaryVehicles.length === 0 && (
+                  <Text style={styles.emptyModalText}>No vehicles available. Add vehicles first.</Text>
+                )}
+                <View style={styles.divider} />
+              </>
 
               {/* Delivery person */}
               <Text style={styles.modalSection}>Select Delivery Person</Text>

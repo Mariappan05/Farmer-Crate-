@@ -34,17 +34,18 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
-import { getOrderById } from '../../services/orderService';
+import { useAuth } from '../../context/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SCAN_SIZE = SCREEN_WIDTH * 0.7;
 
-// Valid statuses
-const VALID_PICKUP_STATUSES = ['ASSIGNED', 'CONFIRMED'];
-const VALID_DELIVERY_STATUSES = ['SHIPPED', 'PICKED_UP', 'OUT_FOR_DELIVERY'];
+// Only transporter-controlled statuses should be QR updated.
+const VALID_TRANSPORTER_QR_STATUSES = ['RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION'];
 
 const QRScan = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
+  const { authState } = useAuth();
+  const expectedOrderId = route?.params?.orderId || route?.params?.expectedOrderId || null;
   const [permission, requestPermission] = useCameraPermissions();
   const [isProcessing, setIsProcessing] = useState(false);
   const [scanned, setScanned] = useState(false);
@@ -54,6 +55,23 @@ const QRScan = ({ navigation, route }) => {
   const lastScanRef = useRef(null);
 
   const myTransporterId = authState?.user?.transporter_id || authState?.user?.id;
+
+  const isAssignedToLoggedTransporter = (order) => {
+    const myId = Number(myTransporterId);
+    if (!myId || !order) return true;
+
+    const sourceId = Number(order.source_transporter_id || order.pickup_transporter_id || order.transporter_id);
+    const destinationId = Number(order.destination_transporter_id || order.delivery_transporter_id);
+    const assignedTransporterId = Number(order.assigned_transporter_id || order.transporter?.id || order.transporter?.transporter_id);
+    const role = String(order.transporter_role || '').toUpperCase();
+
+    if (role === 'PICKUP_SHIPPING' && sourceId) return sourceId === myId;
+    if (role === 'DELIVERY' && destinationId) return destinationId === myId;
+    if (assignedTransporterId) return assignedTransporterId === myId;
+    if (sourceId && destinationId) return sourceId === myId || destinationId === myId;
+
+    return true;
+  };
 
   const processQR = async (qrData) => {
     if (isProcessing || scanned) return;
@@ -92,18 +110,33 @@ const QRScan = ({ navigation, route }) => {
   /* ── Fetch and validate order ───────────────────────────── */
   const fetchAndValidateOrder = async (orderId) => {
     try {
-      // Fetch from transporter's allocated orders
+      // Fetch from transporter's allocated orders with endpoint fallbacks.
       let order = null;
-      try {
-        const res = await api.get(`/orders/${orderId}`);
-        order = res.data?.data || res.data;
-      } catch {
-        // Try transporter-specific endpoint
-        const res2 = await api.get('/transporters/orders/active');
-        const allOrders = res2.data?.data || res2.data?.orders || res2.data || [];
-        order = (Array.isArray(allOrders) ? allOrders : []).find(
-          (o) => (o.order_id || o.id) == orderId
-        );
+      const orderEndpoints = [
+        `/orders/${orderId}`,
+        `/transporters/orders/${orderId}`,
+      ];
+
+      for (const endpoint of orderEndpoints) {
+        try {
+          const res = await api.get(endpoint);
+          const payload = res.data?.data || res.data?.order || res.data;
+          const candidate = payload?.order || payload;
+          if (candidate && (candidate.order_id || candidate.id)) {
+            order = candidate;
+            break;
+          }
+        } catch (_) {
+          // Continue fallbacks.
+        }
+      }
+
+      if (!order) {
+        const listRes = await api
+          .get('/orders/transporter/allocated')
+          .catch(() => api.get('/transporters/orders/active').catch(() => ({ data: [] })));
+        const allOrders = listRes.data?.data || listRes.data?.orders || listRes.data || [];
+        order = (Array.isArray(allOrders) ? allOrders : []).find((o) => (o.order_id || o.id) == orderId);
       }
 
       if (!order) {
@@ -120,16 +153,13 @@ const QRScan = ({ navigation, route }) => {
 
       const status = (order.current_status || order.status || '').toUpperCase();
 
-      // Validate for pickup
-      if (VALID_PICKUP_STATUSES.includes(status)) {
-        navigateToOrder(order, 'pickup');
-        return;
+      if (!isAssignedToLoggedTransporter(order)) {
+        Alert.alert('Not Assigned', 'This order is not assigned to your transporter account.', [{ text: 'OK', onPress: resetScanner }]);
+        return null;
       }
 
-      // Validate for delivery
-      if (VALID_DELIVERY_STATUSES.includes(status)) {
-        navigateToOrder(order, 'delivery');
-        return;
+      if (VALID_TRANSPORTER_QR_STATUSES.includes(status)) {
+        return order;
       }
 
       // Already delivered
@@ -144,19 +174,45 @@ const QRScan = ({ navigation, route }) => {
       // Invalid status
       Alert.alert(
         'Invalid Status',
-        `Order #${orderId} has status "${status}" which is not valid for scanning.`,
+        `Order #${orderId} has status "${status}". Pickup delivery person must update pickup manually; transporter QR scan starts from RECEIVED status.`,
         [{ text: 'OK', onPress: resetScanner }]
       );
+      return null;
     } catch (e) {
       Alert.alert('Error', e.message || 'Failed to fetch order', [{ text: 'Retry', onPress: resetScanner }]);
+      return null;
     }
+  };
+
+  const validateAndUpdate = async (orderId) => {
+    const order = await fetchAndValidateOrder(orderId);
+    if (!order) return;
+    await updateStatusAfterScan(order);
   };
 
   const getNextStatusAfterScan = (order) => {
     const role = (order?.transporter_role || '').toUpperCase();
     const current = (order?.current_status || order?.status || '').toUpperCase();
-    if (role === 'PICKUP_SHIPPING' && current === 'ASSIGNED') return 'SHIPPED';
-    if (role === 'DELIVERY' && current === 'SHIPPED') return 'RECEIVED';
+    const isSameTransporter = order?.same_transporter === true || 
+      (order?.source_transporter_id && order?.source_transporter_id === order?.destination_transporter_id);
+
+    // When same transporter handles both roles, allow the full flow
+    if (isSameTransporter || !role) {
+      if (current === 'RECEIVED') return 'SHIPPED';
+      if (current === 'SHIPPED') return 'IN_TRANSIT';
+      if (current === 'IN_TRANSIT') return 'REACHED_DESTINATION';
+      if (current === 'REACHED_DESTINATION') return 'OUT_FOR_DELIVERY';
+      return null;
+    }
+
+    if (role === 'PICKUP_SHIPPING') {
+      if (current === 'RECEIVED') return 'SHIPPED';
+      if (current === 'SHIPPED') return 'IN_TRANSIT';
+    }
+    if (role === 'DELIVERY') {
+      if (current === 'SHIPPED' || current === 'IN_TRANSIT') return 'REACHED_DESTINATION';
+      if (current === 'REACHED_DESTINATION') return 'OUT_FOR_DELIVERY';
+    }
     return null;
   };
 

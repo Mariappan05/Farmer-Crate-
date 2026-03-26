@@ -1,7 +1,25 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const BASE_URL = 'https://farmercrate.onrender.com/api';
+const DEFAULT_API_BASE_URL = 'https://farmercrate.onrender.com/api';
+
+const normalizeBaseUrl = (value) => {
+  if (!value || typeof value !== 'string') return DEFAULT_API_BASE_URL;
+  let url = value.trim();
+  if (!url) return DEFAULT_API_BASE_URL;
+
+  // Remove trailing slash for stable endpoint joins.
+  url = url.replace(/\/+$/, '');
+
+  // If user provides host only, append /api to keep existing backend contract.
+  if (!/\/api$/i.test(url)) {
+    url = `${url}/api`;
+  }
+
+  return url;
+};
+
+export const BASE_URL = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,

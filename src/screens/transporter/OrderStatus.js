@@ -28,6 +28,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
+import { optimizeImageUrl } from '../../services/cloudinaryService';
 import {
   assignTransporterDeliveryPerson,
   updateTransporterOrderStatus,
@@ -140,6 +141,8 @@ const OrderStatus = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [updatingId, setUpdatingId] = useState(null);
 
+  const orders = activeTab === 0 ? sourceOrders : destinationOrders;
+
   /* ── Fetch ──────────────────────────────────────────────── */
   const fetchOrders = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -181,16 +184,6 @@ const OrderStatus = ({ navigation }) => {
     return unsub;
   }, [navigation, fetchOrders]);
 
-  /* ── Filter ─────────────────────────────────────────────── */
-  const filteredOrders = orders.filter((o) => {
-    if (activeFilter === 'All') return true;
-    const st = (o.current_status || o.status || '').toUpperCase();
-    if (activeFilter === 'Assigned') return st === 'ASSIGNED';
-    if (activeFilter === 'Shipped') return st === 'SHIPPED';
-    if (activeFilter === 'In Transit') return st === 'OUT_FOR_DELIVERY' || st === 'IN_TRANSIT';
-    return true;
-  });
-
   /* ── Status update ──────────────────────────────────────── */
   const handleStatusUpdate = (order, newStatus) => {
     const orderId = order.order_id || order.id;
@@ -219,32 +212,41 @@ const OrderStatus = ({ navigation }) => {
   };
 
   /* ── Assign ─────────────────────────────────────────────── */
-  const handleAssign = (order) => {
-    const available = deliveryPersons.filter((p) => p.is_available !== false && p.availability !== false);
-    if (available.length === 0) {
-      Alert.alert('No Available Persons', 'No delivery persons available.');
-      return;
+  const handleAssign = async (order) => {
+    try {
+      const res = await api.get('/transporters/delivery-persons');
+      const persons = res.data?.data || res.data?.delivery_persons || res.data || [];
+      const available = (Array.isArray(persons) ? persons : []).filter(
+        (p) => p.is_available !== false && p.availability !== false
+      );
+
+      if (available.length === 0) {
+        Alert.alert('No Available Persons', 'No delivery persons available.');
+        return;
+      }
+
+      const options = available.map((p) => ({
+        text: `${p.full_name || p.name || 'Person'}${p.mobile_number || p.phone ? ` (${p.mobile_number || p.phone})` : ''}`,
+        onPress: async () => {
+          const orderId = order.order_id || order.id;
+          setUpdatingId(orderId);
+          try {
+            await assignTransporterDeliveryPerson(orderId, p.id || p.delivery_person_id, 'delivery');
+            Alert.alert('Success', `Assigned ${p.full_name || p.name}`);
+            fetchOrders(true);
+          } catch (e) {
+            Alert.alert('Error', e.message || 'Failed to assign');
+          } finally {
+            setUpdatingId(null);
+          }
+        },
+      }));
+
+      options.push({ text: 'Cancel', style: 'cancel' });
+      Alert.alert('Assign Delivery Person', 'Choose:', options);
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Unable to load delivery persons');
     }
-    const options = available.map((p) => ({
-      text: p.full_name || p.name || 'Person',
-      onPress: async () => {
-        const orderId = order.order_id || order.id;
-        setUpdatingId(orderId);
-        try {
-          await api.put(`/transporters/orders/${orderId}/assign`, {
-            delivery_person_id: p.id || p.delivery_person_id,
-          });
-          Alert.alert('Success', `Assigned ${p.full_name || p.name}`);
-          fetchOrders(true);
-        } catch (e) {
-          Alert.alert('Error', e.message || 'Failed to assign');
-        } finally {
-          setUpdatingId(null);
-        }
-      },
-    }));
-    options.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert('Assign Delivery Person', 'Choose:', options);
   };
 
   /* ── Render order card ──────────────────────────────────── */
@@ -323,7 +325,7 @@ const OrderStatus = ({ navigation }) => {
           {role === 'DELIVERY' && status === 'SHIPPED' && (
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: '#FF5722' }]}
-              onPress={() => handleStatusUpdate(order, 'RECEIVED')}
+              onPress={() => handleAssign(order)}
               disabled={isUpdating}
             >
               {isUpdating ? (

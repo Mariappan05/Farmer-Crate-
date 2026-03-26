@@ -110,7 +110,7 @@ const OrderConfirm = ({ navigation, route }) => {
   // ── Derived data ──
   const orderId = order?.order_id || order?.id || 'N/A';
   const totalAmount = parseFloat(order?.total_amount || order?.total_price || 0) || 0;
-  const paymentMethod = order?.payment_method || 'COD';
+  const paymentMethod = order?.payment_method || 'ONLINE';
   const qrCodeStr = order?.qr_code || '';
   const subtotal = parseFloat(order?.subtotal || totalAmount) || 0;
   const adminCommission = parseFloat(order?.admin_commission || 0) || 0;

@@ -146,6 +146,16 @@ function isVisibleToCustomer(product) {
   return status === 'AVAILABLE' || status === 'ACTIVE' || !status;
 }
 
+function normalizeProductListResponse(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.data)) return raw.data;
+  if (Array.isArray(raw?.products)) return raw.products;
+  if (Array.isArray(raw?.data?.products)) return raw.data.products;
+  if (Array.isArray(raw?.data?.data)) return raw.data.data;
+  return [];
+}
+
 // ---------------------------------------------------------------------------
 // Shimmer placeholder component
 // ---------------------------------------------------------------------------
@@ -277,11 +287,17 @@ export default function CustomerHome({ navigation }) {
   const fetchProducts = async () => {
     try {
       console.log('[CustomerHome] Fetching products...');
-      const res = await api.get('/products');
-      console.log('[CustomerHome] Products response:', res.data);
-      
-      const data = res.data?.data || res.data || [];
-      const productList = Array.isArray(data) ? data : [];
+      let productList = [];
+
+      const primary = await api.get('/products');
+      console.log('[CustomerHome] Products response:', primary.data);
+      productList = normalizeProductListResponse(primary.data);
+
+      if (!productList.length) {
+        // Fallback for backends that split list endpoints
+        const fallback = await api.get('/products/all').catch(() => null);
+        productList = normalizeProductListResponse(fallback?.data);
+      }
       
       console.log('[CustomerHome] Raw products:', productList);
       
@@ -303,6 +319,8 @@ export default function CustomerHome({ navigation }) {
       setProducts(activeProducts);
     } catch (e) {
       console.log('Products error:', e.message);
+      toastRef.current?.show('Unable to load products right now. Pull to refresh.', 'warning');
+      setProducts([]);
     }
   };
 
@@ -312,8 +330,7 @@ export default function CustomerHome({ navigation }) {
       const res = await api.get('/products/trending');
       console.log('[CustomerHome] Trending response:', res.data);
       
-      const data = res.data?.data || res.data || [];
-      const trendingList = Array.isArray(data) ? data : [];
+      const trendingList = normalizeProductListResponse(res.data);
       
       const activeTrending = trendingList.filter(isVisibleToCustomer);
       
@@ -324,8 +341,7 @@ export default function CustomerHome({ navigation }) {
       try {
         console.log('[CustomerHome] Trending fallback - using top viewed products');
         const res = await api.get('/products');
-        const data = res.data?.data || res.data || [];
-        const productList = Array.isArray(data) ? data : [];
+        const productList = normalizeProductListResponse(res.data);
         
         const activeProducts = productList.filter(isVisibleToCustomer);
         

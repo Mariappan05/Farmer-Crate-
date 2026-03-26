@@ -31,8 +31,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
-import { getOrderById } from '../../services/orderService';
-import { optimizeImageUrl } from '../../services/cloudinaryService';
+import { optimizeImageUrl, pickImage, uploadImageToCloudinary } from '../../services/cloudinaryService';
 
 /* ── Constants ────────────────────────────────────────────── */
 const TIMELINE_STAGES = [
@@ -138,6 +137,31 @@ const getPartyImage = (party) => {
   return party.image_url || party.image || party.profile_image || party.photo || null;
 };
 
+const getPackingProofImages = (order) => {
+  const packing =
+    order?.packing_image_url ||
+    order?.packing_photo_url ||
+    order?.package_image_url ||
+    order?.package_photo_url ||
+    order?.packing?.packing_image_url ||
+    order?.packing?.packing_photo_url ||
+    null;
+
+  const bill =
+    order?.bill_paste_image_url ||
+    order?.bill_image_url ||
+    order?.bill_photo_url ||
+    order?.bill_copy_url ||
+    order?.packing?.bill_paste_image_url ||
+    order?.packing?.bill_image_url ||
+    null;
+
+  return {
+    packing,
+    bill,
+  };
+};
+
 /* ── Component ────────────────────────────────────────────── */
 const OrderDetail = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
@@ -149,8 +173,9 @@ const OrderDetail = ({ navigation, route }) => {
   const [assigningDP, setAssigningDP] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deliveryPersons, setDeliveryPersons] = useState([]);
-  const [showNoPersonsModal, setShowNoPersonsModal] = useState(false);
-  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [permanentVehicles, setPermanentVehicles] = useState([]);
+  const [temporaryVehicles, setTemporaryVehicles] = useState([]);
+  const [uploadingPackingProof, setUploadingPackingProof] = useState(false);
 
   const orderId = paramOrderId || order?.order_id || order?.id;
   const status = (order?.current_status || order?.status || 'PENDING').toUpperCase();
@@ -170,54 +195,56 @@ const OrderDetail = ({ navigation, route }) => {
       }
       
       let orderRes = initialOrder;
-      
-      // Try to fetch fresh data, but don't fail if it doesn't work
+
       if (orderId) {
-        try {
-          console.log(`[OrderDetail] Trying GET /transporters/orders/${orderId}/track`);
-          const res = await api.get(`/transporters/orders/${orderId}/track`);
-          
-          // Check if response has data
-          if (res.data?.success && res.data?.data) {
-            console.log('[OrderDetail] Track response received');
-            const trackData = res.data.data;
-            const freshOrder = trackData.order || trackData;
+        const endpoints = [
+          `/transporters/orders/${orderId}`,
+          `/transporters/orders/${orderId}/track`,
+          `/orders/${orderId}`,
+        ];
+
+        for (const endpoint of endpoints) {
+          try {
+            const res = await api.get(endpoint);
+            // Handle various response shapes from different endpoints
+            const raw = res.data;
+            let candidate = null;
             
-            // Only use fresh data if it's valid
-            if (freshOrder && (freshOrder.order_id || freshOrder.id)) {
-              orderRes = freshOrder;
-              console.log('[OrderDetail] Using fresh order data from track endpoint');
-            } else {
-              console.log('[OrderDetail] Track response invalid, using initialOrder');
+            // Shape 1: { data: { order: {...} } } (trackOrder)
+            if (raw?.data?.order && (raw.data.order.order_id || raw.data.order.id)) {
+              candidate = raw.data.order;
             }
-          } else {
-            console.log('[OrderDetail] Track response has no data, using initialOrder');
+            // Shape 2: { data: { order_id, farmer, customer, ... } } (getOrderDetail)
+            else if (raw?.data && (raw.data.order_id || raw.data.id)) {
+              candidate = raw.data;
+            }
+            // Shape 3: { order: {...} }
+            else if (raw?.order && (raw.order.order_id || raw.order.id)) {
+              candidate = raw.order;
+            }
+            // Shape 4: direct { order_id, ... }
+            else if (raw?.order_id || raw?.id) {
+              candidate = raw;
+            }
+
+            if (candidate && (candidate.order_id || candidate.id)) {
+              orderRes = candidate;
+              break;
+            }
+          } catch (_) {
+            // Keep trying endpoint fallbacks.
           }
-        } catch (err) {
-          console.log('[OrderDetail] Track endpoint error:', err.message);
-          console.log('[OrderDetail] Status:', err.response?.status);
-          console.log('[OrderDetail] Backend message:', err.response?.data?.message);
-          
-          // If it's a permission or not found error, the order might not belong to this transporter
-          if (err.response?.status === 403) {
-            console.log('[OrderDetail] Permission denied - order may not belong to this transporter');
-          } else if (err.response?.status === 404) {
-            console.log('[OrderDetail] Order not found in backend');
-          }
-          
-          console.log('[OrderDetail] Continuing with initialOrder (this is normal)');
         }
       }
-      
-      // Fetch delivery persons
-      const personsRes = await api.get('/transporters/delivery-persons').catch((err) => {
-        console.log('[OrderDetail] Delivery persons API error:', err.message);
-        return { data: { data: [] } };
-      });
+
+      const [personsRes, vehiclesRes] = await Promise.all([
+        api.get('/transporters/delivery-persons').catch(() => ({ data: { data: [] } })),
+        api.get('/vehicles').catch(() => ({ data: { data: {} } })),
+      ]);
       
       // Set the order (either fresh or initial)
       if (orderRes) {
-        const o = orderRes?.data || orderRes?.order || orderRes;
+        const o = orderRes;
         console.log('[OrderDetail] Setting order with ID:', o?.order_id || o?.id);
         if (o) setOrder(o);
       }
@@ -227,6 +254,18 @@ const OrderDetail = ({ navigation, route }) => {
       const personsList = Array.isArray(persons) ? persons : [];
       console.log('[OrderDetail] Loaded', personsList.length, 'delivery persons');
       setDeliveryPersons(personsList);
+
+      const vehicleData = vehiclesRes.data?.data || vehiclesRes.data || {};
+      setPermanentVehicles(
+        Array.isArray(vehicleData?.permanent_vehicles)
+          ? vehicleData.permanent_vehicles
+          : []
+      );
+      setTemporaryVehicles(
+        Array.isArray(vehicleData?.temporary_vehicles)
+          ? vehicleData.temporary_vehicles
+          : []
+      );
       
     } catch (e) {
       console.error('[OrderDetail] Unexpected error:', e.message);
@@ -245,76 +284,201 @@ const OrderDetail = ({ navigation, route }) => {
   }, [fetchOrder]);
 
   /* ── Status update ──────────────────────────────────────── */
-  const handleStatusUpdate = (newStatus) => {
-    Alert.alert('Update Status', `Change to "${newStatus.replace(/_/g, ' ')}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Confirm',
-        onPress: async () => {
-          setUpdatingStatus(true);
-          try {
-            await api.put(`/transporters/orders/${orderId}/status`, { status: newStatus });
-            Alert.alert('Success', 'Status updated');
-            fetchOrder(true);
-          } catch (e) {
-            Alert.alert('Error', e.message || 'Failed to update');
-          } finally {
-            setUpdatingStatus(false);
-          }
-        },
-      },
-    ]);
+  const assignVehicleAndPerson = async (vehicle, person) => {
+    const oid = orderId || order?.order_id || order?.id;
+    if (!oid) throw new Error('Order ID missing');
+
+    const vehicleId = vehicle?.vehicle_id || vehicle?.id;
+    const vehicleKind = vehicle?._vehicleKind || vehicle?.vehicle_kind || 'permanent';
+    const personId = person?.delivery_person_id || person?.id;
+
+    const vehiclePayload = {
+      order_id: oid,
+      vehicle_id: vehicleId,
+      vehicle_type: vehicleKind,
+    };
+    const personPayload = {
+      order_id: oid,
+      delivery_person_id: personId,
+    };
+
+    const vehicleAttempts = [
+      () => api.post('/transporters/assign-vehicle', vehiclePayload),
+      () => api.put('/transporters/assign-vehicle', vehiclePayload),
+      () => api.post(`/transporters/orders/${oid}/assign-vehicle`, vehiclePayload),
+      () => api.put(`/transporters/orders/${oid}/assign-vehicle`, vehiclePayload),
+    ];
+
+    const personAttempts = [
+      () => api.put(`/transporters/orders/${oid}/assign`, personPayload),
+      () => api.post('/transporters/assign-order', personPayload),
+      () => api.put('/transporters/assign-order', personPayload),
+    ];
+
+    let vehicleError = null;
+    for (const run of vehicleAttempts) {
+      try {
+        await run();
+        vehicleError = null;
+        break;
+      } catch (err) {
+        vehicleError = err;
+      }
+    }
+    if (vehicleError) throw vehicleError;
+
+    let personError = null;
+    for (const run of personAttempts) {
+      try {
+        await run();
+        personError = null;
+        break;
+      } catch (err) {
+        personError = err;
+      }
+    }
+    if (personError) throw personError;
   };
 
-  /* ── Assign ─────────────────────────────────────────────── */
   const handleAssign = () => {
+    const allVehicles = [
+      ...(permanentVehicles || []).map((v) => ({ ...v, _vehicleKind: 'permanent' })),
+      ...(temporaryVehicles || []).map((v) => ({ ...v, _vehicleKind: 'temporary' })),
+    ].filter((v) => v.is_available !== false);
+
     const available = deliveryPersons.filter((p) => p.is_available !== false);
+
+    if (allVehicles.length === 0) {
+      Alert.alert('No Vehicles', 'Add or enable a vehicle first.');
+      return;
+    }
     if (available.length === 0) {
       Alert.alert('No Available Persons', 'Add delivery persons first.');
       return;
     }
-    const options = available.map((p) => ({
-      text: p.full_name || p.name || 'Person',
+
+    const vehicleOptions = allVehicles.map((vehicle) => ({
+      text: `${vehicle.vehicle_number || 'Vehicle'} (${vehicle._vehicleKind})`,
       onPress: async () => {
-        setAssigningDP(true);
-        try {
-          await api.put(`/transporters/orders/${orderId}/assign`, {
-            delivery_person_id: p.id || p.delivery_person_id,
-          });
-          Alert.alert('Success', `Assigned ${p.full_name || p.name}`);
-          fetchOrder(true);
-        } catch (e) {
-          Alert.alert('Error', e.message);
-        } finally {
-          setAssigningDP(false);
-        }
+        const personOptions = available.map((p) => ({
+          text: p.full_name || p.name || 'Person',
+          onPress: async () => {
+            setAssigningDP(true);
+            try {
+              await assignVehicleAndPerson(vehicle, p);
+              Alert.alert('Success', `Assigned ${vehicle.vehicle_number || 'vehicle'} + ${p.full_name || p.name}`);
+              fetchOrder(true);
+            } catch (e) {
+              Alert.alert('Error', e.message || 'Failed to assign');
+            } finally {
+              setAssigningDP(false);
+            }
+          },
+        }));
+        personOptions.push({ text: 'Cancel', style: 'cancel' });
+        Alert.alert('Assign Delivery Person', 'Choose delivery person:', personOptions);
       },
     }));
-    options.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert('Assign Delivery Person', 'Choose:', options);
+    vehicleOptions.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Assign Vehicle', 'Choose vehicle:', vehicleOptions);
   };
 
-  const assignDeliveryPerson = async (person) => {
-    setAssigningDP(true);
+  const uploadPackingProof = async () => {
+    const oid = orderId || order?.order_id || order?.id;
+    if (!oid) return;
+
+    const packingLocalUri = await pickImage(false);
+    if (!packingLocalUri) return;
+
+    const billLocalUri = await pickImage(false);
+    if (!billLocalUri) return;
+
+    setUploadingPackingProof(true);
     try {
-      await api.put(`/transporters/orders/${orderId}/assign`, {
-        delivery_person_id: person.delivery_person_id || person.id,
-      });
-      setShowAssignModal(false);
-      Alert.alert('Success', `Assigned ${person.name || person.full_name || 'delivery person'}`);
-      fetchOrder(true);
+      const [packingUrl, billUrl] = await Promise.all([
+        uploadImageToCloudinary(packingLocalUri),
+        uploadImageToCloudinary(billLocalUri),
+      ]);
+
+      if (!packingUrl || !billUrl) {
+        throw new Error('Failed to upload packing images');
+      }
+
+      const payload = {
+        packing_image_url: packingUrl,
+        bill_paste_image_url: billUrl,
+      };
+
+      const attempts = [
+        () => api.put(`/transporters/orders/${oid}/packing`, payload),
+        () => api.post(`/transporters/orders/${oid}/packing`, payload),
+        () => api.put(`/orders/${oid}/packing`, payload),
+        () => api.post(`/orders/${oid}/packing`, payload),
+        () => api.put(`/transporters/orders/${oid}`, payload),
+      ];
+
+      let saved = false;
+      for (const run of attempts) {
+        try {
+          await run();
+          saved = true;
+          break;
+        } catch (_) {
+          // Try next endpoint.
+        }
+      }
+
+      setOrder((prev) => ({ ...(prev || {}), ...payload }));
+
+      if (!saved) {
+        Alert.alert('Uploaded', 'Images uploaded. Backend packing save endpoint unavailable, but images are attached locally in app view.');
+      } else {
+        Alert.alert('Success', 'Packing and bill images uploaded successfully');
+      }
     } catch (e) {
-      Alert.alert('Error', e?.response?.data?.message || e.message || 'Failed to assign');
+      Alert.alert('Error', e.message || 'Failed to upload packing proof');
     } finally {
-      setAssigningDP(false);
+      setUploadingPackingProof(false);
     }
   };
 
   const getNextStatusByScan = () => {
     const current = (order?.current_status || order?.status || '').toUpperCase();
-    if (current === 'ASSIGNED') return 'SHIPPED';
-    if (current === 'SHIPPED') return 'OUT_FOR_DELIVERY';
+    // Pickup statuses should ONLY be updated manually, not via QR
+    if (current === 'PICKUP_ASSIGNED' || current === 'PICKUP_IN_PROGRESS' || current === 'PICKED_UP') return null;
+    if (current === 'RECEIVED') return 'SHIPPED';
+    if (current === 'SHIPPED') return 'IN_TRANSIT';
+    if (current === 'IN_TRANSIT') return 'REACHED_DESTINATION';
+    if (current === 'REACHED_DESTINATION') return 'OUT_FOR_DELIVERY';
     return null;
+  };
+
+  // Check if current status is a pickup status (manual-only updates)
+  const isPickupStatus = ['PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS', 'PICKED_UP'].includes(status);
+  const getNextPickupStatus = () => {
+    if (status === 'PICKUP_ASSIGNED') return 'PICKUP_IN_PROGRESS';
+    if (status === 'PICKUP_IN_PROGRESS') return 'PICKED_UP';
+    if (status === 'PICKED_UP') return 'RECEIVED';
+    return null;
+  };
+
+  const handleManualStatusUpdate = async (newStatus) => {
+    const oid = orderId || order?.order_id || order?.id;
+    if (!oid || !newStatus) return;
+    setUpdatingStatus(true);
+    try {
+      try {
+        await api.put('/transporters/order-status', { order_id: oid, status: newStatus });
+      } catch {
+        await api.put('/orders/status', { order_id: oid, status: newStatus });
+      }
+      Alert.alert('Success', `Status updated to ${newStatus.replace(/_/g, ' ')}`);
+      fetchOrder(true);
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to update status');
+    } finally {
+      setUpdatingStatus(false);
+    }
   };
 
   /* ── Product image ──────────────────────────────────────── */
@@ -357,6 +521,7 @@ const OrderDetail = ({ navigation, route }) => {
   const items = order.items || order.order_items || (order.product || order.Product ? [{ product: order.product || order.Product, quantity: order.quantity || 1 }] : []);
   const firstItem = items[0] || {};
   const firstProduct = firstItem?.product || firstItem || {};
+  const productName = firstProduct?.name || order?.product?.name || order?.Product?.name || 'Product';
   
   // Resolve party objects from different backend shapes
   const farmerRaw =
@@ -394,6 +559,24 @@ const OrderDetail = ({ navigation, route }) => {
     ),
     image: getPartyImage(customerRaw),
   };
+
+  // Parse delivery address from JSON if needed
+  const deliveryAddressFormatted = (() => {
+    const raw = order.delivery_address || customer.address;
+    if (!raw) return '';
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed === 'object') {
+          return [parsed.full_name, parsed.address_line, parsed.address, parsed.city, parsed.district, parsed.state, parsed.pincode, parsed.phone ? `Ph: ${parsed.phone}` : null].filter(Boolean).join(', ');
+        }
+      } catch { return raw; }
+    }
+    if (typeof raw === 'object') {
+      return [raw.full_name, raw.address_line, raw.address, raw.city, raw.district, raw.state, raw.pincode, raw.phone ? `Ph: ${raw.phone}` : null].filter(Boolean).join(', ');
+    }
+    return String(raw);
+  })();
 
   const dpRaw =
     order.delivery_person ||
@@ -434,6 +617,20 @@ const OrderDetail = ({ navigation, route }) => {
     ),
     image: getPartyImage(dpRaw),
   };
+
+  // Resolve source and destination transporter
+  const srcTransRaw = order.source_transporter || order.sourceTransporter || {};
+  const dstTransRaw = order.destination_transporter || order.destinationTransporter || {};
+  const srcTransporter = {
+    ...normalizeParty(srcTransRaw, null, null, null),
+    image: getPartyImage(srcTransRaw),
+    id: order.source_transporter_id || srcTransRaw?.transporter_id,
+  };
+  const dstTransporter = {
+    ...normalizeParty(dstTransRaw, null, null, null),
+    image: getPartyImage(dstTransRaw),
+    id: order.destination_transporter_id || dstTransRaw?.transporter_id,
+  };
   
   const hasDP = !!(
     order.delivery_person_id ||
@@ -447,6 +644,8 @@ const OrderDetail = ({ navigation, route }) => {
     dp.vehicleType
   );
   const nextStatusByScan = getNextStatusByScan();
+  const packingProof = getPackingProofImages(order);
+  const canUploadPackingProof = ['RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(status);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -459,7 +658,7 @@ const OrderDetail = ({ navigation, route }) => {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>
-            {items.length > 0 ? (items[0].product?.name || items[0].name || `Order #${orderId}`) : `Order #${orderId}`}
+            {productName}
           </Text>
           <Text style={styles.headerSub}>{formatDate(order.created_at)}</Text>
         </View>
@@ -556,14 +755,41 @@ const OrderDetail = ({ navigation, route }) => {
         </View>
 
         {/* Customer Info */}
-        <InfoCard
-          title="Customer"
-          icon="person-outline"
-          iconColor="#2196F3"
-          name={customer.full_name || customer.name || order.customer_name || 'N/A'}
-          phone={customer.phone || customer.mobile}
-          address={customer.address || customer.address_line || order.delivery_address}
-        />
+        <View style={styles.card}>
+          <View style={styles.infoHeader}>
+            <View style={[styles.infoIconWrap, { backgroundColor: '#2196F315' }]}>
+              <Ionicons name="person" size={20} color="#2196F3" />
+            </View>
+            <Text style={styles.cardTitle}>Customer Details</Text>
+          </View>
+          <View style={styles.profileCard}>
+            {customer.image ? (
+              <Image source={{ uri: optimizeImageUrl(customer.image, { width: 80, height: 80 }) }} style={styles.profileAvatarImg} />
+            ) : (
+              <View style={styles.profileAvatar}>
+                <Ionicons name="person" size={32} color="#2196F3" />
+              </View>
+            )}
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileName}>{customer.full_name || customer.name || order.customer_name || 'N/A'}</Text>
+              {deliveryAddressFormatted ? (
+                <View style={styles.profileDetailRow}>
+                  <Ionicons name="location" size={16} color="#2196F3" />
+                  <Text style={styles.profileDetailText}>{deliveryAddressFormatted}</Text>
+                </View>
+              ) : null}
+              {(customer.phone || customer.mobile) && (
+                <TouchableOpacity 
+                  style={[styles.callBtn, { backgroundColor: '#2196F315' }]} 
+                  onPress={() => Linking.openURL(`tel:${customer.phone || customer.mobile}`)}
+                >
+                  <Ionicons name="call" size={16} color="#2196F3" />
+                  <Text style={[styles.callBtnText, { color: '#2196F3' }]}>Call Customer</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
 
         {/* Delivery Person Info */}
         {hasDP && (
@@ -584,12 +810,6 @@ const OrderDetail = ({ navigation, route }) => {
               )}
               <View style={styles.profileInfo}>
                 <Text style={styles.profileName}>{dp.name || 'N/A'}</Text>
-                {dp.address && (
-                  <View style={styles.profileDetailRow}>
-                    <Ionicons name="location" size={16} color="#9C27B0" />
-                    <Text style={styles.profileDetailText}>{dp.address}</Text>
-                  </View>
-                )}
                 {dp.vehicle && (
                   <View style={styles.profileDetailRow}>
                     <Ionicons name="car" size={16} color="#9C27B0" />
@@ -610,42 +830,140 @@ const OrderDetail = ({ navigation, route }) => {
           </View>
         )}
 
-        {/* QR Code */}
-        {(order.qr_code || order.qr_image_url) && (
+        {/* Source Transporter Info */}
+        {(srcTransporter.id || srcTransporter.name) && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>QR Code</Text>
-            {order.qr_image_url ? (
-              <Image source={{ uri: order.qr_image_url }} style={styles.qrImage} resizeMode="contain" />
-            ) : (
-              <View style={styles.qrTextWrap}>
-                <MaterialCommunityIcons name="qrcode" size={40} color="#1B5E20" />
-                <Text style={styles.qrText}>{order.qr_code}</Text>
+            <View style={styles.infoHeader}>
+              <View style={[styles.infoIconWrap, { backgroundColor: '#FF572215' }]}>
+                <MaterialCommunityIcons name="truck-delivery" size={20} color="#FF5722" />
               </View>
-            )}
+              <Text style={styles.cardTitle}>Source Transporter</Text>
+            </View>
+            <View style={styles.profileCard}>
+              {srcTransporter.image ? (
+                <Image source={{ uri: optimizeImageUrl(srcTransporter.image, { width: 80, height: 80 }) }} style={styles.profileAvatarImg} />
+              ) : (
+                <View style={styles.profileAvatar}>
+                  <MaterialCommunityIcons name="truck" size={32} color="#FF5722" />
+                </View>
+              )}
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{srcTransporter.name || `Transporter #${srcTransporter.id}`}</Text>
+                {srcTransporter.address && (
+                  <View style={styles.profileDetailRow}>
+                    <Ionicons name="location" size={16} color="#FF5722" />
+                    <Text style={styles.profileDetailText}>{srcTransporter.address}</Text>
+                  </View>
+                )}
+                {srcTransporter.phone && (
+                  <TouchableOpacity 
+                    style={[styles.callBtn, { backgroundColor: '#FF572215' }]} 
+                    onPress={() => Linking.openURL(`tel:${srcTransporter.phone}`)}
+                  >
+                    <Ionicons name="call" size={16} color="#FF5722" />
+                    <Text style={[styles.callBtnText, { color: '#FF5722' }]}>Call Source Transporter</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
           </View>
         )}
 
-        {/* QR Code — only shown after ASSIGNED (step 3+) */}
+        {/* Destination Transporter Info */}
+        {(dstTransporter.id || dstTransporter.name) && (
+          <View style={styles.card}>
+            <View style={styles.infoHeader}>
+              <View style={[styles.infoIconWrap, { backgroundColor: '#673AB715' }]}>
+                <MaterialCommunityIcons name="truck-check" size={20} color="#673AB7" />
+              </View>
+              <Text style={styles.cardTitle}>Destination Transporter</Text>
+            </View>
+            <View style={styles.profileCard}>
+              {dstTransporter.image ? (
+                <Image source={{ uri: optimizeImageUrl(dstTransporter.image, { width: 80, height: 80 }) }} style={styles.profileAvatarImg} />
+              ) : (
+                <View style={styles.profileAvatar}>
+                  <MaterialCommunityIcons name="truck" size={32} color="#673AB7" />
+                </View>
+              )}
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{dstTransporter.name || `Transporter #${dstTransporter.id}`}</Text>
+                {dstTransporter.address && (
+                  <View style={styles.profileDetailRow}>
+                    <Ionicons name="location" size={16} color="#673AB7" />
+                    <Text style={styles.profileDetailText}>{dstTransporter.address}</Text>
+                  </View>
+                )}
+                {dstTransporter.phone && (
+                  <TouchableOpacity 
+                    style={[styles.callBtn, { backgroundColor: '#673AB715' }]} 
+                    onPress={() => Linking.openURL(`tel:${dstTransporter.phone}`)}
+                  >
+                    <Ionicons name="call" size={16} color="#673AB7" />
+                    <Text style={[styles.callBtnText, { color: '#673AB7' }]}>Call Destination Transporter</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* QR Code — single display, only shown after ASSIGNED (step 3+) */}
         {stageIdx >= 2 && (order.qr_code || order.qr_image_url) && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Order QR Code</Text>
             <Text style={styles.qrNote}>Only assigned transporters and destination delivery person can scan this QR</Text>
             {order.qr_image_url ? (
               <Image source={{ uri: order.qr_image_url }} style={styles.qrImage} resizeMode="contain" />
-            ) : (
+            ) : order.qr_code ? (
               <View style={styles.qrTextWrap}>
                 <MaterialCommunityIcons name="qrcode" size={40} color="#1B5E20" />
                 <Text style={styles.qrText}>{order.qr_code}</Text>
               </View>
-            )}
+            ) : null}
+          </View>
+        )}
+
+        {/* Packing proof */}
+        {(packingProof.packing || packingProof.bill) && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Packed Order Proof</Text>
+            <View style={styles.packingProofRow}>
+              <View style={styles.packingProofCard}>
+                <Text style={styles.packingProofLabel}>Packed Parcel</Text>
+                {packingProof.packing ? (
+                  <Image source={{ uri: optimizeImageUrl(packingProof.packing, { width: 280 }) }} style={styles.packingProofImage} />
+                ) : (
+                  <View style={[styles.packingProofImage, styles.productImgPlaceholder]}>
+                    <Text style={styles.packingProofEmptyText}>Not uploaded</Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.packingProofCard}>
+                <Text style={styles.packingProofLabel}>Bill Pasted</Text>
+                {packingProof.bill ? (
+                  <Image source={{ uri: optimizeImageUrl(packingProof.bill, { width: 280 }) }} style={styles.packingProofImage} />
+                ) : (
+                  <View style={[styles.packingProofImage, styles.productImgPlaceholder]}>
+                    <Text style={styles.packingProofEmptyText}>Not uploaded</Text>
+                  </View>
+                )}
+              </View>
+            </View>
           </View>
         )}
 
         {/* Action Buttons */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Actions</Text>
+          <View style={styles.infoHeader}>
+            <View style={[styles.infoIconWrap, { backgroundColor: '#1B5E2015' }]}>
+              <Ionicons name="flash" size={20} color="#1B5E20" />
+            </View>
+            <Text style={styles.cardTitle}>Actions</Text>
+          </View>
           <View style={styles.actionsWrap}>
-            {!hasDP && (
+            {/* Assign button — always visible when DP or vehicle not assigned */}
+            {(!hasDP || !order?.permanent_vehicle_id && !order?.temp_vehicle_id) && (
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: '#9C27B0' }]}
                 onPress={handleAssign}
@@ -653,152 +971,106 @@ const OrderDetail = ({ navigation, route }) => {
               >
                 {assigningDP ? <ActivityIndicator size="small" color="#fff" /> : (
                   <>
-                    <Ionicons name="person-add-outline" size={18} color="#fff" />
-                    <Text style={styles.actionBtnText}>Assign Delivery Person</Text>
+                    <View style={styles.actionRowIconWrap}>
+                      <Ionicons name="person-add" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.actionBtnText}>Assign Vehicle + Delivery Person</Text>
+                    <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
                   </>
                 )}
               </TouchableOpacity>
             )}
 
-            {status === 'ASSIGNED' && (
+            {/* Pickup delivery person manual status update */}
+            {isPickupStatus && getNextPickupStatus() && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#FF5722' }]}
+                onPress={() => {
+                  const next = getNextPickupStatus();
+                  Alert.alert(
+                    'Update Status',
+                    `Mark order as ${next.replace(/_/g, ' ')}?`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Confirm', onPress: () => handleManualStatusUpdate(next) }
+                    ]
+                  );
+                }}
+                disabled={updatingStatus}
+              >
+                {updatingStatus ? <ActivityIndicator size="small" color="#fff" /> : (
+                  <>
+                    <View style={styles.actionRowIconWrap}>
+                      <Ionicons name="hand-left" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.actionBtnText}>Update: {getNextPickupStatus()?.replace(/_/g, ' ')}</Text>
+                    <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Packing proof upload */}
+            {canUploadPackingProof && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#FF9800' }]}
+                onPress={uploadPackingProof}
+                disabled={uploadingPackingProof}
+              >
+                {uploadingPackingProof ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <View style={styles.actionRowIconWrap}>
+                      <Ionicons name="images" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.actionBtnText}>Upload Packing + Bill Photos</Text>
+                    <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* QR scan — only for non-pickup statuses */}
+            {nextStatusByScan && (
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: '#3F51B5' }]}
-                onPress={() => handleStatusUpdate('SHIPPED')}
-                disabled={updatingStatus}
+                onPress={() => navigation.navigate('QRScan', { orderId, expectedOrderId: orderId })}
               >
-                {updatingStatus ? <ActivityIndicator size="small" color="#fff" /> : (
-                  <>
-                    <Ionicons name="airplane-outline" size={18} color="#fff" />
-                    <Text style={styles.actionBtnText}>Mark as Shipped</Text>
-                  </>
-                )}
+                <View style={styles.actionRowIconWrap}>
+                  <Ionicons name="qr-code" size={18} color="#fff" />
+                </View>
+                <Text style={styles.actionBtnText}>Scan QR → {nextStatusByScan.replace(/_/g, ' ')}</Text>
+                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
               </TouchableOpacity>
             )}
 
-            {status === 'SHIPPED' && (
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#00BCD4' }]}
-                onPress={() => handleStatusUpdate('OUT_FOR_DELIVERY')}
-                disabled={updatingStatus}
-              >
-                {updatingStatus ? <ActivityIndicator size="small" color="#fff" /> : (
-                  <>
-                    <Ionicons name="bicycle-outline" size={18} color="#fff" />
-                    <Text style={styles.actionBtnText}>Out for Delivery</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-
+            {/* Track Order */}
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: '#1B5E20' }]}
               onPress={() => navigation.navigate('TransporterOrderTracking', { orderId, order })}
             >
-              <Ionicons name="navigate-outline" size={18} color="#fff" />
+              <View style={styles.actionRowIconWrap}>
+                <Ionicons name="navigate" size={18} color="#fff" />
+              </View>
               <Text style={styles.actionBtnText}>Track Order</Text>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
             </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.actionRowBtn, { backgroundColor: '#FF9800' }]}
-                onPress={() => navigation.navigate('BillPreview', { orderId, order })}
-              >
-                <View style={styles.actionRowContent}>
-                  <View style={styles.actionRowIconWrap}>
-                    <Ionicons name="receipt" size={22} color="#fff" />
-                  </View>
-                  <Text style={styles.actionRowText}>View Bill</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#fff" />
-              </TouchableOpacity>
+            {/* View Bill */}
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#00897B' }]}
+              onPress={() => navigation.navigate('BillPreview', { orderId, order })}
+            >
+              <View style={styles.actionRowIconWrap}>
+                <Ionicons name="receipt" size={18} color="#fff" />
+              </View>
+              <Text style={styles.actionBtnText}>View Bill</Text>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
-
-      {/* No Delivery Persons Modal */}
-      <Modal visible={showNoPersonsModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>No Delivery Persons</Text>
-            <Text style={styles.modalMessage}>
-              You have not added any delivery persons yet. Please add delivery persons first.
-            </Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity onPress={() => setShowNoPersonsModal(false)}>
-                <Text style={styles.modalBtnCancel}>CANCEL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setShowNoPersonsModal(false); navigation.navigate('AddDeliveryPerson'); }}>
-                <Text style={styles.modalBtnAdd}>ADD NOW</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Assign Delivery Person Modal */}
-      <Modal visible={showAssignModal} transparent animationType="slide">
-        <View style={styles.assignModalOverlay}>
-          <TouchableOpacity 
-            style={styles.assignModalBackdrop} 
-            activeOpacity={1} 
-            onPress={() => setShowAssignModal(false)}
-          />
-          <View style={styles.assignModalSheet}>
-            <View style={styles.assignModalHandle} />
-            <View style={styles.assignModalHeader}>
-              <Text style={styles.assignModalTitle}>Select Delivery Person</Text>
-              <TouchableOpacity onPress={() => setShowAssignModal(false)}>
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.assignModalScroll} showsVerticalScrollIndicator={false}>
-              {deliveryPersons.filter(p => p.is_available !== false && p.is_available !== 0).map((person) => (
-                <TouchableOpacity
-                  key={person.delivery_person_id}
-                  style={styles.personCard}
-                  onPress={() => assignDeliveryPerson(person)}
-                  disabled={assigningDP}
-                >
-                  <View style={styles.personAvatar}>
-                    {person.image_url ? (
-                      <Image source={{ uri: person.image_url }} style={styles.personAvatarImg} />
-                    ) : (
-                      <Ionicons name="person" size={24} color="#1B5E20" />
-                    )}
-                  </View>
-                  <View style={styles.personInfo}>
-                    <Text style={styles.personName}>{person.name || person.full_name || 'Delivery Person'}</Text>
-                    {person.mobile_number && (
-                      <View style={styles.personDetail}>
-                        <Ionicons name="call-outline" size={14} color="#666" />
-                        <Text style={styles.personDetailText}>{person.mobile_number}</Text>
-                      </View>
-                    )}
-                    {person.vehicle_number && (
-                      <View style={styles.personDetail}>
-                        <Ionicons name="car-outline" size={14} color="#666" />
-                        <Text style={styles.personDetailText}>{person.vehicle_number} • {person.vehicle_type || 'Vehicle'}</Text>
-                      </View>
-                    )}
-                    {person.total_deliveries !== undefined && (
-                      <View style={styles.personDetail}>
-                        <Ionicons name="checkmark-circle-outline" size={14} color="#4CAF50" />
-                        <Text style={styles.personDetailText}>{person.total_deliveries} deliveries</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#ccc" />
-                </TouchableOpacity>
-              ))}
-              {deliveryPersons.filter(p => p.is_available !== false && p.is_available !== 0).length === 0 && (
-                <View style={styles.emptyState}>
-                  <Ionicons name="people-outline" size={48} color="#ccc" />
-                  <Text style={styles.emptyText}>No available delivery persons</Text>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 };
@@ -894,7 +1166,25 @@ const styles = StyleSheet.create({
   qrTextWrap: { alignItems: 'center', gap: 8, padding: 16 },
   qrText: { fontSize: 14, color: '#333', fontFamily: 'monospace' },
 
+  packingProofRow: { gap: 12 },
+  packingProofCard: { backgroundColor: '#F8F9FA', borderRadius: 12, padding: 10 },
+  packingProofLabel: { fontSize: 13, fontWeight: '700', color: '#1B5E20', marginBottom: 8 },
+  packingProofImage: { width: '100%', height: 160, borderRadius: 10, backgroundColor: '#EEE' },
+  packingProofEmptyText: { color: '#999', fontSize: 12 },
+
   // Actions
+  actionsWrap: { gap: 10 },
+  actionBtn: {
+    width: '100%',
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  actionBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16, marginBottom: 16 },
   actionCard: { flex: 1, minWidth: '45%', aspectRatio: 1.2, borderRadius: 16, padding: 16, justifyContent: 'center', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 },
   actionIconWrap: { marginBottom: 8 },

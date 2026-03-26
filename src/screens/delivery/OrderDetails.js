@@ -37,14 +37,11 @@ const STATUS_COLORS = {
   CANCELLED: '#F44336',
 };
 
-// Full 9-step flow
+// Unified 10-step flow
 const STATUS_FLOW = [
   'PENDING',
-  'PLACED',
-  'CONFIRMED',
   'ASSIGNED',
   'PICKUP_ASSIGNED',
-  'PICKUP_IN_PROGRESS',
   'PICKED_UP',
   'RECEIVED',
   'SHIPPED',
@@ -56,7 +53,10 @@ const STATUS_FLOW = [
 
 const STATUS_NORMALIZE = {
   COMPLETED: 'DELIVERED',
-  ACCEPTED: 'CONFIRMED',
+  ACCEPTED: 'ASSIGNED',
+  CONFIRMED: 'ASSIGNED',
+  PLACED: 'PENDING',
+  PICKUP_IN_PROGRESS: 'PICKUP_ASSIGNED',
   PICKUP_COMPLETE: 'PICKED_UP',
   REACHED: 'REACHED_DESTINATION',
 };
@@ -169,9 +169,14 @@ const buildCustomerProfile = (order) => {
   return { name, phone, address };
 };
 
-// Only destination delivery person scans QR to confirm delivery
-// Pickup delivery person has NO action button
-const STATUS_ACTIONS = {
+// Pickup and destination delivery persons both use QR, with role-specific transitions in scanner.
+const PICKUP_STATUS_ACTIONS = {
+  ASSIGNED: { label: 'Scan QR to Start Pickup', icon: 'qr-code-outline' },
+  PICKUP_ASSIGNED: { label: 'Scan QR to Confirm Pickup', icon: 'qr-code-outline' },
+  PICKUP_IN_PROGRESS: { label: 'Scan QR to Confirm Pickup', icon: 'qr-code-outline' },
+};
+
+const DELIVERY_STATUS_ACTIONS = {
   REACHED_DESTINATION: { label: 'Scan QR to Start Delivery', icon: 'qr-code-outline' },
   OUT_FOR_DELIVERY: { label: 'Scan QR to Confirm Delivery', icon: 'qr-code-outline' },
 };
@@ -220,10 +225,20 @@ const OrderDetails = ({ navigation, route }) => {
   // ─── Status (QR-only for destination delivery person) ────────────────
   const rawStatus = (order?.current_status || order?.status || '').toUpperCase();
   const currentStatus = STATUS_NORMALIZE[rawStatus] || rawStatus;
-  const action = STATUS_ACTIONS[currentStatus];
+  const pickupOnlyOrder = isPickupOrder(order);
+  const action = pickupOnlyOrder
+    ? PICKUP_STATUS_ACTIONS[currentStatus]
+    : DELIVERY_STATUS_ACTIONS[currentStatus];
 
-  // Navigate to QR scanner tab for delivery confirmation
-  const handleQRScan = () => navigation.navigate('Scanner');
+  // Navigate to QR scanner tab for pickup/delivery confirmation
+  const handleQRScan = () =>
+    navigation.navigate('DeliveryTabs', {
+      screen: 'Scanner',
+      params: {
+        expectedOrderId: orderId,
+        expectedStatus: currentStatus,
+      },
+    });
 
   // ─── Phone & Map actions ──────────────────────────────────────────────
   const callPerson = (phone) => {
@@ -318,7 +333,6 @@ const OrderDetails = ({ navigation, route }) => {
   const statusColor = STATUS_COLORS[currentStatus] || '#888';
   const farmerProfile = buildFarmerProfile(order);
   const customerProfile = buildCustomerProfile(order);
-  const pickupOnlyOrder = isPickupOrder(order);
 
   // Order items
   const items = order?.items || order?.order_items || [];
@@ -520,7 +534,7 @@ const OrderDetails = ({ navigation, route }) => {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="git-branch-outline" size={20} color="#1B5E20" />
-            <Text style={styles.cardTitle}>Order Timeline</Text>
+            <Text style={styles.cardTitle}>Order Timeline (10 Steps)</Text>
           </View>
           {renderTimeline()}
         </View>

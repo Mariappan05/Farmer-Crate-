@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  AppState,
   Dimensions,
   Linking,
+  Modal,
   RefreshControl,
   StatusBar,
   StyleSheet,
@@ -84,6 +86,9 @@ const DeliveryDashboard = ({ navigation }) => {
   const [deliveryOrders, setDeliveryOrders] = useState([]);
   const [isAvailable, setIsAvailable] = useState(true);
   const [togglingAvailability, setTogglingAvailability] = useState(false);
+  const [showStartupModal, setShowStartupModal] = useState(false);
+  const [availabilityModalVisible, setAvailabilityModalVisible] = useState(false);
+  const [pendingAvailability, setPendingAvailability] = useState(null);
   const [stats, setStats] = useState({
     todayDeliveries: 0,
     todayEarnings: 0,
@@ -93,6 +98,9 @@ const DeliveryDashboard = ({ navigation }) => {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const toastRef = useRef(null);
+  const startupPromptShownRef = useRef(false);
+  const appStateRef = useRef(AppState.currentState);
+  const appExitSyncRef = useRef(false);
 
   const deliveryName =
     authState?.user?.full_name ||
@@ -148,7 +156,12 @@ const DeliveryDashboard = ({ navigation }) => {
       // Profile / availability
       if (profileRes.status === 'fulfilled') {
         const prof = profileRes.value?.data?.data || profileRes.value?.data || {};
-        setIsAvailable(prof.is_available ?? prof.availability ?? true);
+        const availability = prof.is_available ?? prof.availability ?? true;
+        setIsAvailable(availability);
+        if (!availability && !startupPromptShownRef.current) {
+          startupPromptShownRef.current = true;
+          setShowStartupModal(true);
+        }
         setStats((prev) => ({
           ...prev,
           rating: parseFloat(prof.rating || prof.average_rating || 0),
@@ -188,9 +201,36 @@ const DeliveryDashboard = ({ navigation }) => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
   }, []);
 
+  // Best-effort status sync when app goes background/exit-like state.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      appStateRef.current = nextState;
+
+      if ((nextState === 'inactive' || nextState === 'background') && isAvailable && !appExitSyncRef.current) {
+        appExitSyncRef.current = true;
+        try {
+          await updateDeliveryAvailability(false, authState?.token);
+          setIsAvailable(false);
+        } catch {
+          // Ignore network failures on app exit/background transition.
+        } finally {
+          appExitSyncRef.current = false;
+        }
+      }
+    });
+
+    return () => sub.remove();
+  }, [isAvailable, authState?.token]);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
+  };
+
+  const openAvailabilityModal = (value) => {
+    if (togglingAvailability) return;
+    setPendingAvailability(value);
+    setAvailabilityModalVisible(true);
   };
 
   // ─── Availability toggle ─────────────────────────────────────────────
@@ -199,9 +239,10 @@ const DeliveryDashboard = ({ navigation }) => {
     try {
       await updateDeliveryAvailability(val, authState?.token);
       setIsAvailable(val);
+      toastRef.current?.show(val ? 'You are now available for deliveries' : 'You are now offline', 'success');
     } catch (e) {
       console.log('Availability error:', e.message);
-      setIsAvailable(!val);
+      toastRef.current?.show('Failed to update availability status', 'error');
     } finally {
       setTogglingAvailability(false);
     }
@@ -418,7 +459,7 @@ const DeliveryDashboard = ({ navigation }) => {
           ) : (
             <Switch
               value={isAvailable}
-              onValueChange={toggleAvailability}
+              onValueChange={openAvailabilityModal}
               trackColor={{ false: '#666', true: '#81C784' }}
               thumbColor={isAvailable ? '#fff' : '#ccc'}
             />
@@ -496,19 +537,40 @@ const DeliveryDashboard = ({ navigation }) => {
           </View>
 
           {/* Pending Counts */}
-          <View style={styles.pendingCountRow}>
-            <View style={[styles.pendingCountCard, { borderLeftColor: '#FF5722' }]}>
-              <Text style={styles.pendingCountVal}>{pickupOrders.length}</Text>
-              <Text style={styles.pendingCountLabel}>Pending Pickups</Text>
+          {isAvailable && (
+            <View style={styles.pendingCountRow}>
+              <View style={[styles.pendingCountCard, { borderLeftColor: '#FF5722' }]}>
+                <Text style={styles.pendingCountVal}>{pickupOrders.length}</Text>
+                <Text style={styles.pendingCountLabel}>Pending Pickups</Text>
+              </View>
+              <View style={[styles.pendingCountCard, { borderLeftColor: '#2196F3' }]}>
+                <Text style={styles.pendingCountVal}>{deliveryOrders.length}</Text>
+                <Text style={styles.pendingCountLabel}>Pending Deliveries</Text>
+              </View>
             </View>
-            <View style={[styles.pendingCountCard, { borderLeftColor: '#2196F3' }]}>
-              <Text style={styles.pendingCountVal}>{deliveryOrders.length}</Text>
-              <Text style={styles.pendingCountLabel}>Pending Deliveries</Text>
+          )}
+
+          {/* Offline Notice */}
+          {!isAvailable && (
+            <View style={styles.offlineCard}>
+              <View style={styles.offlineIconWrap}>
+                <Ionicons name="pause-circle-outline" size={30} color="#FF9800" />
+              </View>
+              <Text style={styles.offlineTitle}>You are offline</Text>
+              <Text style={styles.offlineMsg}>
+                Orders assigned by transporter are hidden while you are offline. Turn on availability to view active tasks.
+              </Text>
+              <TouchableOpacity
+                style={styles.goOnlineBtn}
+                onPress={() => toggleAvailability(true)}
+              >
+                <Text style={styles.goOnlineBtnText}>Go Online</Text>
+              </TouchableOpacity>
             </View>
-          </View>
+          )}
 
           {/* Pickup Orders */}
-          {pickupOrders.length > 0 && (
+          {isAvailable && pickupOrders.length > 0 && (
             <>
               <View style={styles.sectionHeader}>
                 <Ionicons name="cube-outline" size={20} color="#1B5E20" />
@@ -519,7 +581,7 @@ const DeliveryDashboard = ({ navigation }) => {
           )}
 
           {/* Delivery Orders */}
-          {deliveryOrders.length > 0 && (
+          {isAvailable && deliveryOrders.length > 0 && (
             <>
               <View style={styles.sectionHeader}>
                 <MaterialCommunityIcons name="truck-delivery-outline" size={20} color="#1B5E20" />
@@ -530,7 +592,7 @@ const DeliveryDashboard = ({ navigation }) => {
           )}
 
           {/* Empty state */}
-          {pickupOrders.length === 0 && deliveryOrders.length === 0 && (
+          {isAvailable && pickupOrders.length === 0 && deliveryOrders.length === 0 && (
             <View style={styles.emptyCard}>
               <MaterialCommunityIcons name="check-circle-outline" size={64} color="#C8E6C9" />
               <Text style={styles.emptyTitle}>All Caught Up!</Text>
@@ -543,6 +605,92 @@ const DeliveryDashboard = ({ navigation }) => {
           )}
         </Animated.ScrollView>
       )}
+
+      <Modal
+        visible={showStartupModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStartupModal(false)}
+      >
+        <View style={styles.startupModalOverlay}>
+          <View style={styles.startupModalCard}>
+            <View style={styles.startupModalIconWrap}>
+              <Ionicons name="information-circle-outline" size={30} color="#FF9800" />
+            </View>
+            <Text style={styles.startupModalTitle}>You are currently offline</Text>
+            <Text style={styles.startupModalText}>
+              Switch to available mode to receive and view active pickup and delivery orders.
+            </Text>
+            <View style={styles.startupModalActions}>
+              <TouchableOpacity
+                style={styles.startupLaterBtn}
+                onPress={() => setShowStartupModal(false)}
+              >
+                <Text style={styles.startupLaterBtnText}>Later</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.startupOnlineBtn}
+                onPress={async () => {
+                  setShowStartupModal(false);
+                  await toggleAvailability(true);
+                }}
+              >
+                <Text style={styles.startupOnlineBtnText}>Go Online</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={availabilityModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAvailabilityModalVisible(false)}
+      >
+        <View style={styles.startupModalOverlay}>
+          <View style={styles.startupModalCard}>
+            <View style={styles.startupModalIconWrap}>
+              <Ionicons
+                name={pendingAvailability ? 'radio-button-on-outline' : 'radio-button-off-outline'}
+                size={30}
+                color={pendingAvailability ? '#4CAF50' : '#F44336'}
+              />
+            </View>
+            <Text style={styles.startupModalTitle}>
+              {pendingAvailability ? 'Go available?' : 'Go offline?'}
+            </Text>
+            <Text style={styles.startupModalText}>
+              {pendingAvailability
+                ? 'You will start receiving pickup and delivery assignments.'
+                : 'Active assignment cards will be hidden until you turn availability back on.'}
+            </Text>
+            <View style={styles.startupModalActions}>
+              <TouchableOpacity
+                style={styles.startupLaterBtn}
+                onPress={() => {
+                  setAvailabilityModalVisible(false);
+                  setPendingAvailability(null);
+                }}
+              >
+                <Text style={styles.startupLaterBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.startupOnlineBtn}
+                onPress={async () => {
+                  const next = pendingAvailability;
+                  setAvailabilityModalVisible(false);
+                  setPendingAvailability(null);
+                  if (typeof next === 'boolean') await toggleAvailability(next);
+                }}
+              >
+                <Text style={styles.startupOnlineBtnText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Toast */}
       <ToastMessage ref={toastRef} />
     </View>
@@ -707,6 +855,79 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   refreshBtnText: { color: Colors.primaryMid, fontSize: Font.base, fontWeight: Font.weightSemiBold },
+
+  // Offline card
+  offlineCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 18,
+    ...shadowStyle('sm'),
+  },
+  offlineIconWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#FFF3E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  offlineTitle: { fontSize: Font.lg, fontWeight: Font.weightBold, color: Colors.textPrimary },
+  offlineMsg: { fontSize: Font.sm, color: Colors.textMuted, textAlign: 'center', marginTop: 8, lineHeight: 20 },
+  goOnlineBtn: {
+    marginTop: 14,
+    backgroundColor: Colors.primaryMid,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: Radius.md,
+  },
+  goOnlineBtnText: { color: Colors.textOnDark, fontSize: Font.sm, fontWeight: Font.weightBold },
+
+  // Startup modal
+  startupModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  startupModalCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
+    padding: 22,
+    ...shadowStyle('md'),
+  },
+  startupModalIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF3E0',
+    alignSelf: 'center',
+    marginBottom: 10,
+  },
+  startupModalTitle: { textAlign: 'center', fontSize: Font.lg, fontWeight: Font.weightBold, color: Colors.textPrimary },
+  startupModalText: { textAlign: 'center', fontSize: Font.sm, color: Colors.textMuted, marginTop: 8, lineHeight: 20 },
+  startupModalActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  startupLaterBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  startupLaterBtnText: { color: Colors.textSecondary, fontSize: Font.sm, fontWeight: Font.weightSemiBold },
+  startupOnlineBtn: {
+    flex: 1,
+    backgroundColor: Colors.primaryMid,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  startupOnlineBtnText: { color: Colors.textOnDark, fontSize: Font.sm, fontWeight: Font.weightBold },
 });
 
 export default DeliveryDashboard;
