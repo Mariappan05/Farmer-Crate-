@@ -339,24 +339,31 @@ const OrderStatus = ({ navigation }) => {
             </TouchableOpacity>
           )}
 
-          {status === 'ASSIGNED' && (
+          {['ASSIGNED', 'CONFIRMED', 'PLACED', 'PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS', 'PICKED_UP'].includes(status) && role === 'PICKUP_SHIPPING' && (
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#3F51B5' }]}
-              onPress={() => handleStatusUpdate(order, 'SHIPPED')}
+              style={[styles.actionBtn, { backgroundColor: '#FF9800' }]}
+              onPress={() => handleStatusUpdate(order, 'RECEIVED')}
               disabled={isUpdating}
             >
               {isUpdating ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <>
-                  <Ionicons name="airplane-outline" size={14} color="#fff" />
-                  <Text style={styles.actionBtnText}>Ship</Text>
+                  <Ionicons name="cube-outline" size={14} color="#fff" />
+                  <Text style={styles.actionBtnText}>Pack Order</Text>
                 </>
               )}
             </TouchableOpacity>
           )}
 
-          {status === 'SHIPPED' && (
+          {status === 'RECEIVED' && role === 'PICKUP_SHIPPING' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#eef2ee', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, gap: 6 }}>
+              <Ionicons name="qr-code-outline" size={16} color="#1B5E20" />
+              <Text style={{ color: '#1B5E20', fontSize: 12, fontWeight: '600' }}>Use QR Scan to Ship</Text>
+            </View>
+          )}
+
+          {status === 'REACHED_DESTINATION' && role === 'DELIVERY' && !hasAssignedDeliveryPerson && (
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: '#00BCD4' }]}
               onPress={() => handleStatusUpdate(order, 'OUT_FOR_DELIVERY')}
