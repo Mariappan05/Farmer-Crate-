@@ -1,4 +1,4 @@
-﻿import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Animated, Platform,
 } from 'react-native';
@@ -20,7 +20,7 @@ import OrderConfirm from '../screens/customer/OrderConfirm';
 import FindTransporter from '../screens/customer/FindTransporter';
 import Explore from '../screens/customer/Explore';
 import Notifications from '../screens/customer/Notifications';
-import CustomerOrderTracking from '../screens/customer/CustomerOrderTracking';
+import OrderTracking from '../screens/common/OrderTracking';
 import AppSettings from '../screens/customer/AppSettings';
 import TransporterLive from '../screens/customer/TransporterLive';
 import TrendingPage from '../screens/customer/TrendingPage';
@@ -49,7 +49,7 @@ const TAB_ITEMS = [
   { name: 'Profile', icon: 'person',  iconOff: 'person-outline' },
 ];
 
-// ─── Modern Pill Tab Button ──────────────────────────────────────────────────
+// --- Modern Pill Tab Button --------------------------------------------------
 const TabButton = ({ item, onPress, isFocused, cartCount }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pillAnim  = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
@@ -97,7 +97,7 @@ const TabButton = ({ item, onPress, isFocused, cartCount }) => {
   );
 };
 
-// ─── Custom Tab Bar ───────────────────────────────────────────────────────────
+// --- Custom Tab Bar -----------------------------------------------------------
 const CustomTabBar = ({ state, descriptors, navigation }) => {
   const { cartCount } = useCart();
   const insets = useSafeAreaInsets();
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 9, color: '#fff', fontWeight: '800' },
 });
 
-// ─── Customer Tabs ────────────────────────────────────────────────────────────
+// --- Customer Tabs ------------------------------------------------------------
 const CustomerTabs = () => (
   <Tab.Navigator
     tabBar={(props) => <CustomTabBar {...props} />}
@@ -208,7 +208,7 @@ const CustomerTabs = () => (
   </Tab.Navigator>
 );
 
-// ─── Customer Navigator ───────────────────────────────────────────────────────
+// --- Customer Navigator -------------------------------------------------------
 const CustomerNavigator = () => (
   <Stack.Navigator screenOptions={{ headerShown: false, ...SLIDE }}>
     <Stack.Screen name="CustomerTabs" component={CustomerTabs} options={{ animation: 'none' }} />
@@ -218,7 +218,7 @@ const CustomerNavigator = () => (
     <Stack.Screen name="Payment" component={Payment} />
     <Stack.Screen name="OrderConfirm" component={OrderConfirm} options={{ animation: 'slide_from_bottom' }} />
     <Stack.Screen name="OrderSummary" component={OrderSummary} />
-    <Stack.Screen name="CustomerOrderTracking" component={CustomerOrderTracking} />
+    <Stack.Screen name="OrderTracking" component={OrderTracking} />
     <Stack.Screen name="FindTransporter" component={FindTransporter} />
     <Stack.Screen name="TransporterLive" component={TransporterLive} />
     <Stack.Screen name="Notifications" component={Notifications} />

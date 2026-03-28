@@ -1,4 +1,4 @@
-﻿import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -13,7 +13,7 @@ import SellingHistory from '../screens/farmer/SellingHistory';
 import EditProduct from '../screens/farmer/EditProduct';
 import ProductDetail from '../screens/farmer/ProductDetail';
 import ContactAdmin from '../screens/farmer/ContactAdmin';
-import FarmerOrderTracking from '../screens/farmer/FarmerOrderTracking';
+import OrderTracking from '../screens/common/OrderTracking';
 import FAQ from '../screens/common/FAQ';
 import HelpSupport from '../screens/common/HelpSupport';
 import Feedback from '../screens/common/Feedback';
@@ -32,7 +32,7 @@ const FARMER_TABS = [
   { name: 'Profile', icon: 'person',  iconOff: 'person-outline',   label: 'Profile' },
 ];
 
-// ─── Modern Pill Tab Button ──────────────────────────────────────────────────
+// --- Modern Pill Tab Button --------------------------------------------------
 const AnimatedTabButton = ({ item, onPress, isFocused }) => {
   const scaleAnim   = useRef(new Animated.Value(1)).current;
   const pillAnim    = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
@@ -156,7 +156,7 @@ const FarmerNavigator = () => (
     <Stack.Screen name="EditProduct" component={EditProduct} />
     <Stack.Screen name="ProductDetail" component={ProductDetail} />
     <Stack.Screen name="ContactAdmin" component={ContactAdmin} />
-    <Stack.Screen name="FarmerOrderTracking" component={FarmerOrderTracking} />
+    <Stack.Screen name="OrderTracking" component={OrderTracking} />
     <Stack.Screen name="FAQ" component={FAQ} />
     <Stack.Screen name="HelpSupport" component={HelpSupport} />
     <Stack.Screen name="Feedback" component={Feedback} />

@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../context/CartContext';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh';
 import api from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 
@@ -155,7 +156,8 @@ const Categories = ({ navigation, route }) => {
   // ---------------------------------------------------------------------------
   // Fetch products
   // ---------------------------------------------------------------------------
-  const fetchProducts = useCallback(async () => {
+  const fetchProducts = useCallback(async (isSilent = false) => {
+    if (!isSilent) setIsLoading(true);
     try {
       const res = await api.get('/products', {
         params: { category: selectedCategory },
@@ -172,15 +174,16 @@ const Categories = ({ navigation, route }) => {
   }, [selectedCategory]);
 
   useEffect(() => {
-    setIsLoading(true);
     setSearchQuery('');
     setSelectedVarieties(new Set());
-    fetchProducts();
+    // The auto-refresh hook handles the initial fetch on focus
   }, [selectedCategory]);
+
+  useAutoRefresh(fetchProducts, 10000); // Auto-refresh every 10 seconds
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchProducts();
+    fetchProducts(true);
   }, [fetchProducts]);
 
   // ---------------------------------------------------------------------------

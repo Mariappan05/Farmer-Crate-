@@ -1,4 +1,4 @@
-﻿import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -16,7 +16,7 @@ import FarmerDetails from '../screens/admin/FarmerDetails';
 import CustomerDetails from '../screens/admin/CustomerDetails';
 import DeliveryPersonDetails from '../screens/admin/DeliveryPersonDetails';
 import TransporterDetails from '../screens/admin/TransporterDetails';
-import AdminOrderTracking from '../screens/admin/AdminOrderTracking';
+import OrderTracking from '../screens/common/OrderTracking';
 import AdminProfile from '../screens/admin/AdminProfile';
 
 const Tab = createBottomTabNavigator();
@@ -31,7 +31,7 @@ const ADMIN_TABS = [
   { name: 'Users',        icon: 'people',              iconOff: 'people-outline',                label: 'Users' },
 ];
 
-// ─── Modern Pill Tab Button ──────────────────────────────────────────────────
+// --- Modern Pill Tab Button --------------------------------------------------
 const AnimatedTabBtn = ({ item, onPress, isFocused }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pillAnim  = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
@@ -105,7 +105,7 @@ const AdminNavigator = () => (
     <Stack.Screen name="CustomerDetails" component={CustomerDetails} />
     <Stack.Screen name="DeliveryPersonDetails" component={DeliveryPersonDetails} />
     <Stack.Screen name="TransporterDetails" component={TransporterDetails} />
-    <Stack.Screen name="AdminOrderTracking" component={AdminOrderTracking} />
+    <Stack.Screen name="OrderTracking" component={OrderTracking} />
     <Stack.Screen name="AdminProfile" component={AdminProfile} />
   </Stack.Navigator>
 );

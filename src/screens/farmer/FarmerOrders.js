@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { getFarmerOrders, getFarmerOrdersByStatus, acceptFarmerOrder, rejectFarmerOrder, assignTransporters } from '../../services/orderService';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import ToastMessage from '../../utils/Toast';
 
 const STATUS_LIST = ['All', 'PENDING', 'PLACED', 'ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY', 'COMPLETED', 'CANCELLED'];
@@ -194,9 +195,12 @@ const FarmerOrders = ({ navigation }) => {
     }
   }, []);
 
-  useEffect(() => { 
-    fetchOrders(activeFilter); 
-  }, [activeFilter]);
+  useAutoRefresh(
+    useCallback(() => {
+      fetchOrders(activeFilter);
+    }, [activeFilter, fetchOrders]),
+    10000
+  );
 
   const onRefresh = () => { 
     setRefreshing(true); 
@@ -468,7 +472,7 @@ const FarmerOrders = ({ navigation }) => {
     {['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(item.status) && (
               <TouchableOpacity
                 style={styles.trackBtn}
-                onPress={() => navigation.navigate('FarmerOrderTracking', { orderId: realId, order: item })}
+                onPress={() => navigation.navigate('OrderTracking', { orderId: realId, order: item })}
               >
                 <MaterialCommunityIcons name="truck-outline" size={16} color="#1B5E20" />
                 <Text style={styles.trackText}>Track Order</Text>
@@ -693,7 +697,7 @@ const FarmerOrders = ({ navigation }) => {
                 {['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKED_UP', 'RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(o.status) && (
                   <TouchableOpacity
                     style={styles.detailTrackBtn}
-                    onPress={() => { setDetailModal(false); navigation.navigate('FarmerOrderTracking', { orderId: realId, order: o }); }}
+                    onPress={() => { setDetailModal(false); navigation.navigate('OrderTracking', { orderId: realId, order: o }); }}
                   >
                     <MaterialCommunityIcons name="truck-outline" size={18} color="#fff" />
                     <Text style={styles.detailTrackText}>Track Order</Text>

@@ -33,6 +33,7 @@ import {
   assignTransporterDeliveryPerson,
   updateTransporterOrderStatus,
 } from '../../services/orderService';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 
 const TABS = ['Source (Pickup)', 'Destination (Delivery)'];
 
@@ -134,6 +135,15 @@ const getProductImage = (order) => {
 const OrderStatus = ({ navigation }) => {
   const insets = useSafeAreaInsets();
 
+  const navigateToOrderDetail = useCallback((orderId, order) => {
+    const parentNav = navigation.getParent?.();
+    if (parentNav?.navigate) {
+      parentNav.navigate('OrderDetail', { orderId, order });
+      return;
+    }
+    navigation.navigate('OrderDetail', { orderId, order });
+  }, [navigation]);
+
   const [sourceOrders, setSourceOrders] = useState([]);
   const [destinationOrders, setDestinationOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -175,14 +185,8 @@ const OrderStatus = ({ navigation }) => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+  useAutoRefresh(fetchOrders, 10000);
 
-  useEffect(() => {
-    const unsub = navigation.addListener('focus', () => fetchOrders(true));
-    return unsub;
-  }, [navigation, fetchOrders]);
 
   /* ── Status update ──────────────────────────────────────── */
   const handleStatusUpdate = (order, newStatus) => {
@@ -271,7 +275,7 @@ const OrderStatus = ({ navigation }) => {
       <TouchableOpacity
         key={orderId}
         style={styles.orderCard}
-        onPress={() => navigation.navigate('OrderDetail', { orderId, order })}
+        onPress={() => navigateToOrderDetail(orderId, order)}
         activeOpacity={0.7}
       >
         {/* Header */}
@@ -382,7 +386,7 @@ const OrderStatus = ({ navigation }) => {
 
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#1B5E20' }]}
-            onPress={() => navigation.navigate('TransporterOrderTracking', { orderId, order })}
+            onPress={() => navigation.navigate('OrderTracking', { orderId, order })}
           >
             <Ionicons name="navigate-outline" size={14} color="#fff" />
             <Text style={styles.actionBtnText}>Track</Text>

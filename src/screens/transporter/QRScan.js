@@ -20,10 +20,10 @@ import { useRef, useState } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Vibration,
   TextInput,
   KeyboardAvoidingView,
@@ -41,6 +41,51 @@ const SCAN_SIZE = SCREEN_WIDTH * 0.7;
 
 // Only transporter-controlled statuses should be QR updated.
 const VALID_TRANSPORTER_QR_STATUSES = ['RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION'];
+const toNumberOrZero = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const extractOrderIdFromQrPayload = (rawValue) => {
+  const raw = String(rawValue || '').trim();
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) return Number(raw);
+
+  try {
+    const parsed = JSON.parse(raw);
+    const candidate = parsed?.order_id || parsed?.orderId || parsed?.id;
+    if (candidate && /^\d+$/.test(String(candidate))) return Number(candidate);
+  } catch (_) {
+    // keep parsing
+  }
+
+  try {
+    const url = new URL(raw);
+    const idFromQuery = url.searchParams.get('order_id') || url.searchParams.get('orderId') || url.searchParams.get('id');
+    if (idFromQuery && /^\d+$/.test(String(idFromQuery))) return Number(idFromQuery);
+  } catch (_) {
+    // keep parsing
+  }
+
+  const idMatch = raw.match(/(?:order[_-]?id|id)[:=\s"']*(\d+)/i) || raw.match(/#(\d+)/);
+  if (idMatch) return Number(idMatch[1]);
+
+  return null;
+};
+
+const getProductMetaFromOrder = (order) => {
+  const product = order?.product || order?.Product || {};
+  const productName = order?.product_name || product?.name || 'Product';
+  const productImages = Array.isArray(product?.images) ? product.images : [];
+  const primaryImageObj = productImages.find((img) => img?.is_primary) || productImages[0] || null;
+  const imageFromArray = typeof primaryImageObj === 'string'
+    ? primaryImageObj
+    : primaryImageObj?.image_url || primaryImageObj?.url || null;
+  const productImage = order?.product_image || imageFromArray || null;
+
+  return { productName, productImage };
+};
 
 const QRScan = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
@@ -52,9 +97,48 @@ const QRScan = ({ navigation, route }) => {
   const [torchOn, setTorchOn] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [manualId, setManualId] = useState('');
+  const [popup, setPopup] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    buttons: [],
+    productName: '',
+    productImage: null,
+  });
   const lastScanRef = useRef(null);
 
   const myTransporterId = authState?.user?.transporter_id || authState?.user?.id;
+
+  const showPopup = (title, message, buttons = [], type = 'info', meta = {}) => {
+    const baseButtons = buttons.length > 0
+      ? buttons
+      : [{ text: 'OK', variant: 'primary', onPress: () => {} }];
+    const hasCancel = baseButtons.some((btn) => String(btn?.text || '').toLowerCase() === 'cancel');
+    const normalizedButtons = hasCancel
+      ? baseButtons
+      : [...baseButtons, { text: 'Cancel', variant: 'outline', onPress: () => {} }];
+    setPopup({
+      visible: true,
+      title,
+      message,
+      type,
+      buttons: normalizedButtons,
+      productName: meta?.productName || '',
+      productImage: meta?.productImage || null,
+    });
+  };
+
+  const closePopup = () => {
+    setPopup((prev) => ({ ...prev, visible: false }));
+  };
+
+  const handlePopupPress = (btn) => {
+    closePopup();
+    if (typeof btn?.onPress === 'function') {
+      setTimeout(() => btn.onPress(), 0);
+    }
+  };
 
   const isAssignedToLoggedTransporter = (order) => {
     const myId = Number(myTransporterId);
@@ -84,24 +168,34 @@ const QRScan = ({ navigation, route }) => {
 
     try {
       let orderId = null;
-      try {
-        const parsed = JSON.parse(qrData);
-        orderId = parsed.order_id || parsed.orderId || parsed.id;
-      } catch {
-        const match = qrData.match(/order_id[:\s"]*(\d+)/i) || qrData.match(/^(\d+)$/);
-        if (match) orderId = parseInt(match[1]);
+      orderId = extractOrderIdFromQrPayload(qrData);
+
+      // Fallback for UUID/code-only payloads.
+      if (!orderId) {
+        try {
+          const resolveRes = await api.post('/transporters/orders/resolve-qr', { qr_code: qrData });
+          const resolvedId = resolveRes?.data?.data?.order_id;
+          if (resolvedId) orderId = Number(resolvedId);
+        } catch (_) {
+          // Keep null and show invalid dialog below.
+        }
       }
 
       if (!orderId) {
-        Alert.alert('Invalid QR', 'No valid order ID found.', [
-          { text: 'Rescan', onPress: resetScanner },
-          { text: 'Enter Manually', onPress: () => { resetScanner(); setShowManual(true); } },
-        ]);
+        showPopup(
+          'Invalid QR',
+          'This QR does not contain a valid order reference.',
+          [
+            { text: 'Rescan', variant: 'primary', onPress: resetScanner },
+            { text: 'Enter Manually', variant: 'outline', onPress: () => { resetScanner(); setShowManual(true); } },
+          ],
+          'error'
+        );
         return;
       }
       await validateAndUpdate(orderId);
     } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to process QR', [{ text: 'Retry', onPress: resetScanner }]);
+      showPopup('Error', e.message || 'Failed to process QR', [{ text: 'Retry', variant: 'primary', onPress: resetScanner }], 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -140,21 +234,19 @@ const QRScan = ({ navigation, route }) => {
       }
 
       if (!order) {
-        Alert.alert('Not Found', `Order #${orderId} not found or not assigned to you.`, [{ text: 'OK', onPress: resetScanner }]);
+        showPopup('Not Found', `Order #${orderId} not found or not assigned to you.`, [{ text: 'OK', variant: 'primary', onPress: resetScanner }], 'warning');
         return;
       }
 
       if (expectedOrderId && Number(orderId) !== Number(expectedOrderId)) {
-        Alert.alert('Wrong QR', `Please scan QR for order #${expectedOrderId}.`, [
-          { text: 'Rescan', onPress: resetScanner },
-        ]);
+        showPopup('Wrong QR', `Please scan QR for order #${expectedOrderId}.`, [{ text: 'Rescan', variant: 'primary', onPress: resetScanner }], 'warning');
         return;
       }
 
       const status = (order.current_status || order.status || '').toUpperCase();
 
       if (!isAssignedToLoggedTransporter(order)) {
-        Alert.alert('Not Assigned', 'This order is not assigned to your transporter account.', [{ text: 'OK', onPress: resetScanner }]);
+        showPopup('Not Assigned', 'This order is not assigned to your transporter account.', [{ text: 'OK', variant: 'primary', onPress: resetScanner }], 'warning');
         return null;
       }
 
@@ -164,22 +256,30 @@ const QRScan = ({ navigation, route }) => {
 
       // Already delivered
       if (status === 'DELIVERED' || status === 'COMPLETED') {
-        Alert.alert('Already Delivered', `Order #${orderId} has already been delivered.`, [
-          { text: 'View Details', onPress: () => navigation.navigate('OrderDetail', { orderId, order }) },
-          { text: 'Scan Another', onPress: resetScanner },
-        ]);
+        const { productName, productImage } = getProductMetaFromOrder(order);
+        showPopup(
+          'Already Delivered',
+          'This product has already been delivered.',
+          [
+            { text: 'View Details', variant: 'outline', onPress: () => navigation.navigate('OrderDetail', { orderId, order }) },
+            { text: 'Scan Another', variant: 'primary', onPress: resetScanner },
+          ],
+          'success',
+          { productName, productImage }
+        );
         return;
       }
 
       // Invalid status
-      Alert.alert(
+      showPopup(
         'Invalid Status',
-        `Order #${orderId} has status "${status}". Pickup delivery person must update pickup manually; transporter QR scan starts from RECEIVED status.`,
-        [{ text: 'OK', onPress: resetScanner }]
+        `Order #${orderId} has status "${status}". QR scanning is not allowed at this stage.`,
+        [{ text: 'OK', variant: 'primary', onPress: resetScanner }],
+        'warning'
       );
       return null;
     } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to fetch order', [{ text: 'Retry', onPress: resetScanner }]);
+      showPopup('Error', e.message || 'Failed to fetch order', [{ text: 'Retry', variant: 'primary', onPress: resetScanner }], 'error');
       return null;
     }
   };
@@ -193,8 +293,27 @@ const QRScan = ({ navigation, route }) => {
   const getNextStatusAfterScan = (order) => {
     const role = (order?.transporter_role || '').toUpperCase();
     const current = (order?.current_status || order?.status || '').toUpperCase();
+    const myId = toNumberOrZero(myTransporterId);
+    const sourceId = toNumberOrZero(order?.source_transporter_id || order?.pickup_transporter_id || order?.transporter_id);
+    const destinationId = toNumberOrZero(order?.destination_transporter_id || order?.delivery_transporter_id);
+    const isDestinationTransporter = !!myId && !!destinationId && myId === destinationId;
+    const isSourceTransporter = !!myId && !!sourceId && myId === sourceId;
     const isSameTransporter = order?.same_transporter === true || 
       (order?.source_transporter_id && order?.source_transporter_id === order?.destination_transporter_id);
+
+    // Destination transporter can progress only delivery-side statuses by QR.
+    if (isDestinationTransporter && !isSameTransporter) {
+      if (current === 'SHIPPED' || current === 'IN_TRANSIT') return 'REACHED_DESTINATION';
+      if (current === 'REACHED_DESTINATION') return 'OUT_FOR_DELIVERY';
+      return null;
+    }
+
+    // Source transporter keeps source-side QR transitions.
+    if (isSourceTransporter && !isSameTransporter) {
+      if (current === 'RECEIVED') return 'SHIPPED';
+      if (current === 'SHIPPED') return 'IN_TRANSIT';
+      return null;
+    }
 
     // When same transporter handles both roles, allow the full flow
     if (isSameTransporter || !role) {
@@ -221,25 +340,45 @@ const QRScan = ({ navigation, route }) => {
     const nextStatus = getNextStatusAfterScan(order);
 
     if (!nextStatus) {
-      Alert.alert('No Next Status', 'This order cannot be advanced by QR scan right now.', [
-        { text: 'OK', onPress: resetScanner },
-      ]);
+      showPopup('No Next Status', 'This order cannot be advanced by QR scan right now.', [{ text: 'OK', variant: 'primary', onPress: resetScanner }], 'warning');
       return;
     }
 
     try {
-      try {
-        await api.put('/orders/status', { order_id: orderId, status: nextStatus });
-      } catch {
-        await api.put(`/transporters/orders/${orderId}/status`, { status: nextStatus });
+      const attempts = [
+        () => api.put(`/transporters/orders/${orderId}/status`, { status: nextStatus, is_qr_scan: true }),
+        () => api.put('/transporters/order-status', { order_id: orderId, status: nextStatus, is_qr_scan: true }),
+        () => api.put(`/orders/${orderId}/qr-status`, { status: nextStatus, is_qr_scan: true }),
+        () => api.put('/orders/status', { order_id: orderId, status: nextStatus, is_qr_scan: true }),
+      ];
+
+      let lastError = null;
+      for (const run of attempts) {
+        try {
+          await run();
+          lastError = null;
+          break;
+        } catch (err) {
+          lastError = err;
+          const statusCode = err?.response?.status;
+          const shouldRetry = statusCode === 404 || statusCode === 405;
+          if (!shouldRetry) {
+            break;
+          }
+        }
       }
 
-      Alert.alert(
+      if (lastError) throw lastError;
+
+      const { productName, productImage } = getProductMetaFromOrder(order);
+
+      showPopup(
         'Status Updated',
-        `Order #${orderId} marked as ${nextStatus.replace(/_/g, ' ')}.`,
+        `${nextStatus.replace(/_/g, ' ')} updated successfully.`,
         [
           {
             text: 'View Order',
+            variant: 'outline',
             onPress: () => navigation.replace('OrderDetail', {
               orderId,
               order: {
@@ -249,13 +388,17 @@ const QRScan = ({ navigation, route }) => {
               },
             }),
           },
-          { text: 'Scan Another', onPress: resetScanner },
-        ]
+          { text: 'Scan Another', variant: 'primary', onPress: resetScanner },
+        ],
+        'success',
+        { productName, productImage }
       );
     } catch (e) {
-      Alert.alert('Update Failed', e.message || 'Could not update order status', [
-        { text: 'Retry', onPress: resetScanner },
-      ]);
+      const serverMessage = e?.response?.data?.message || e?.response?.data?.error;
+      const statusCode = e?.response?.status;
+      const readable = serverMessage || e?.message || 'Could not update order status';
+      const suffix = statusCode ? ` (HTTP ${statusCode})` : '';
+      showPopup('Update Failed', `${readable}${suffix}`, [{ text: 'Retry', variant: 'primary', onPress: resetScanner }], 'error');
     }
   };
 
@@ -267,7 +410,7 @@ const QRScan = ({ navigation, route }) => {
 
   const handleManualSubmit = async () => {
     const id = parseInt(manualId.trim());
-    if (!id || isNaN(id)) { Alert.alert('Invalid', 'Enter a valid order ID'); return; }
+    if (!id || isNaN(id)) { showPopup('Invalid Input', 'Enter a valid order ID', [{ text: 'OK', variant: 'primary', onPress: () => {} }], 'warning'); return; }
     setShowManual(false);
     setIsProcessing(true);
     setScanned(true);
@@ -378,6 +521,53 @@ const QRScan = ({ navigation, route }) => {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={popup.visible} transparent animationType="fade" onRequestClose={closePopup}>
+        <View style={styles.popupOverlay}>
+          <View style={styles.popupCard}>
+            <View style={[
+              styles.popupIconWrap,
+              popup.type === 'success' && styles.popupIconSuccess,
+              popup.type === 'error' && styles.popupIconError,
+              popup.type === 'warning' && styles.popupIconWarning,
+            ]}>
+              <Ionicons
+                name={popup.type === 'success' ? 'checkmark-circle' : popup.type === 'error' ? 'close-circle' : 'alert-circle'}
+                size={24}
+                color={popup.type === 'success' ? '#16A34A' : popup.type === 'error' ? '#DC2626' : '#D97706'}
+              />
+            </View>
+            <Text style={styles.popupTitle}>{popup.title}</Text>
+            <Text style={styles.popupMessage}>{popup.message}</Text>
+            {(popup.productImage || popup.productName) && (
+              <View style={styles.popupProductWrap}>
+                {popup.productImage ? (
+                  <Image source={{ uri: popup.productImage }} style={styles.popupProductImage} />
+                ) : (
+                  <View style={styles.popupProductPlaceholder}>
+                    <Ionicons name="cube-outline" size={24} color="#9CA3AF" />
+                  </View>
+                )}
+                <Text style={styles.popupProductName} numberOfLines={2}>{popup.productName || 'Product'}</Text>
+              </View>
+            )}
+            <View style={styles.popupActions}>
+              {popup.buttons.map((btn, idx) => (
+                <TouchableOpacity
+                  key={`${btn.text}-${idx}`}
+                  style={[
+                    styles.popupBtn,
+                    btn.variant === 'outline' ? styles.popupBtnOutline : styles.popupBtnPrimary,
+                  ]}
+                  onPress={() => handlePopupPress(btn)}
+                >
+                  <Text style={btn.variant === 'outline' ? styles.popupBtnOutlineText : styles.popupBtnPrimaryText}>{btn.text}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -419,6 +609,41 @@ const styles = StyleSheet.create({
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 20 },
   modalBtnItem: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 12 },
   modalBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  popupOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
+  popupCard: { width: '100%', maxWidth: 360, backgroundColor: '#fff', borderRadius: 18, padding: 18, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 },
+  popupIconWrap: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center', marginBottom: 10, backgroundColor: '#FEF3C7' },
+  popupIconSuccess: { backgroundColor: '#DCFCE7' },
+  popupIconError: { backgroundColor: '#FEE2E2' },
+  popupIconWarning: { backgroundColor: '#FEF3C7' },
+  popupTitle: { fontSize: 18, fontWeight: '800', color: '#1F2937' },
+  popupMessage: { fontSize: 14, color: '#4B5563', marginTop: 6, lineHeight: 20 },
+  popupProductWrap: {
+    marginTop: 12,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  popupProductImage: { width: 52, height: 52, borderRadius: 10, backgroundColor: '#E5E7EB' },
+  popupProductPlaceholder: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  popupProductName: { flex: 1, color: '#111827', fontSize: 14, fontWeight: '700' },
+  popupActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  popupBtn: { flex: 1, borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
+  popupBtnPrimary: { backgroundColor: '#1B5E20' },
+  popupBtnOutline: { backgroundColor: '#F3F4F6' },
+  popupBtnPrimaryText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  popupBtnOutlineText: { color: '#374151', fontWeight: '700', fontSize: 14 },
 });
 
 export default QRScan;

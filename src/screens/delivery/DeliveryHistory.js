@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
+  Image,
     RefreshControl,
     StatusBar,
     StyleSheet,
@@ -12,7 +13,7 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import api from '../../services/api';
+import api, { BASE_URL } from '../../services/api';
 import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
 
 const STATUS_COLORS = {
@@ -27,6 +28,150 @@ const STATUS_COLORS = {
   ASSIGNED: '#607D8B',
 };
 
+const HISTORY_STATUSES = [
+  'PICKED_UP',
+  'RECEIVED',
+  'SHIPPED',
+  'OUT_FOR_DELIVERY',
+  'REACHED_DESTINATION',
+  'DELIVERED',
+  'COMPLETED',
+  'CANCELLED',
+  'FAILED',
+  'TRANSFERRED',
+];
+
+const normalizeOrders = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data?.orders)) return payload.data.orders;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.orders)) return payload.orders;
+  if (Array.isArray(payload?.rows)) return payload.rows;
+  return [];
+};
+
+const normalizeStatus = (order) => (order?.current_status || order?.status || '').toUpperCase();
+
+const pickFirst = (...values) => values.find((value) => !!value);
+
+const API_ORIGIN = BASE_URL.replace(/\/api$/i, '');
+
+const toAbsoluteImageUrl = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  const cleaned = value.trim().replace(/\\/g, '/');
+  if (!cleaned) return null;
+  if (/^\/\//.test(cleaned)) return `https:${cleaned}`;
+  if (/^https?:\/\//i.test(cleaned) || /^data:image\//i.test(cleaned)) return cleaned;
+  return `${API_ORIGIN}${cleaned.startsWith('/') ? '' : '/'}${cleaned}`;
+};
+
+const getProductImageCandidates = (order) => {
+  const product = order?.product || order?.Product || {};
+  const productImages = Array.isArray(product.images) ? product.images : [];
+  const orderItems = Array.isArray(order?.items) ? order.items : [];
+  const firstItem = orderItems[0] || {};
+
+  const primaryImage = productImages.find((img) => img?.is_primary === true);
+  const firstProductImage = productImages[0];
+
+  const rawCandidates = [
+      product?.image_url,
+      product?.image,
+      product?.photo,
+      primaryImage?.image_url,
+      primaryImage?.url,
+      firstProductImage?.image_url,
+      firstProductImage?.url,
+      firstItem?.product?.image_url,
+      firstItem?.product?.image,
+      firstItem?.image_url,
+      order?.product_image,
+      order?.image_url,
+      order?.image
+  ];
+
+  return rawCandidates
+    .map(toAbsoluteImageUrl)
+    .filter(Boolean);
+};
+
+const formatAddress = (rawAddress) => {
+  if (!rawAddress) return null;
+
+  let parsed = rawAddress;
+  if (typeof rawAddress === 'string') {
+    try {
+      parsed = JSON.parse(rawAddress);
+    } catch {
+      return rawAddress;
+    }
+  }
+
+  if (typeof parsed !== 'object') return String(parsed);
+
+  return [
+    parsed.full_name,
+    parsed.address_line,
+    parsed.landmark,
+    parsed.city,
+    parsed.district,
+    parsed.state,
+    parsed.pincode,
+    parsed.zone,
+  ]
+    .filter(Boolean)
+    .join(', ');
+};
+
+const getPartyDetails = (order) => {
+  const farmer = order?.farmer || order?.pickup_farmer || null;
+  const customer = order?.customer || order?.delivery_customer || null;
+
+  const farmerName = pickFirst(
+    farmer?.name,
+    farmer?.full_name,
+    order?.farmer_name,
+    order?.pickup_farmer_name,
+    null
+  );
+  const customerName = pickFirst(
+    customer?.name,
+    customer?.full_name,
+    order?.customer_name,
+    order?.delivery_customer_name,
+    null
+  );
+
+  return {
+    farmer: {
+      name: farmerName,
+      phone: pickFirst(farmer?.mobile_number, farmer?.phone, order?.farmer_phone, null),
+      image: toAbsoluteImageUrl(
+        pickFirst(
+          farmer?.image_url,
+          farmer?.profile_image,
+          farmer?.image,
+          order?.farmer_image_url,
+          order?.farmer_image
+        )
+      ),
+    },
+    customer: {
+      name: customerName,
+      phone: pickFirst(customer?.mobile_number, customer?.phone, order?.customer_phone, null),
+      image: toAbsoluteImageUrl(
+        pickFirst(
+          customer?.image_url,
+          customer?.profile_image,
+          customer?.image,
+          order?.customer_image_url,
+          order?.customer_image
+        )
+      ),
+    },
+  };
+};
+
 const FILTER_OPTIONS = [
   { key: 'All', label: 'All' },
   { key: 'Pickups', label: 'Pickups' },
@@ -38,26 +183,70 @@ const FILTER_OPTIONS = [
 const DeliveryHistory = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const [history, setHistory] = useState([]);
+  const [productImageById, setProductImageById] = useState({});
+  const [brokenUris, setBrokenUris] = useState({});
   const [filter, setFilter] = useState('All');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const loadMissingProductImages = useCallback(async (orders) => {
+    const uniqueProductIds = Array.from(
+      new Set(
+        orders
+          .filter((o) => getProductImageCandidates(o).length === 0)
+          .map((o) => o?.product_id)
+          .filter(Boolean)
+      )
+    );
+
+    if (uniqueProductIds.length === 0) return;
+
+    const results = await Promise.allSettled(
+      uniqueProductIds.map((productId) => api.get(`/products/${productId}`))
+    );
+
+    const nextMap = {};
+    results.forEach((result, idx) => {
+      const productId = uniqueProductIds[idx];
+      if (result.status !== 'fulfilled') {
+        nextMap[productId] = null;
+        return;
+      }
+
+      const productPayload = result.value?.data?.data || result.value?.data || {};
+      const product = productPayload?.product || productPayload;
+      const productCandidates = getProductImageCandidates({ product });
+      nextMap[productId] = productCandidates[0] || null;
+    });
+
+    setProductImageById((prev) => ({ ...prev, ...nextMap }));
+  }, []);
 
   // ─── Fetch ────────────────────────────────────────────────────────────
   const fetchHistory = useCallback(async () => {
     try {
       const res = await api.get('/delivery-persons/orders/history');
-      const data = res.data?.data || res.data?.orders || [];
-      setHistory(data);
+      const data = normalizeOrders(res.data);
+
+      if (data.length > 0) {
+        setHistory(data);
+        loadMissingProductImages(data).catch(() => {});
+        return;
+      }
+
+      // Some backends return empty history endpoint; fallback to orders endpoint.
+      const res2 = await api.get('/delivery-persons/orders');
+      const all = normalizeOrders(res2.data);
+      const done = all.filter((o) => HISTORY_STATUSES.includes(normalizeStatus(o)));
+      setHistory(done);
+      loadMissingProductImages(done).catch(() => {});
     } catch (e) {
       try {
         const res2 = await api.get('/delivery-persons/orders');
-        const all = res2.data?.data || res2.data?.orders || [];
-        const done = all.filter((o) =>
-          ['DELIVERED', 'COMPLETED', 'CANCELLED', 'FAILED', 'OUT_FOR_DELIVERY', 'SHIPPED'].includes(
-            o.current_status || o.status
-          )
-        );
+        const all = normalizeOrders(res2.data);
+        const done = all.filter((o) => HISTORY_STATUSES.includes(normalizeStatus(o)));
         setHistory(done);
+        loadMissingProductImages(done).catch(() => {});
       } catch {
         console.log('Failed to fetch delivery history');
       }
@@ -65,11 +254,16 @@ const DeliveryHistory = ({ navigation }) => {
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [loadMissingProductImages]);
 
   useEffect(() => {
     fetchHistory();
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', fetchHistory);
+    return unsubscribe;
+  }, [navigation, fetchHistory]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -83,21 +277,21 @@ const DeliveryHistory = ({ navigation }) => {
         return history;
       case 'Pickups':
         return history.filter((o) =>
-          ['ASSIGNED', 'PICKUP_IN_PROGRESS', 'SHIPPED'].includes(o.current_status || o.status)
+          ['PICKED_UP', 'RECEIVED', 'SHIPPED', 'TRANSFERRED'].includes(normalizeStatus(o))
         );
       case 'Deliveries':
         return history.filter((o) =>
-          ['OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(o.current_status || o.status)
+          ['OUT_FOR_DELIVERY', 'REACHED_DESTINATION', 'DELIVERED', 'COMPLETED'].includes(normalizeStatus(o))
         );
       default:
-        return history.filter((o) => (o.current_status || o.status) === filter);
+        return history.filter((o) => normalizeStatus(o) === filter);
     }
   }, [filter, history]);
 
   // ─── Stats ────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
     const delivered = history.filter((o) =>
-      ['DELIVERED', 'COMPLETED'].includes(o.current_status || o.status)
+      ['DELIVERED', 'COMPLETED'].includes(normalizeStatus(o))
     );
     const totalEarnings = delivered.reduce(
       (sum, d) => sum + Number(d.delivery_charge || d.earnings || d.transport_charge || 0),
@@ -111,7 +305,7 @@ const DeliveryHistory = ({ navigation }) => {
       total: history.length,
       completed: delivered.length,
       cancelled: history.filter((o) =>
-        ['CANCELLED', 'FAILED'].includes(o.current_status || o.status)
+        ['CANCELLED', 'FAILED'].includes(normalizeStatus(o))
       ).length,
       totalEarnings,
       totalDistance,
@@ -120,11 +314,11 @@ const DeliveryHistory = ({ navigation }) => {
 
   // ─── Type icon ────────────────────────────────────────────────────────
   const getTypeInfo = (status) => {
-    const s = status || '';
-    if (['ASSIGNED', 'PICKUP_IN_PROGRESS'].includes(s)) {
+    const s = (status || '').toUpperCase();
+    if (['PICKED_UP', 'RECEIVED', 'SHIPPED', 'TRANSFERRED'].includes(s)) {
       return { icon: 'cube-outline', label: 'Pickup', color: '#9C27B0' };
     }
-    if (['SHIPPED', 'OUT_FOR_DELIVERY'].includes(s)) {
+    if (['REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(s)) {
       return { icon: 'bicycle-outline', label: 'Delivery', color: '#2196F3' };
     }
     if (['DELIVERED', 'COMPLETED'].includes(s)) {
@@ -135,13 +329,30 @@ const DeliveryHistory = ({ navigation }) => {
 
   // ─── Render card ──────────────────────────────────────────────────────
   const renderItem = ({ item }) => {
-    const status = item.current_status || item.status || 'UNKNOWN';
+    const status = normalizeStatus(item) || 'UNKNOWN';
     const color = STATUS_COLORS[status] || '#888';
     const typeInfo = getTypeInfo(status);
+    const productName = pickFirst(
+      item.product?.name,
+      item.product_name,
+      item.item_name,
+      item.title,
+      'Product'
+    );
+    const productImageCandidates = getProductImageCandidates(item);
+    const fallbackImage = item?.product_id ? productImageById[item.product_id] : null;
+    const allCandidates = [...productImageCandidates, ...(fallbackImage ? [fallbackImage] : [])]
+      .filter(Boolean)
+      .filter((uri, idx, arr) => arr.indexOf(uri) === idx);
+    const productImage = allCandidates.find((uri) => !brokenUris[uri]) || null;
+    const quantity = Number(item.quantity || item.qty || item.product?.quantity || 0);
+    const totalAmount = Number(item.total_price || item.total_amount || item.amount || 0);
+    const paymentMethod = pickFirst(item.payment_method, item.payment_type, item.payment?.method, 'N/A');
     const earning = Number(item.delivery_charge || item.earnings || item.transport_charge || 0);
     const dateStr = item.delivery_date || item.order_date || item.updated_at || '';
-    const pickupAddr = item.pickup_address || item.farmer?.address || '';
-    const deliveryAddr = item.delivery_address || item.customer?.address || '';
+    const pickupAddr = formatAddress(item.pickup_address || item.farmer?.address || item.farmer?.farm_address || '');
+    const deliveryAddr = formatAddress(item.delivery_address || item.customer?.address || '');
+    const parties = getPartyDetails(item);
 
     return (
       <TouchableOpacity
@@ -149,19 +360,43 @@ const DeliveryHistory = ({ navigation }) => {
         onPress={() => navigation.navigate('OrderDetails', { order: item })}
         activeOpacity={0.7}
       >
-        {/* Top row: type badge + order ID + date */}
+        {/* Top row: product image + product name + status */}
         <View style={styles.cardTop}>
           <View style={styles.cardTopLeft}>
-            <View style={[styles.typeIcon, { backgroundColor: typeInfo.color + '15' }]}>
-              <Ionicons name={typeInfo.icon} size={18} color={typeInfo.color} />
-            </View>
+            {productImage ? (
+              <Image
+                source={{ uri: productImage }}
+                style={styles.productImage}
+                onError={() => setBrokenUris((prev) => ({ ...prev, [productImage]: true }))}
+              />
+            ) : (
+              <View style={[styles.productImageFallback, { backgroundColor: typeInfo.color + '15' }]}>
+                <Ionicons name={typeInfo.icon} size={20} color={typeInfo.color} />
+              </View>
+            )}
             <View>
-              <Text style={styles.orderId}>Order #{item.order_id || item.id}</Text>
+              <Text style={styles.productName} numberOfLines={1}>{productName}</Text>
               <Text style={styles.typeLabel}>{typeInfo.label}</Text>
             </View>
           </View>
           <View style={[styles.badge, { backgroundColor: color + '18' }]}>
             <Text style={[styles.badgeText, { color }]}>{status.replace(/_/g, ' ')}</Text>
+          </View>
+        </View>
+
+        {/* Detail rows */}
+        <View style={styles.detailsGrid}>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Quantity</Text>
+            <Text style={styles.detailValue}>{quantity > 0 ? quantity : 'N/A'}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Order Amount</Text>
+            <Text style={styles.detailValue}>{totalAmount > 0 ? `₹${totalAmount.toFixed(0)}` : 'N/A'}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Payment</Text>
+            <Text style={styles.detailValue}>{String(paymentMethod).replace(/_/g, ' ')}</Text>
           </View>
         </View>
 
@@ -186,11 +421,50 @@ const DeliveryHistory = ({ navigation }) => {
         </View>
 
         {/* Customer / Farmer name */}
-        <View style={styles.personRow}>
-          <Ionicons name="person-outline" size={14} color="#888" />
-          <Text style={styles.personName} numberOfLines={1}>
-            {item.customer?.name || item.customer_name || item.farmer?.name || 'Customer'}
-          </Text>
+        <View style={styles.peopleCard}>
+          <Text style={styles.peopleTitle}>People</Text>
+
+          {parties.farmer.name ? (
+            <View style={styles.personRow}>
+              {parties.farmer.image ? (
+                <Image
+                  source={{ uri: parties.farmer.image }}
+                  style={styles.personAvatar}
+                  onError={() => setBrokenUris((prev) => ({ ...prev, [parties.farmer.image]: true }))}
+                />
+              ) : (
+                <View style={styles.personAvatarFallback}>
+                  <Ionicons name="leaf-outline" size={14} color="#2E7D32" />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.personLabel}>Farmer</Text>
+                <Text style={styles.personName} numberOfLines={1}>{parties.farmer.name}</Text>
+              </View>
+              {parties.farmer.phone ? <Text style={styles.personPhone}>{parties.farmer.phone}</Text> : null}
+            </View>
+          ) : null}
+
+          {parties.customer.name ? (
+            <View style={styles.personRow}>
+              {parties.customer.image ? (
+                <Image
+                  source={{ uri: parties.customer.image }}
+                  style={styles.personAvatar}
+                  onError={() => setBrokenUris((prev) => ({ ...prev, [parties.customer.image]: true }))}
+                />
+              ) : (
+                <View style={styles.personAvatarFallback}>
+                  <Ionicons name="person-outline" size={14} color="#1565C0" />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.personLabel}>Customer</Text>
+                <Text style={styles.personName} numberOfLines={1}>{parties.customer.name}</Text>
+              </View>
+              {parties.customer.phone ? <Text style={styles.personPhone}>{parties.customer.phone}</Text> : null}
+            </View>
+          ) : null}
         </View>
 
         {/* Bottom row: date + earnings */}
@@ -266,17 +540,18 @@ const DeliveryHistory = ({ navigation }) => {
       </View>
 
       {/* Filters */}
-      <FlatList
-        horizontal
-        data={FILTER_OPTIONS}
-        keyExtractor={(item) => item.key}
-        renderItem={({ item }) => (
+      <View style={styles.chipRow}>
+        {FILTER_OPTIONS.map((item) => (
           <TouchableOpacity
+            key={item.key}
             onPress={() => setFilter(item.key)}
             style={[styles.chip, filter === item.key && styles.chipActive]}
             activeOpacity={0.7}
           >
-            <Text style={[styles.chipText, filter === item.key && styles.chipTextActive]}>
+            <Text
+              style={[styles.chipText, filter === item.key && styles.chipTextActive]}
+              numberOfLines={1}
+            >
               {item.label}
             </Text>
             {filter === item.key && (
@@ -285,10 +560,8 @@ const DeliveryHistory = ({ navigation }) => {
               </View>
             )}
           </TouchableOpacity>
-        )}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipRow}
-      />
+        ))}
+      </View>
 
       {/* Main List */}
       {isLoading ? (
@@ -299,7 +572,7 @@ const DeliveryHistory = ({ navigation }) => {
       ) : (
         <FlatList
           data={filtered}
-          keyExtractor={(item) => String(item.order_id || item.id)}
+          keyExtractor={(item, index) => String(item.order_id || item.id || `history-${index}`)}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 14, paddingBottom: 30 }}
           refreshControl={
@@ -348,15 +621,26 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 10, color: '#888', fontWeight: '500' },
 
   // Chips
-  chipRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, backgroundColor: '#fff' },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
+    gap: 8,
+    backgroundColor: '#fff',
+  },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#F4F8F4',
     borderRadius: 22,
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 6,
+    minWidth: '31%',
+    maxWidth: '48%',
   },
   chipActive: { backgroundColor: '#1B5E20' },
   chipText: { fontSize: 13, color: '#666', fontWeight: '600' },
@@ -374,27 +658,62 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderRadius: Radius.lg,
     padding: 16,
-    marginBottom: 10,
-    ...shadowStyle('sm'),
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#EAF2EA',
+    ...shadowStyle('md'),
   },
   cardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 12,
   },
   cardTopLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  typeIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  productImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#f3f3f3',
+  },
+  productImageFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  orderId: { fontSize: Font.base, fontWeight: Font.weightBold, color: Colors.textPrimary },
+  productName: { fontSize: Font.base, fontWeight: Font.weightBold, color: Colors.textPrimary, maxWidth: 180 },
   typeLabel: { fontSize: Font.xs, color: Colors.textMuted, marginTop: 1, fontWeight: Font.weightMedium },
   badge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
   badgeText: { fontSize: 10, fontWeight: Font.weightExtraBold, textTransform: 'uppercase', letterSpacing: 0.3 },
+
+  detailsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 12,
+    backgroundColor: '#FAFCFA',
+  },
+  detailItem: {
+    width: '50%',
+    marginBottom: 8,
+    paddingRight: 8,
+  },
+  detailLabel: {
+    fontSize: Font.xs,
+    color: Colors.textMuted,
+    marginBottom: 2,
+  },
+  detailValue: {
+    fontSize: Font.sm,
+    color: Colors.textPrimary,
+    fontWeight: Font.weightBold,
+  },
 
   // Addresses
   addressSection: { marginBottom: 10, gap: 6 },
@@ -403,8 +722,49 @@ const styles = StyleSheet.create({
   addressText: { flex: 1, fontSize: Font.sm, color: Colors.textSecondary },
 
   // Person
-  personRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  personName: { fontSize: Font.sm, color: Colors.textSecondary, flex: 1, fontWeight: Font.weightMedium },
+  peopleCard: {
+    borderWidth: 1,
+    borderColor: '#E7F2E7',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
+    backgroundColor: '#F9FCF9',
+    gap: 8,
+  },
+  peopleTitle: {
+    fontSize: Font.xs,
+    fontWeight: Font.weightExtraBold,
+    color: '#1B5E20',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  personAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EAF4EA',
+  },
+  personAvatarFallback: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EAF4EA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  personLabel: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    fontWeight: Font.weightSemiBold,
+  },
+  personName: { fontSize: Font.sm, color: Colors.textSecondary, flex: 1, fontWeight: Font.weightBold },
+  personPhone: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    fontWeight: Font.weightMedium,
+  },
 
   // Bottom
   cardBottom: {

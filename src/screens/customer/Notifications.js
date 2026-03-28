@@ -262,7 +262,7 @@ const Notifications = ({ navigation }) => {
     }
     // Optionally navigate based on type
     if (notif.order_id) {
-      navigation.navigate('CustomerOrderTracking', { orderId: notif.order_id });
+      navigation.navigate('OrderTracking', { orderId: notif.order_id });
     }
   };
 

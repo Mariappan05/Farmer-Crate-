@@ -19,6 +19,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 import { getFarmerOrders } from '../../services/orderService';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import ToastMessage from '../../utils/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -595,8 +596,9 @@ const FarmerHome = ({ navigation }) => {
     }
   }, []);
 
+  useAutoRefresh(fetchData, 10000);
+
   useEffect(() => {
-    fetchData();
     fetchRecommendations();
     fetchPricePredictions();
     Animated.timing(fadeAnim, {
@@ -1442,7 +1444,7 @@ const FarmerHome = ({ navigation }) => {
                   key={order.id || order.order_id || idx}
                   style={[styles.orderCard, { borderLeftWidth: 4, borderLeftColor: statusColor }]}
                   onPress={() =>
-                    navigation.navigate('FarmerOrderTracking', {
+                    navigation.navigate('OrderTracking', {
                       orderId: order.id || order.order_id,
                       order,
                     })

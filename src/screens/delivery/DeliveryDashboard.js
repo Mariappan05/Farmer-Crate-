@@ -21,6 +21,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { updateDeliveryAvailability } from '../../services/authService';
 import { getDeliveryDrops, getDeliveryPickups } from '../../services/orderService';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import ToastMessage from '../../utils/Toast';
 import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
 
@@ -39,6 +40,9 @@ const STATUS_COLORS = {
   COMPLETED: Colors.success,
   CANCELLED: Colors.error,
 };
+
+const ACTIVE_PICKUP_STATUSES = ['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS'];
+const ACTIVE_DELIVERY_STATUSES = ['IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'];
 
 const pickFirst = (...values) => values.find((value) => !!value);
 
@@ -150,15 +154,32 @@ const DeliveryDashboard = ({ navigation }) => {
       console.log('[DeliveryDashboard] Pickups data:', pickups);
       console.log('[DeliveryDashboard] Drops data:', drops);
 
-      setPickupOrders(pickups);
-      setDeliveryOrders(drops);
+      const activePickups = pickups.filter((o) =>
+        ACTIVE_PICKUP_STATUSES.includes((o.current_status || o.status || '').toUpperCase())
+      );
+      const activeDrops = drops.filter((o) =>
+        ACTIVE_DELIVERY_STATUSES.includes((o.current_status || o.status || '').toUpperCase())
+      );
 
-      // Profile / availability
+      setPickupOrders(activePickups);
+      setDeliveryOrders(activeDrops);
       if (profileRes.status === 'fulfilled') {
-        const prof = profileRes.value?.data?.data || profileRes.value?.data || {};
-        const availability = prof.is_available ?? prof.availability ?? true;
-        setIsAvailable(availability);
-        if (!availability && !startupPromptShownRef.current) {
+        const prof = profileRes.value?.data?.data || profileRes.value?.data || profileRes.value || {};
+        const rawAvailability = prof?.is_available;
+        const availability =
+          typeof rawAvailability === 'boolean'
+            ? rawAvailability
+            : typeof rawAvailability === 'number'
+              ? rawAvailability === 1
+              : typeof rawAvailability === 'string'
+                ? rawAvailability.toLowerCase() === 'true' || rawAvailability === '1'
+                : null;
+
+        if (availability !== null) {
+          setIsAvailable(availability);
+        }
+
+        if (availability === false && !startupPromptShownRef.current) {
           startupPromptShownRef.current = true;
           setShowStartupModal(true);
         }
@@ -196,8 +217,9 @@ const DeliveryDashboard = ({ navigation }) => {
     }
   }, []);
 
+  useAutoRefresh(fetchData, 10000);
+
   useEffect(() => {
-    fetchData();
     Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
   }, []);
 

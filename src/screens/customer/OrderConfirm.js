@@ -9,7 +9,7 @@
  *   - Order summary: total, payment method, delivery address
  *   - Estimated delivery time (3-5 days)
  *   - QR code display
- *   - Track Order → CustomerOrderTracking
+ *   - Track Order → OrderTracking
  *   - Continue Shopping → CustomerHome
  *   - Green gradient accent
  */
@@ -301,7 +301,7 @@ const OrderConfirm = ({ navigation, route }) => {
           {/* ── Action Buttons ── */}
           <TouchableOpacity
             style={styles.trackBtn}
-            onPress={() => navigation.navigate('CustomerOrderTracking', { order })}
+            onPress={() => navigation.navigate('OrderTracking', { order })}
             activeOpacity={0.85}
           >
             <Ionicons name="navigate-outline" size={20} color="#fff" />

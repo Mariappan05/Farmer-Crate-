@@ -30,8 +30,11 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import api from '../../services/api';
+import api, { BASE_URL } from '../../services/api';
 import { optimizeImageUrl, pickImage, uploadImageToCloudinary } from '../../services/cloudinaryService';
+import { useAuth } from '../../context/AuthContext';
+
+const API_ORIGIN = BASE_URL.replace(/\/api$/i, '');
 
 /* ── Constants ────────────────────────────────────────────── */
 const TIMELINE_STAGES = [
@@ -89,11 +92,44 @@ const formatDate = (d) => {
 const formatCurrency = (a) => '₹' + (parseFloat(a) || 0).toFixed(2);
 
 const pickFirst = (...values) => values.find((v) => v !== undefined && v !== null && String(v).trim() !== '');
+const toNumberOrZero = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
 
 const toReadableText = (value) => {
   if (value === undefined || value === null) return '';
   if (typeof value === 'object') return '';
   return String(value).trim();
+};
+
+const parseObjectLike = (value) => {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+const toAbsoluteImageUrl = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  const cleaned = value.trim().replace(/\\/g, '/');
+  if (!cleaned) return null;
+  if (/^\/\//.test(cleaned)) return `https:${cleaned}`;
+  if (/^https?:\/\//i.test(cleaned) || /^data:image\//i.test(cleaned)) return cleaned;
+  return `${API_ORIGIN}${cleaned.startsWith('/') ? '' : '/'}${cleaned}`;
+};
+
+const getNameFromAddressPayload = (value) => {
+  const source = parseObjectLike(value);
+  if (!source) return '';
+  return toReadableText(pickFirst(source.full_name, source.name, source.farmer_name, source.customer_name));
 };
 
 const normalizeAddress = (value) => {
@@ -121,20 +157,104 @@ const normalizeAddress = (value) => {
 };
 
 const normalizeParty = (raw, fallbackName, fallbackAddress, fallbackPhone) => {
-  const source = raw && typeof raw === 'object' ? raw : {};
+  const source = parseObjectLike(raw) || {};
+  const nested = parseObjectLike(source.user) || parseObjectLike(source.profile) || {};
   return {
-    name: toReadableText(pickFirst(source.full_name, source.name, source.username, fallbackName)),
-    full_name: toReadableText(pickFirst(source.full_name, source.name, fallbackName)),
-    phone: toReadableText(pickFirst(source.mobile_number, source.phone, source.mobile, fallbackPhone)),
-    mobile: toReadableText(pickFirst(source.mobile_number, source.mobile, source.phone, fallbackPhone)),
-    address: normalizeAddress(pickFirst(source.address, source.address_line, source.location, fallbackAddress)),
-    address_line: normalizeAddress(pickFirst(source.address_line, source.address, fallbackAddress)),
+    name: toReadableText(
+      pickFirst(
+        source.full_name,
+        source.name,
+        source.username,
+        source.farmer_name,
+        source.customer_name,
+        nested.full_name,
+        nested.name,
+        nested.username,
+        fallbackName
+      )
+    ),
+    full_name: toReadableText(
+      pickFirst(
+        source.full_name,
+        source.name,
+        source.username,
+        source.farmer_name,
+        source.customer_name,
+        nested.full_name,
+        nested.name,
+        nested.username,
+        fallbackName
+      )
+    ),
+    phone: toReadableText(
+      pickFirst(
+        source.mobile_number,
+        source.phone,
+        source.mobile,
+        source.phone_number,
+        nested.mobile_number,
+        nested.phone,
+        nested.mobile,
+        nested.phone_number,
+        fallbackPhone
+      )
+    ),
+    mobile: toReadableText(
+      pickFirst(
+        source.mobile_number,
+        source.mobile,
+        source.phone,
+        source.phone_number,
+        nested.mobile_number,
+        nested.mobile,
+        nested.phone,
+        nested.phone_number,
+        fallbackPhone
+      )
+    ),
+    address: normalizeAddress(
+      pickFirst(
+        source.address,
+        source.address_line,
+        source.location,
+        source.farm_address,
+        nested.address,
+        nested.address_line,
+        nested.location,
+        fallbackAddress
+      )
+    ),
+    address_line: normalizeAddress(
+      pickFirst(source.address_line, source.address, nested.address_line, nested.address, fallbackAddress)
+    ),
   };
 };
 
 const getPartyImage = (party) => {
-  if (!party || typeof party !== 'object') return null;
-  return party.image_url || party.image || party.profile_image || party.photo || null;
+  const source = parseObjectLike(party) || {};
+  const nested = parseObjectLike(source.user) || parseObjectLike(source.profile) || {};
+  const rawImage = pickFirst(
+    source.image_url,
+    source.image,
+    source.profile_image,
+    source.profileImage,
+    source.photo,
+    source.photo_url,
+    source.avatar,
+    source.avatar_url,
+    source.user_image,
+    nested.image_url,
+    nested.image,
+    nested.profile_image,
+    nested.profileImage,
+    nested.photo,
+    nested.photo_url,
+    nested.avatar,
+    nested.avatar_url,
+    nested.user_image
+  );
+
+  return toAbsoluteImageUrl(toReadableText(rawImage)) || null;
 };
 
 const getPackingProofImages = (order) => {
@@ -165,6 +285,7 @@ const getPackingProofImages = (order) => {
 /* ── Component ────────────────────────────────────────────── */
 const OrderDetail = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
+  const { authState } = useAuth();
   const { orderId: paramOrderId, order: initialOrder } = route.params || {};
 
   const [order, setOrder] = useState(initialOrder || null);
@@ -176,11 +297,28 @@ const OrderDetail = ({ navigation, route }) => {
   const [permanentVehicles, setPermanentVehicles] = useState([]);
   const [temporaryVehicles, setTemporaryVehicles] = useState([]);
   const [uploadingPackingProof, setUploadingPackingProof] = useState(false);
+  const [statusConfirmModal, setStatusConfirmModal] = useState({ visible: false, nextStatus: null });
+  const [successModal, setSuccessModal] = useState({ visible: false, title: 'Success', message: '' });
+  const [proofPickerModal, setProofPickerModal] = useState({ visible: false, packingUri: null, billUri: null });
 
   const orderId = paramOrderId || order?.order_id || order?.id;
   const status = (order?.current_status || order?.status || 'PENDING').toUpperCase();
   const stageIdx = STATUS_INDEX[status] ?? 0;
   const isCancelled = status === 'CANCELLED';
+  const myTransporterId = toNumberOrZero(
+    authState?.user?.transporter_id || authState?.user?.id || authState?.userId || authState?.user_id
+  );
+  const sourceTransporterId = toNumberOrZero(
+    order?.source_transporter_id || order?.pickup_transporter_id || order?.sourceTransporter?.transporter_id
+  );
+  const destinationTransporterId = toNumberOrZero(
+    order?.destination_transporter_id || order?.delivery_transporter_id || order?.destinationTransporter?.transporter_id
+  );
+  const isDestinationTransporterView =
+    !!myTransporterId &&
+    !!destinationTransporterId &&
+    myTransporterId === destinationTransporterId &&
+    sourceTransporterId !== destinationTransporterId;
 
   /* ── Fetch ──────────────────────────────────────────────── */
   const fetchOrder = useCallback(async (silent = false) => {
@@ -270,14 +408,14 @@ const OrderDetail = ({ navigation, route }) => {
     } catch (e) {
       console.error('[OrderDetail] Unexpected error:', e.message);
       // Only show error if we have no order data at all
-      if (!order && !initialOrder) {
+      if (!initialOrder) {
         Alert.alert('Error', 'Unable to load order details. Please try again.');
       }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [orderId, initialOrder, order]);
+  }, [orderId, initialOrder]);
 
   useEffect(() => {
     fetchOrder();
@@ -366,7 +504,11 @@ const OrderDetail = ({ navigation, route }) => {
             setAssigningDP(true);
             try {
               await assignVehicleAndPerson(vehicle, p);
-              Alert.alert('Success', `Assigned ${vehicle.vehicle_number || 'vehicle'} + ${p.full_name || p.name}`);
+              setSuccessModal({
+                visible: true,
+                title: 'Assigned Successfully',
+                message: `Assigned ${vehicle.vehicle_number || 'vehicle'} + ${p.full_name || p.name}`,
+              });
               fetchOrder(true);
             } catch (e) {
               Alert.alert('Error', e.message || 'Failed to assign');
@@ -384,14 +526,29 @@ const OrderDetail = ({ navigation, route }) => {
   };
 
   const uploadPackingProof = async () => {
+    setProofPickerModal({ visible: true, packingUri: null, billUri: null });
+  };
+
+  const pickProofImage = async (target, fromCamera) => {
+    const uri = await pickImage(fromCamera);
+    if (!uri) return;
+    setProofPickerModal((prev) => ({
+      ...prev,
+      [`${target}Uri`]: uri,
+    }));
+  };
+
+  const confirmProofUpload = async () => {
     const oid = orderId || order?.order_id || order?.id;
     if (!oid) return;
 
-    const packingLocalUri = await pickImage(false);
+    const packingLocalUri = proofPickerModal.packingUri;
     if (!packingLocalUri) return;
 
-    const billLocalUri = await pickImage(false);
+    const billLocalUri = proofPickerModal.billUri;
     if (!billLocalUri) return;
+
+    setProofPickerModal((prev) => ({ ...prev, visible: false }));
 
     setUploadingPackingProof(true);
     try {
@@ -433,7 +590,11 @@ const OrderDetail = ({ navigation, route }) => {
       if (!saved) {
         Alert.alert('Uploaded', 'Images uploaded. Backend packing save endpoint unavailable, but images are attached locally in app view.');
       } else {
-        Alert.alert('Success', 'Packing and bill images uploaded successfully');
+        setSuccessModal({
+          visible: true,
+          title: 'Upload Complete',
+          message: 'Packing and bill images uploaded successfully',
+        });
       }
     } catch (e) {
       Alert.alert('Error', e.message || 'Failed to upload packing proof');
@@ -444,8 +605,34 @@ const OrderDetail = ({ navigation, route }) => {
 
   const getNextStatusByScan = () => {
     const current = (order?.current_status || order?.status || '').toUpperCase();
-    // Pickup statuses should ONLY be updated manually, not via QR
+    const isSameTransporter =
+      sourceTransporterId > 0 &&
+      destinationTransporterId > 0 &&
+      sourceTransporterId === destinationTransporterId;
+    const isSourceTransporterView =
+      !!myTransporterId &&
+      !!sourceTransporterId &&
+      myTransporterId === sourceTransporterId &&
+      sourceTransporterId !== destinationTransporterId;
+
+    // Pickup statuses should ONLY be updated manually, not via QR.
     if (current === 'PICKUP_ASSIGNED' || current === 'PICKUP_IN_PROGRESS' || current === 'PICKED_UP') return null;
+
+    // Destination transporter is QR-only for delivery-side progression.
+    if (isDestinationTransporterView && !isSameTransporter) {
+      if (current === 'SHIPPED' || current === 'IN_TRANSIT') return 'REACHED_DESTINATION';
+      if (current === 'REACHED_DESTINATION') return 'OUT_FOR_DELIVERY';
+      return null;
+    }
+
+    // Source transporter scans source-side progression.
+    if (isSourceTransporterView && !isSameTransporter) {
+      if (current === 'RECEIVED') return 'SHIPPED';
+      if (current === 'SHIPPED') return 'IN_TRANSIT';
+      return null;
+    }
+
+    // Same transporter flow keeps full progression.
     if (current === 'RECEIVED') return 'SHIPPED';
     if (current === 'SHIPPED') return 'IN_TRANSIT';
     if (current === 'IN_TRANSIT') return 'REACHED_DESTINATION';
@@ -465,6 +652,12 @@ const OrderDetail = ({ navigation, route }) => {
   const handleManualStatusUpdate = async (newStatus) => {
     const oid = orderId || order?.order_id || order?.id;
     if (!oid || !newStatus) return;
+
+    if (isDestinationTransporterView) {
+      Alert.alert('Use QR Scan', 'Destination transporter can update status only via QR scan.');
+      return;
+    }
+
     setUpdatingStatus(true);
     try {
       try {
@@ -472,7 +665,11 @@ const OrderDetail = ({ navigation, route }) => {
       } catch {
         await api.put('/orders/status', { order_id: oid, status: newStatus });
       }
-      Alert.alert('Success', `Status updated to ${newStatus.replace(/_/g, ' ')}`);
+      setSuccessModal({
+        visible: true,
+        title: 'Status Updated',
+        message: `Order moved to ${newStatus.replace(/_/g, ' ')}`,
+      });
       fetchOrder(true);
     } catch (e) {
       Alert.alert('Error', e.message || 'Failed to update status');
@@ -529,6 +726,10 @@ const OrderDetail = ({ navigation, route }) => {
     order.Farmer ||
     order.farmer_details ||
     order.farmerDetails ||
+    order.farmer_profile ||
+    order.farmerProfile ||
+    order.farmer_user ||
+    order.farmerUser ||
     order.pickup_farmer ||
     order.Product?.farmer ||
     order.product?.farmer ||
@@ -537,11 +738,11 @@ const OrderDetail = ({ navigation, route }) => {
   const farmer = {
     ...normalizeParty(
       farmerRaw,
-      order.farmer_name || order.farmerName || firstProduct?.farmer_name || firstProduct?.farm_name,
+      order.farmer_name || order.farmerName || order.farmer_full_name || getNameFromAddressPayload(order.pickup_address) || firstProduct?.farmer_name || firstProduct?.farm_name,
       order.pickup_address || order.farm_address || order.farmer_address || firstProduct?.farmer_address || firstProduct?.farm_address,
       order.farmer_phone || order.farmer_mobile || firstProduct?.farmer_phone || firstProduct?.farmer_mobile
     ),
-    image: getPartyImage(farmerRaw),
+    image: getPartyImage(farmerRaw) || toAbsoluteImageUrl(order.farmer_image || order.farmer_profile_image || order.farmer_image_url || firstProduct?.farmer_image || firstProduct?.farmer_image_url),
   };
 
   const customerRaw =
@@ -645,7 +846,11 @@ const OrderDetail = ({ navigation, route }) => {
   );
   const nextStatusByScan = getNextStatusByScan();
   const packingProof = getPackingProofImages(order);
-  const canUploadPackingProof = ['RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(status);
+  const hasPackingAndBillProof = Boolean(packingProof.packing && packingProof.bill);
+  const isShippedScanBlocked = nextStatusByScan === 'SHIPPED' && !hasPackingAndBillProof;
+  const canUploadPackingProof = status === 'RECEIVED';
+  const canEditPackingProof = status === 'RECEIVED' && hasPackingAndBillProof;
+  const isUploadPackingProofDisabled = uploadingPackingProof || hasPackingAndBillProof;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -734,7 +939,7 @@ const OrderDetail = ({ navigation, route }) => {
               </View>
             )}
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>{farmer.name || 'N/A'}</Text>
+              <Text style={styles.profileName}>{farmer.full_name || farmer.name || order.farmer_name || 'Farmer'}</Text>
               {farmer.address && (
                 <View style={styles.profileDetailRow}>
                   <Ionicons name="location" size={16} color="#4CAF50" />
@@ -982,20 +1187,10 @@ const OrderDetail = ({ navigation, route }) => {
             )}
 
             {/* Pickup delivery person manual status update */}
-            {isPickupStatus && getNextPickupStatus() && (
+            {!isDestinationTransporterView && isPickupStatus && getNextPickupStatus() && (
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: '#FF5722' }]}
-                onPress={() => {
-                  const next = getNextPickupStatus();
-                  Alert.alert(
-                    'Update Status',
-                    `Mark order as ${next.replace(/_/g, ' ')}?`,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Confirm', onPress: () => handleManualStatusUpdate(next) }
-                    ]
-                  );
-                }}
+                onPress={() => setStatusConfirmModal({ visible: true, nextStatus: getNextPickupStatus() })}
                 disabled={updatingStatus}
               >
                 {updatingStatus ? <ActivityIndicator size="small" color="#fff" /> : (
@@ -1010,12 +1205,23 @@ const OrderDetail = ({ navigation, route }) => {
               </TouchableOpacity>
             )}
 
+            {isDestinationTransporterView && (
+              <View style={styles.destQrOnlyHint}>
+                <Ionicons name="information-circle" size={16} color="#3F51B5" />
+                <Text style={styles.destQrOnlyHintText}>Destination transporter updates are QR-only.</Text>
+              </View>
+            )}
+
             {/* Packing proof upload */}
             {canUploadPackingProof && (
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#FF9800' }]}
+                style={[
+                  styles.actionBtn,
+                  { backgroundColor: '#FF9800' },
+                  isUploadPackingProofDisabled && styles.disabledActionBtn,
+                ]}
                 onPress={uploadPackingProof}
-                disabled={uploadingPackingProof}
+                disabled={isUploadPackingProofDisabled}
               >
                 {uploadingPackingProof ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -1024,7 +1230,29 @@ const OrderDetail = ({ navigation, route }) => {
                     <View style={styles.actionRowIconWrap}>
                       <Ionicons name="images" size={18} color="#fff" />
                     </View>
-                    <Text style={styles.actionBtnText}>Upload Packing + Bill Photos</Text>
+                    <Text style={styles.actionBtnText}>
+                      {hasPackingAndBillProof ? 'Packing + Bill Uploaded' : 'Upload Packing + Bill Photos'}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {canEditPackingProof && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#EF6C00' }]}
+                onPress={uploadPackingProof}
+                disabled={uploadingPackingProof}
+              >
+                {uploadingPackingProof ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <View style={styles.actionRowIconWrap}>
+                      <Ionicons name="create-outline" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.actionBtnText}>Edit Packing + Bill Photos</Text>
                     <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
                   </>
                 )}
@@ -1033,9 +1261,15 @@ const OrderDetail = ({ navigation, route }) => {
 
             {/* QR scan — only for non-pickup statuses */}
             {nextStatusByScan && (
+              <>
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#3F51B5' }]}
+                style={[
+                  styles.actionBtn,
+                  { backgroundColor: '#3F51B5' },
+                  isShippedScanBlocked && styles.disabledActionBtn,
+                ]}
                 onPress={() => navigation.navigate('QRScan', { orderId, expectedOrderId: orderId })}
+                disabled={isShippedScanBlocked}
               >
                 <View style={styles.actionRowIconWrap}>
                   <Ionicons name="qr-code" size={18} color="#fff" />
@@ -1043,12 +1277,18 @@ const OrderDetail = ({ navigation, route }) => {
                 <Text style={styles.actionBtnText}>Scan QR → {nextStatusByScan.replace(/_/g, ' ')}</Text>
                 <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
               </TouchableOpacity>
+              {isShippedScanBlocked && (
+                <Text style={styles.disabledActionHint}>
+                  Upload both packing and bill photos to enable Scan QR for SHIPPED.
+                </Text>
+              )}
+              </>
             )}
 
             {/* Track Order */}
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: '#1B5E20' }]}
-              onPress={() => navigation.navigate('TransporterOrderTracking', { orderId, order })}
+              onPress={() => navigation.navigate('OrderTracking', { orderId, order })}
             >
               <View style={styles.actionRowIconWrap}>
                 <Ionicons name="navigate" size={18} color="#fff" />
@@ -1071,6 +1311,149 @@ const OrderDetail = ({ navigation, route }) => {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={statusConfirmModal.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStatusConfirmModal({ visible: false, nextStatus: null })}
+      >
+        <View style={styles.statusModalOverlay}>
+          <View style={styles.statusModalCard}>
+            <View style={styles.statusModalIconWrap}>
+              <Ionicons name="swap-horizontal" size={22} color="#FF5722" />
+            </View>
+            <Text style={styles.statusModalTitle}>Confirm Status Update</Text>
+            <Text style={styles.statusModalMessage}>Do you want to update this order status?</Text>
+            <View style={styles.statusModalStatusPill}>
+              <Text style={styles.statusModalStatusLabel}>Next:</Text>
+              <Text style={styles.statusModalStatusValue}>
+                {(statusConfirmModal.nextStatus || '').replace(/_/g, ' ')}
+              </Text>
+            </View>
+
+            <View style={styles.statusModalActions}>
+              <TouchableOpacity
+                style={styles.statusModalCancelBtn}
+                onPress={() => setStatusConfirmModal({ visible: false, nextStatus: null })}
+                disabled={updatingStatus}
+              >
+                <Text style={styles.statusModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.statusModalConfirmBtn}
+                onPress={() => {
+                  const next = statusConfirmModal.nextStatus;
+                  setStatusConfirmModal({ visible: false, nextStatus: null });
+                  if (next) handleManualStatusUpdate(next);
+                }}
+                disabled={updatingStatus}
+              >
+                {updatingStatus ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.statusModalConfirmText}>Confirm</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={proofPickerModal.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProofPickerModal({ visible: false, packingUri: null, billUri: null })}
+      >
+        <View style={styles.statusModalOverlay}>
+          <View style={styles.proofModalCard}>
+            <Text style={styles.proofModalTitle}>Upload Packing Proof</Text>
+            <Text style={styles.proofModalSubTitle}>Add both photos before uploading.</Text>
+
+            <View style={styles.proofRow}>
+              <View style={styles.proofInfoWrap}>
+                <Text style={styles.proofLabel}>Packing Photo</Text>
+                <Text style={styles.proofStateText}>{proofPickerModal.packingUri ? 'Selected' : 'Not selected'}</Text>
+              </View>
+              <View style={styles.proofActionWrap}>
+                <TouchableOpacity style={styles.proofSourceBtn} onPress={() => pickProofImage('packing', true)}>
+                  <Ionicons name="camera-outline" size={14} color="#1B5E20" />
+                  <Text style={styles.proofSourceText}>Camera</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.proofSourceBtn} onPress={() => pickProofImage('packing', false)}>
+                  <Ionicons name="images-outline" size={14} color="#1B5E20" />
+                  <Text style={styles.proofSourceText}>Gallery</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.proofRow}>
+              <View style={styles.proofInfoWrap}>
+                <Text style={styles.proofLabel}>Bill Photo</Text>
+                <Text style={styles.proofStateText}>{proofPickerModal.billUri ? 'Selected' : 'Not selected'}</Text>
+              </View>
+              <View style={styles.proofActionWrap}>
+                <TouchableOpacity style={styles.proofSourceBtn} onPress={() => pickProofImage('bill', true)}>
+                  <Ionicons name="camera-outline" size={14} color="#1B5E20" />
+                  <Text style={styles.proofSourceText}>Camera</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.proofSourceBtn} onPress={() => pickProofImage('bill', false)}>
+                  <Ionicons name="images-outline" size={14} color="#1B5E20" />
+                  <Text style={styles.proofSourceText}>Gallery</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.statusModalActions}>
+              <TouchableOpacity
+                style={styles.statusModalCancelBtn}
+                onPress={() => setProofPickerModal({ visible: false, packingUri: null, billUri: null })}
+                disabled={uploadingPackingProof}
+              >
+                <Text style={styles.statusModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.statusModalConfirmBtn,
+                  (!proofPickerModal.packingUri || !proofPickerModal.billUri || uploadingPackingProof) && styles.proofDisabledBtn,
+                ]}
+                onPress={confirmProofUpload}
+                disabled={!proofPickerModal.packingUri || !proofPickerModal.billUri || uploadingPackingProof}
+              >
+                {uploadingPackingProof ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.statusModalConfirmText}>Upload Now</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={successModal.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSuccessModal({ visible: false, title: 'Success', message: '' })}
+      >
+        <View style={styles.statusModalOverlay}>
+          <View style={styles.successModalCard}>
+            <View style={styles.successModalIconWrap}>
+              <Ionicons name="checkmark-circle" size={30} color="#16A34A" />
+            </View>
+            <Text style={styles.successModalTitle}>{successModal.title}</Text>
+            <Text style={styles.successModalMessage}>{successModal.message}</Text>
+            <TouchableOpacity
+              style={styles.successModalOkBtn}
+              onPress={() => setSuccessModal({ visible: false, title: 'Success', message: '' })}
+            >
+              <Text style={styles.successModalOkText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1185,6 +1568,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  disabledActionBtn: { opacity: 0.5 },
+  disabledActionHint: { fontSize: 12, color: '#6B7280', marginTop: -2, marginLeft: 4 },
+  destQrOnlyHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E8F0FF',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  destQrOnlyHintText: { color: '#2D4C9C', fontSize: 12, fontWeight: '600' },
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16, marginBottom: 16 },
   actionCard: { flex: 1, minWidth: '45%', aspectRatio: 1.2, borderRadius: 16, padding: 16, justifyContent: 'center', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 },
   actionIconWrap: { marginBottom: 8 },
@@ -1214,6 +1609,141 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionRowText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  // Status confirmation modal
+  statusModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  statusModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 18,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
+  statusModalIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF0EA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  statusModalTitle: { fontSize: 18, fontWeight: '800', color: '#1F2937' },
+  statusModalMessage: { fontSize: 13, color: '#6B7280', marginTop: 6 },
+  statusModalStatusPill: {
+    marginTop: 14,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusModalStatusLabel: { fontSize: 12, color: '#9A3412', fontWeight: '700' },
+  statusModalStatusValue: { fontSize: 13, color: '#C2410C', fontWeight: '800' },
+  statusModalActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  statusModalCancelBtn: {
+    flex: 1,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  statusModalCancelText: { color: '#4B5563', fontSize: 14, fontWeight: '700' },
+  statusModalConfirmBtn: {
+    flex: 1,
+    borderRadius: 12,
+    backgroundColor: '#FF5722',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  statusModalConfirmText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  proofModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 18,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
+  proofModalTitle: { fontSize: 18, fontWeight: '800', color: '#1F2937' },
+  proofModalSubTitle: { fontSize: 13, color: '#6B7280', marginTop: 4, marginBottom: 14 },
+  proofRow: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    backgroundColor: '#FAFAFA',
+  },
+  proofInfoWrap: { marginBottom: 8 },
+  proofLabel: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  proofStateText: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  proofActionWrap: { flexDirection: 'row', gap: 8 },
+  proofSourceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  proofSourceText: { color: '#1B5E20', fontSize: 12, fontWeight: '700' },
+  proofDisabledBtn: { opacity: 0.5 },
+
+  // Success modal
+  successModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    paddingVertical: 22,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
+  successModalIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  successModalTitle: { fontSize: 19, fontWeight: '800', color: '#14532D' },
+  successModalMessage: { fontSize: 14, color: '#4B5563', textAlign: 'center', marginTop: 8, lineHeight: 20 },
+  successModalOkBtn: {
+    marginTop: 18,
+    minWidth: 120,
+    backgroundColor: '#16A34A',
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 26,
+    alignItems: 'center',
+  },
+  successModalOkText: { color: '#fff', fontSize: 14, fontWeight: '800' },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },

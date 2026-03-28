@@ -1,4 +1,4 @@
-﻿/**
+/**
  * OrderHistory.js
  * Customer order history - full conversion of Flutter order_history.dart (967 lines)
  *
@@ -9,7 +9,7 @@
  *   - Transporter card with name, vehicle, phone
  *   - Delivery person card with name, phone
  *   - Expandable order detail dialog
- *   - Tap order -> OrderSummary; Track Order -> CustomerOrderTracking
+ *   - Tap order -> OrderSummary; Track Order -> OrderTracking
  *   - Pull to refresh, loading & empty states
  */
 
@@ -81,7 +81,7 @@ const getProductImage = (item) => {
   if (item.image) return item.image;
   if (item.product_image) return item.product_image;
   if (item.product_image_url) return item.product_image_url;
-  // Sequelize returns association as capital-P "Product" — check both cases
+  // Sequelize returns association as capital-P "Product" � check both cases
   const product = item.Product || item.product;
   if (product) {
     const imgs = product.images;
@@ -680,7 +680,7 @@ const OrderHistory = ({ navigation }) => {
 
   const handleTrackOrder = (order) => {
     setModalVisible(false);
-    navigation.navigate('CustomerOrderTracking', { orderId: order.order_id || order.id, order });
+    navigation.navigate('OrderTracking', { orderId: order.order_id || order.id, order });
   };
 
   const handleViewSummary = () => {

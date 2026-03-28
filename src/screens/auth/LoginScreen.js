@@ -33,6 +33,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import CustomButton from '../../components/CustomButton';
 
 // Guard: native module may not be present in Expo Go / first-run before
 // `expo run:android` rebuild. Wrap in require() to avoid hard crash.
@@ -560,26 +561,13 @@ const LoginScreen = ({ navigation }) => {
             </TouchableOpacity>
 
             {/* LOGIN button */}
-            <TouchableOpacity
-              style={[styles.loginBtn, isLoading && { opacity: 0.7 }]}
-              onPress={handleLogin}
-              disabled={isLoading}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={['#2E7D32', '#4CAF50']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.loginBtnGradient}
-              >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.loginBtnText}>LOGIN</Text>
-              )}
-              </LinearGradient>
-            </TouchableOpacity>
-
+              <CustomButton
+                title="LOGIN"
+                onPress={handleLogin}
+                loading={isLoading}
+                style={styles.loginBtn}
+                variant="primary"
+              />
             {/* OR divider */}
             <View style={styles.divider}>
               <View style={styles.dividerLine} />

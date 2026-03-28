@@ -15,9 +15,19 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import api from '../../services/api';
-import { updateDeliveryOrderStatus } from '../../services/orderService';
+import api, { BASE_URL } from '../../services/api';
 import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
+
+const API_ORIGIN = BASE_URL.replace(/\/api$/i, '');
+
+const toAbsoluteImageUrl = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  const cleaned = value.trim().replace(/\\/g, '/');
+  if (!cleaned) return null;
+  if (/^\/\//.test(cleaned)) return `https:${cleaned}`;
+  if (/^https?:\/\//i.test(cleaned) || /^data:image\//i.test(cleaned)) return cleaned;
+  return `${API_ORIGIN}${cleaned.startsWith('/') ? '' : '/'}${cleaned}`;
+};
 
 const STATUS_COLORS = {
   PENDING: '#FF9800',
@@ -101,7 +111,13 @@ const formatAddress = (rawAddress) => {
 const pickFirst = (...values) => values.find((value) => !!value);
 
 const buildFarmerProfile = (order) => {
-  const farmer = order?.farmer || order?.pickup_farmer || order?.source_farmer || null;
+  const farmer =
+    order?.farmer ||
+    order?.pickup_farmer ||
+    order?.source_farmer ||
+    order?.product?.farmer ||
+    order?.Product?.farmer ||
+    null;
   const name = pickFirst(
     farmer?.name,
     farmer?.full_name,
@@ -115,6 +131,11 @@ const buildFarmerProfile = (order) => {
     farmer?.phone,
     farmer?.mobile_number,
     farmer?.phone_number,
+    farmer?.mobile,
+    order?.farmer_mobile,
+    order?.farmer_mobile_number,
+    order?.pickup_farmer_mobile,
+    order?.pickup_farmer_mobile_number,
     order?.farmer_phone,
     order?.pickup_farmer_phone,
     order?.source_phone,
@@ -133,8 +154,20 @@ const buildFarmerProfile = (order) => {
       null
     )
   );
+  const image = toAbsoluteImageUrl(
+    pickFirst(
+      farmer?.image_url,
+      farmer?.profile_image,
+      farmer?.image,
+      farmer?.photo,
+      order?.farmer_image_url,
+      order?.farmer_image,
+      order?.pickup_farmer_image,
+      order?.source_farmer_image
+    )
+  );
 
-  return { name, phone, address };
+  return { name, phone, address, image };
 };
 
 const buildCustomerProfile = (order) => {
@@ -165,20 +198,32 @@ const buildCustomerProfile = (order) => {
       null
     )
   );
+  const image = toAbsoluteImageUrl(
+    pickFirst(
+      customer?.image_url,
+      customer?.profile_image,
+      customer?.image,
+      customer?.photo,
+      order?.customer_image_url,
+      order?.customer_image,
+      order?.delivery_customer_image,
+      order?.destination_customer_image
+    )
+  );
 
-  return { name, phone, address };
+  return { name, phone, address, image };
 };
 
-// Pickup and destination delivery persons both use QR, with role-specific transitions in scanner.
+// Pickup uses manual updates, destination uses QR.
 const PICKUP_STATUS_ACTIONS = {
-  ASSIGNED: { label: 'Scan QR to Start Pickup', icon: 'qr-code-outline' },
-  PICKUP_ASSIGNED: { label: 'Scan QR to Confirm Pickup', icon: 'qr-code-outline' },
-  PICKUP_IN_PROGRESS: { label: 'Scan QR to Confirm Pickup', icon: 'qr-code-outline' },
+  ASSIGNED: { label: 'Update Pickup Status', icon: 'create-outline', route: 'OrderUpdate' },
+  PICKUP_ASSIGNED: { label: 'Update Pickup Status', icon: 'create-outline', route: 'OrderUpdate' },
+  PICKUP_IN_PROGRESS: { label: 'Update Pickup Status', icon: 'create-outline', route: 'OrderUpdate' },
 };
 
 const DELIVERY_STATUS_ACTIONS = {
-  REACHED_DESTINATION: { label: 'Scan QR to Start Delivery', icon: 'qr-code-outline' },
-  OUT_FOR_DELIVERY: { label: 'Scan QR to Confirm Delivery', icon: 'qr-code-outline' },
+  REACHED_DESTINATION: { label: 'Scan QR to Start Delivery', icon: 'qr-code-outline', route: 'Scanner' },
+  OUT_FOR_DELIVERY: { label: 'Scan QR to Confirm Delivery', icon: 'qr-code-outline', route: 'Scanner' },
 };
 
 const OrderDetails = ({ navigation, route }) => {
@@ -222,7 +267,7 @@ const OrderDetails = ({ navigation, route }) => {
     fetchOrder();
   };
 
-  // ─── Status (QR-only for destination delivery person) ────────────────
+  // ─── Status (Manual for pickup, QR-only for destination) ────────────────
   const rawStatus = (order?.current_status || order?.status || '').toUpperCase();
   const currentStatus = STATUS_NORMALIZE[rawStatus] || rawStatus;
   const pickupOnlyOrder = isPickupOrder(order);
@@ -230,23 +275,54 @@ const OrderDetails = ({ navigation, route }) => {
     ? PICKUP_STATUS_ACTIONS[currentStatus]
     : DELIVERY_STATUS_ACTIONS[currentStatus];
 
-  // Navigate to QR scanner tab for pickup/delivery confirmation
-  const handleQRScan = () =>
-    navigation.navigate('DeliveryTabs', {
-      screen: 'Scanner',
-      params: {
-        expectedOrderId: orderId,
-        expectedStatus: currentStatus,
-      },
-    });
+  // Navigate to appropriate screen based on action route
+  const handleAction = () => {
+    if (action.route === 'Scanner') {
+      navigation.navigate('DeliveryTabs', {
+        screen: 'Scanner',
+        params: {
+          expectedOrderId: orderId,
+          expectedStatus: currentStatus,
+        },
+      });
+    } else {
+      navigation.navigate('OrderUpdate', {
+        orderId: orderId,
+        order: order,
+      });
+    }
+  };
 
   // ─── Phone & Map actions ──────────────────────────────────────────────
-  const callPerson = (phone) => {
+  const callPerson = async (phone) => {
     if (!phone) {
       Alert.alert('No Phone', 'Phone number not available');
       return;
     }
-    Linking.openURL(`tel:${phone}`).catch(() => Alert.alert('Error', 'Cannot make call'));
+
+    const rawPhone = String(phone).trim();
+    const hasPlusPrefix = rawPhone.startsWith('+');
+    const digits = rawPhone.replace(/\D/g, '');
+    const normalizedPhone = hasPlusPrefix ? `+${digits}` : digits;
+
+    if (!normalizedPhone) {
+      Alert.alert('Invalid Number', 'Phone number format is invalid');
+      return;
+    }
+
+    const telUrl = `tel:${normalizedPhone}`;
+    const telPromptUrl = `telprompt:${normalizedPhone}`;
+
+    try {
+      // Prefer direct openURL because canOpenURL can be unreliable for tel on some Android devices.
+      await Linking.openURL(telUrl);
+    } catch {
+      try {
+        await Linking.openURL(telPromptUrl);
+      } catch {
+        Alert.alert('Call Failed', 'Could not open phone dialer');
+      }
+    }
   };
 
   const openMap = (address) => {
@@ -377,9 +453,19 @@ const OrderDetails = ({ navigation, route }) => {
             <MaterialCommunityIcons name="store-outline" size={20} color="#1B5E20" />
             <Text style={styles.cardTitle}>Pickup From</Text>
           </View>
-          <Text style={styles.personName}>
-            {farmerProfile.name}
-          </Text>
+          <View style={styles.personHeader}>
+            {farmerProfile.image ? (
+              <Image source={{ uri: farmerProfile.image }} style={styles.personAvatar} />
+            ) : (
+              <View style={styles.personAvatarFallback}>
+                <Ionicons name="person-outline" size={20} color="#1B5E20" />
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.personName}>{farmerProfile.name}</Text>
+              <Text style={styles.personRole}>Farmer</Text>
+            </View>
+          </View>
           <View style={styles.infoRow}>
             <Ionicons name="location-outline" size={16} color="#888" />
             <Text style={styles.infoText}>
@@ -419,9 +505,19 @@ const OrderDetails = ({ navigation, route }) => {
               <Ionicons name="person-outline" size={20} color="#1B5E20" />
               <Text style={styles.cardTitle}>Deliver To</Text>
             </View>
-            <Text style={styles.personName}>
-              {customerProfile.name}
-            </Text>
+            <View style={styles.personHeader}>
+              {customerProfile.image ? (
+                <Image source={{ uri: customerProfile.image }} style={styles.personAvatar} />
+              ) : (
+                <View style={styles.personAvatarFallback}>
+                  <Ionicons name="person-outline" size={20} color="#1B5E20" />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.personName}>{customerProfile.name}</Text>
+                <Text style={styles.personRole}>Customer</Text>
+              </View>
+            </View>
             <View style={styles.infoRow}>
               <Ionicons name="location-outline" size={16} color="#888" />
               <Text style={styles.infoText}>
@@ -539,12 +635,12 @@ const OrderDetails = ({ navigation, route }) => {
           {renderTimeline()}
         </View>
 
-        {/* Action — QR scan only for destination delivery person */}
+        {/* Action button: routes to Scanner for destination, OrderUpdate for pickup */}
         {action && currentStatus !== 'DELIVERED' && currentStatus !== 'CANCELLED' && (
           <View style={styles.actionsContainer}>
             <TouchableOpacity
               style={styles.primaryActionBtn}
-              onPress={handleQRScan}
+              onPress={handleAction}
               activeOpacity={0.7}
             >
               <LinearGradient
@@ -614,7 +710,18 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   cardTitle: { fontSize: Font.base, fontWeight: Font.weightExtraBold, color: Colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  personName: { fontSize: Font.lg, fontWeight: Font.weightExtraBold, color: Colors.textPrimary, marginBottom: 8 },
+  personHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  personAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#EAF4EA' },
+  personAvatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EAF4EA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  personName: { fontSize: Font.lg, fontWeight: Font.weightExtraBold, color: Colors.textPrimary, marginBottom: 2 },
+  personRole: { fontSize: Font.xs, color: Colors.textMuted, fontWeight: Font.weightSemiBold },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 },
   infoText: { flex: 1, fontSize: Font.sm, color: Colors.textSecondary, lineHeight: 19 },
 

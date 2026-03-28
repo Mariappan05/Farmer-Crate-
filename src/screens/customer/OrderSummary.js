@@ -401,7 +401,7 @@ const OrderSummary = ({ navigation, route }) => {
             {status !== 'delivered' && status !== 'cancelled' && (
               <TouchableOpacity
                 style={[styles.trackChip, { backgroundColor: statusCfg.color }]}
-                onPress={() => navigation.navigate('CustomerOrderTracking', { order })}
+                onPress={() => navigation.navigate('OrderTracking', { order })}
               >
                 <Ionicons name="navigate-outline" size={14} color="#fff" />
                 <Text style={styles.trackChipText}>Track</Text>
@@ -571,7 +571,7 @@ const OrderSummary = ({ navigation, route }) => {
           {status !== 'delivered' && status !== 'cancelled' && (
             <TouchableOpacity
               style={styles.trackOrderBtn}
-              onPress={() => navigation.navigate('CustomerOrderTracking', { order })}
+              onPress={() => navigation.navigate('OrderTracking', { order })}
               activeOpacity={0.85}
             >
               <Ionicons name="navigate-outline" size={20} color="#fff" />

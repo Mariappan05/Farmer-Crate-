@@ -22,14 +22,40 @@ import api from '../../services/api';
 import { pickImage, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import { updateDeliveryOrderStatus } from '../../services/orderService';
 import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
+import SignaturePad from '../../components/SignaturePad';
 
-const ALL_STATUSES = [
+const isPickupOrder = (order) => {
+  const deliveryType = (order?.delivery_type || '').toUpperCase();
+  if (deliveryType === 'PICKUP') return true;
+  if (deliveryType === 'DELIVERY') return false;
+
+  const status = (order?.current_status || order?.status || '').toUpperCase();
+  return ['ASSIGNED', 'PLACED', 'RECEIVED', 'SHIPPED', 'PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS', 'PICKED_UP', 'IN_TRANSIT'].includes(status);
+};
+
+const PICKUP_STATUSES = [
   { key: 'PICKUP_IN_PROGRESS', label: 'Pickup In Progress', icon: 'bicycle-outline', color: '#00BCD4' },
-  { key: 'SHIPPED', label: 'Picked Up / Shipped', icon: 'cube-outline', color: '#FF5722' },
+  { key: 'PICKED_UP', label: 'Picked Up / Dropped at Transporter', icon: 'checkmark-circle-outline', color: '#4CAF50' },
+  { key: 'FAILED', label: 'Failed Pickup', icon: 'alert-circle-outline', color: '#F44336' },
+  { key: 'CANCELLED', label: 'Cancelled', icon: 'close-circle-outline', color: '#9E9E9E' },
+];
+
+const DELIVERY_STATUSES = [
   { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', icon: 'car-outline', color: '#FF9800' },
   { key: 'DELIVERED', label: 'Delivered', icon: 'checkmark-circle-outline', color: '#4CAF50' },
   { key: 'FAILED', label: 'Failed Attempt', icon: 'alert-circle-outline', color: '#F44336' },
   { key: 'CANCELLED', label: 'Cancelled', icon: 'close-circle-outline', color: '#9E9E9E' },
+];
+
+const HISTORY_REDIRECT_STATUSES = [
+  'PICKED_UP',
+  'RECEIVED',
+  'SHIPPED',
+  'DELIVERED',
+  'COMPLETED',
+  'FAILED',
+  'CANCELLED',
+  'TRANSFERRED',
 ];
 
 const OrderUpdatePage = ({ navigation, route }) => {
@@ -43,6 +69,7 @@ const OrderUpdatePage = ({ navigation, route }) => {
   const [photoUri, setPhotoUri] = useState(null);
   const [photoUrl, setPhotoUrl] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [signatureData, setSignatureData] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const orderId = paramOrderId || order?.order_id || order?.id;
@@ -120,32 +147,18 @@ const OrderUpdatePage = ({ navigation, route }) => {
     setIsUpdating(true);
     try {
       const payload = {
+        order_id: orderId,
         status: selectedStatus,
         remarks: remarks.trim() || undefined,
         proof_image_url: photoUrl || undefined,
+        signature_url: signatureData || undefined
       };
 
-      await updateDeliveryOrderStatus(orderId, selectedStatus);
-
-      // If there's a photo or remarks, try to send them separately
-      if (photoUrl || remarks.trim()) {
-        try {
-          await api.put(`/delivery-persons/orders/${orderId}/update`, payload);
-        } catch {
-          // Not critical if this fails
-        }
-      }
-
+      await api.put(`/delivery-persons/update-status`, payload);
       playSuccessAnimation();
     } catch (e) {
-      // Fallback
-      try {
-        await api.put(`/orders/${orderId}/status`, { status: selectedStatus });
-        playSuccessAnimation();
-      } catch {
-        Alert.alert('Error', e.message || 'Failed to update order status');
-        setIsUpdating(false);
-      }
+      Alert.alert('Error', e.response?.data?.message || e.message || 'Failed to update order status');
+      setIsUpdating(false);
     }
   };
 
@@ -161,17 +174,25 @@ const OrderUpdatePage = ({ navigation, route }) => {
   const playSuccessAnimation = () => {
     setShowSuccess(true);
     setIsUpdating(false);
+    const shouldOpenHistory = HISTORY_REDIRECT_STATUSES.includes((selectedStatus || '').toUpperCase());
     Animated.parallel([
       Animated.timing(successAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
       Animated.spring(scaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
     ]).start(() => {
       setTimeout(() => {
+        if (shouldOpenHistory) {
+          navigation.navigate('DeliveryTabs', { screen: 'History' });
+          return;
+        }
         navigation.goBack();
       }, 1500);
     });
   };
 
-  const currentStatusObj = ALL_STATUSES.find((s) => s.key === currentStatus);
+  const isPickup = isPickupOrder(orderData || order);
+  const availableStatuses = isPickup ? PICKUP_STATUSES : DELIVERY_STATUSES;
+
+  const currentStatusObj = availableStatuses.find((s) => s.key === currentStatus);
 
   // ─── Success overlay ──────────────────────────────────────────────────
   if (showSuccess) {
@@ -253,7 +274,7 @@ const OrderUpdatePage = ({ navigation, route }) => {
               <Ionicons name="swap-vertical-outline" size={20} color="#1B5E20" />
               <Text style={styles.cardTitle}>Select New Status</Text>
             </View>
-            {ALL_STATUSES.map((status) => (
+            {availableStatuses.map((status) => (
               <TouchableOpacity
                 key={status.key}
                 onPress={() => setSelectedStatus(status.key)}
@@ -348,12 +369,14 @@ const OrderUpdatePage = ({ navigation, route }) => {
               <MaterialCommunityIcons name="draw" size={20} color="#1B5E20" />
               <Text style={styles.cardTitle}>Digital Signature</Text>
             </View>
-            <View style={styles.signaturePlaceholder}>
-              <MaterialCommunityIcons name="gesture" size={40} color="#ccc" />
-              <Text style={styles.signaturePlaceholderText}>
-                Signature capture coming soon
-              </Text>
+            <View style={{ height: 200 }}>
+              <SignaturePad onOK={(str) => setSignatureData(str)} />
             </View>
+            {signatureData && (
+              <Text style={{ marginTop: 8, color: '#4CAF50', fontSize: 13 }}>
+                <Ionicons name="checkmark-circle" /> Signature captured successfully
+              </Text>
+            )}
           </View>
 
           {/* Update Button */}

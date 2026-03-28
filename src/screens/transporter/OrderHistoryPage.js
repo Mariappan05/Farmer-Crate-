@@ -24,6 +24,7 @@ import {
     View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+  import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 
 const FILTERS = ['All', 'Completed', 'Cancelled'];
@@ -47,8 +48,41 @@ const formatDate = (d) => {
 
 const formatCurrency = (a) => '₹' + (parseFloat(a) || 0).toFixed(2);
 
+const toNumberOrZero = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const getTransporterOrderSide = (order, myTransporterId) => {
+  const explicitRole = (order?.transporter_role || order?.role || '').toUpperCase();
+  if (explicitRole === 'PICKUP_SHIPPING') return 'SOURCE';
+  if (explicitRole === 'DELIVERY') return 'DESTINATION';
+
+  const sourceId = toNumberOrZero(order?.source_transporter_id || order?.pickup_transporter_id || order?.sourceTransporter?.transporter_id);
+  const destinationId = toNumberOrZero(order?.destination_transporter_id || order?.delivery_transporter_id || order?.destinationTransporter?.transporter_id);
+  const myId = toNumberOrZero(myTransporterId);
+
+  if (myId && sourceId && destinationId && sourceId === myId && destinationId === myId) return 'BOTH';
+  if (myId && sourceId && sourceId === myId) return 'SOURCE';
+  if (myId && destinationId && destinationId === myId) return 'DESTINATION';
+
+  // Safe fallback so order still appears in history if role mapping is missing.
+  return 'SOURCE';
+};
+
 const OrderHistoryPage = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { authState } = useAuth();
+  const myTransporterId = authState?.user?.transporter_id || authState?.user?.id || authState?.userId;
+
+  const navigateToOrderDetail = useCallback((orderId, order) => {
+    const parentNav = navigation.getParent?.();
+    if (parentNav?.navigate) {
+      parentNav.navigate('OrderDetail', { orderId, order });
+      return;
+    }
+    navigation.navigate('OrderDetail', { orderId, order });
+  }, [navigation]);
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -110,6 +144,88 @@ const OrderHistoryPage = ({ navigation }) => {
     return true;
   });
 
+  const sourceOrders = filteredOrders.filter((o) => {
+    const side = getTransporterOrderSide(o, myTransporterId);
+    return side === 'SOURCE' || side === 'BOTH';
+  });
+
+  const destinationOrders = filteredOrders.filter((o) => {
+    const side = getTransporterOrderSide(o, myTransporterId);
+    return side === 'DESTINATION' || side === 'BOTH';
+  });
+
+  const renderOrderCard = (order) => {
+    const orderId = order.order_id || order.id;
+    const status = (order.current_status || order.status || 'PENDING').toUpperCase();
+    const product = order.items?.[0]?.product || order.product || {};
+
+    return (
+      <TouchableOpacity
+        key={orderId}
+        style={styles.orderCard}
+        onPress={() => navigateToOrderDetail(orderId, order)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.orderHeader}>
+          <View>
+            <Text style={styles.orderId}>Order #{orderId}</Text>
+            <Text style={styles.orderDate}>{formatDate(order.created_at || order.order_date)}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(status) + '20' }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(status) }]}>
+              {status.replace(/_/g, ' ')}
+            </Text>
+          </View>
+        </View>
+
+        {product.name && (
+          <View style={styles.detailRow}>
+            <Ionicons name="cube-outline" size={14} color="#666" />
+            <Text style={styles.detailText} numberOfLines={1}>{product.name}</Text>
+          </View>
+        )}
+
+        <View style={styles.addressesWrap}>
+          <View style={styles.detailRow}>
+            <Ionicons name="location" size={14} color="#4CAF50" />
+            <Text style={styles.detailText} numberOfLines={1}>
+              From: {order.farmer_name || order.farmer?.full_name || order.farmer?.name || 'Farmer'}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Ionicons name="location" size={14} color="#F44336" />
+            <Text style={styles.detailText} numberOfLines={1}>
+              To: {order.customer_name || order.customer?.full_name || order.customer?.name || 'Customer'}
+            </Text>
+          </View>
+        </View>
+
+        {(order.total_amount || order.amount) && (
+          <View style={styles.amountRow}>
+            <Text style={styles.amountLabel}>Amount</Text>
+            <Text style={styles.amountValue}>{formatCurrency(order.total_amount || order.amount)}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderSection = (title, items) => (
+    <View style={styles.sectionWrap}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={styles.sectionCount}>{items.length}</Text>
+      </View>
+      {items.length === 0 ? (
+        <View style={styles.sectionEmptyCard}>
+          <Text style={styles.sectionEmptyText}>No {title.toLowerCase()} found.</Text>
+        </View>
+      ) : (
+        items.map(renderOrderCard)
+      )}
+    </View>
+  );
+
   /* ── Render ─────────────────────────────────────────────── */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -170,61 +286,10 @@ const OrderHistoryPage = ({ navigation }) => {
               </Text>
             </View>
           ) : (
-            filteredOrders.map((order) => {
-              const orderId = order.order_id || order.id;
-              const status = (order.current_status || order.status || 'PENDING').toUpperCase();
-              const product = order.items?.[0]?.product || order.product || {};
-
-              return (
-                <TouchableOpacity
-                  key={orderId}
-                  style={styles.orderCard}
-                  onPress={() => navigation.navigate('OrderDetail', { orderId, order })}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.orderHeader}>
-                    <View>
-                      <Text style={styles.orderId}>Order #{orderId}</Text>
-                      <Text style={styles.orderDate}>{formatDate(order.created_at || order.order_date)}</Text>
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(status) + '20' }]}>
-                      <Text style={[styles.statusText, { color: getStatusColor(status) }]}>
-                        {status.replace(/_/g, ' ')}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {product.name && (
-                    <View style={styles.detailRow}>
-                      <Ionicons name="cube-outline" size={14} color="#666" />
-                      <Text style={styles.detailText} numberOfLines={1}>{product.name}</Text>
-                    </View>
-                  )}
-
-                  <View style={styles.addressesWrap}>
-                    <View style={styles.detailRow}>
-                      <Ionicons name="location" size={14} color="#4CAF50" />
-                      <Text style={styles.detailText} numberOfLines={1}>
-                        From: {order.farmer_name || order.farmer?.full_name || order.farmer?.name || 'Farmer'}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Ionicons name="location" size={14} color="#F44336" />
-                      <Text style={styles.detailText} numberOfLines={1}>
-                        To: {order.customer_name || order.customer?.full_name || order.customer?.name || 'Customer'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {(order.total_amount || order.amount) && (
-                    <View style={styles.amountRow}>
-                      <Text style={styles.amountLabel}>Amount</Text>
-                      <Text style={styles.amountValue}>{formatCurrency(order.total_amount || order.amount)}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })
+            <>
+              {renderSection('Source Orders', sourceOrders)}
+              {renderSection('Destination Orders', destinationOrders)}
+            </>
           )}
         </ScrollView>
       )}
@@ -258,6 +323,35 @@ const styles = StyleSheet.create({
   filterTextActive: { color: '#fff' },
 
   body: { flex: 1, paddingHorizontal: 16 },
+
+  sectionWrap: { marginBottom: 12 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: '#1B5E20' },
+  sectionCount: {
+    minWidth: 24,
+    textAlign: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1B5E20',
+    backgroundColor: '#E8F5E9',
+  },
+  sectionEmptyCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  sectionEmptyText: { color: '#7B8794', fontSize: 13, fontWeight: '600' },
 
   orderCard: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,

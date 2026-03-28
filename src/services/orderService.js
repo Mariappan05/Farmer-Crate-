@@ -415,7 +415,7 @@ export const getTransporterActiveOrders = async () => {
   return data;
 };
 
-export const getTransporterOrderTracking = async (orderId) => {
+export const getOrderTracking = async (orderId) => {
   const { data } = await api.get(`/transporters/orders/${orderId}/track`);
   return data;
 };

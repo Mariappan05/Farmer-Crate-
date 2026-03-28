@@ -32,6 +32,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import { useAuth } from '../../context/AuthContext';
 import ToastMessage from '../../utils/Toast';
 
@@ -116,6 +117,18 @@ const parseVehicleBuckets = (payload) => {
 const TransporterDashboard = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { authState } = useAuth();
+  const myTransporterId = Number(
+    authState?.user?.transporter_id || authState?.user?.id || authState?.userId || 0
+  );
+
+  const navigateToStackScreen = useCallback((screen, params) => {
+    const parentNav = navigation.getParent?.();
+    if (parentNav?.navigate) {
+      parentNav.navigate(screen, params);
+      return;
+    }
+    navigation.navigate(screen, params);
+  }, [navigation]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -130,6 +143,35 @@ const TransporterDashboard = ({ navigation }) => {
   const [selectedPersonId, setSelectedPersonId] = useState(null);
   const [assigning, setAssigning] = useState(false);
   const toastRef = React.useRef(null);
+
+  const getOrderRoleForCurrentTransporter = useCallback((order) => {
+    const explicitRole = (order?.transporter_role || order?.role || '').toUpperCase();
+    if (explicitRole === 'PICKUP_SHIPPING' || explicitRole === 'DELIVERY') return explicitRole;
+
+    const sourceId = Number(order?.source_transporter_id || order?.pickup_transporter_id || 0);
+    const destinationId = Number(order?.destination_transporter_id || order?.delivery_transporter_id || 0);
+    const status = (order?.current_status || order?.status || '').toUpperCase();
+
+    if (myTransporterId > 0) {
+      if (sourceId === myTransporterId && destinationId !== myTransporterId) return 'PICKUP_SHIPPING';
+      if (destinationId === myTransporterId && sourceId !== myTransporterId) return 'DELIVERY';
+      if (sourceId === myTransporterId && destinationId === myTransporterId) {
+        if (['SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(status)) {
+          return 'DELIVERY';
+        }
+        return 'PICKUP_SHIPPING';
+      }
+    }
+
+    // Fallback inference when transporter IDs are missing in payload.
+    if (['ASSIGNED', 'PLACED', 'PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS', 'PICKED_UP', 'RECEIVED'].includes(status)) {
+      return 'PICKUP_SHIPPING';
+    }
+    if (['SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(status)) {
+      return 'DELIVERY';
+    }
+    return '';
+  }, [myTransporterId]);
 
   /* ── Fetch data ─────────────────────────────────────────── */
   const fetchDashboard = useCallback(async (silent = false) => {
@@ -147,15 +189,14 @@ const TransporterDashboard = ({ navigation }) => {
 
       const allOrders = normalizeArray(allocatedRes?.data);
       const srcOrders = allOrders.filter((o) => {
-        const role = (o.transporter_role || o.role || '').toUpperCase();
+        const role = getOrderRoleForCurrentTransporter(o);
         const status = (o.current_status || o.status || '').toUpperCase();
-        // Same transporter: backend already assigns correct role based on status
-        return role === 'PICKUP_SHIPPING' && status !== 'COMPLETED' && status !== 'CANCELLED';
+        return role === 'PICKUP_SHIPPING' && !['COMPLETED', 'CANCELLED', 'DELIVERED'].includes(status);
       });
       const destOrders = allOrders.filter((o) => {
-        const role = (o.transporter_role || o.role || '').toUpperCase();
+        const role = getOrderRoleForCurrentTransporter(o);
         const status = (o.current_status || o.status || '').toUpperCase();
-        return role === 'DELIVERY' && status !== 'COMPLETED' && status !== 'CANCELLED';
+        return role === 'DELIVERY' && !['COMPLETED', 'CANCELLED', 'DELIVERED'].includes(status);
       });
       setSourceOrders(srcOrders);
       setDestinationOrders(destOrders);
@@ -172,16 +213,9 @@ const TransporterDashboard = ({ navigation }) => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [getOrderRoleForCurrentTransporter]);
 
-  useEffect(() => {
-    fetchDashboard();
-  }, [fetchDashboard]);
-
-  useEffect(() => {
-    const unsub = navigation.addListener('focus', () => fetchDashboard(true));
-    return unsub;
-  }, [navigation, fetchDashboard]);
+  useAutoRefresh(fetchDashboard, 10000);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -190,7 +224,7 @@ const TransporterDashboard = ({ navigation }) => {
 
   /* ── Open assign dialog ─────────────────────────────────── */
   const openAssignModal = (order) => {
-    const isSource = order.transporter_role === 'PICKUP_SHIPPING';
+    const isSource = getOrderRoleForCurrentTransporter(order) === 'PICKUP_SHIPPING';
     setSelectedVehicleId(null);
     setSelectedVehicleType(null);
     setSelectedPersonId(null);
@@ -287,6 +321,7 @@ const TransporterDashboard = ({ navigation }) => {
     { label: 'Vehicles', icon: 'car-outline', screen: 'Vehicles', color: '#00BCD4' },
     { label: 'Add Person', icon: 'person-add-outline', screen: 'AddDeliveryPerson', color: '#1B5E20' },
   ];
+  const stackOnlyQuickActions = new Set(['QRScan', 'AddDeliveryPerson']);
 
   /* ── Render order card ──────────────────────────────────── */
   const renderOrderCard = (order, i) => {
@@ -299,7 +334,7 @@ const TransporterDashboard = ({ navigation }) => {
       <TouchableOpacity
         key={orderId || i}
         style={styles.orderCard}
-        onPress={() => navigation.navigate('OrderDetail', { orderId, order })}
+        onPress={() => navigateToStackScreen('OrderDetail', { orderId, order })}
         activeOpacity={0.7}
       >
         <View style={styles.orderHeader}>
@@ -428,7 +463,13 @@ const TransporterDashboard = ({ navigation }) => {
             <TouchableOpacity
               key={i}
               style={styles.actionCard}
-              onPress={() => navigation.navigate(a.screen)}
+              onPress={() => {
+                if (stackOnlyQuickActions.has(a.screen)) {
+                  navigateToStackScreen(a.screen);
+                  return;
+                }
+                navigation.navigate(a.screen);
+              }}
             >
               <View style={[styles.actionIconWrap, { backgroundColor: a.color + '15' }]}>
                 <Ionicons name={a.icon} size={24} color={a.color} />
@@ -441,7 +482,7 @@ const TransporterDashboard = ({ navigation }) => {
         {/* Delivery Persons */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Delivery Persons ({deliveryPersons.length})</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('AddDeliveryPerson')}>
+          <TouchableOpacity onPress={() => navigateToStackScreen('AddDeliveryPerson')}>
             <Ionicons name="add-circle" size={24} color="#1B5E20" />
           </TouchableOpacity>
         </View>
@@ -449,7 +490,7 @@ const TransporterDashboard = ({ navigation }) => {
           <View style={styles.emptyCard}>
             <Ionicons name="people-outline" size={40} color="#ccc" />
             <Text style={styles.emptyText}>No delivery persons yet</Text>
-            <TouchableOpacity style={styles.addPersonBtn} onPress={() => navigation.navigate('AddDeliveryPerson')}>
+            <TouchableOpacity style={styles.addPersonBtn} onPress={() => navigateToStackScreen('AddDeliveryPerson')}>
               <Text style={styles.addPersonBtnText}>+ Add Delivery Person</Text>
             </TouchableOpacity>
           </View>

@@ -1,4 +1,4 @@
-﻿import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -14,7 +14,7 @@ import AddDeliveryPerson from '../screens/transporter/AddDeliveryPerson';
 import BillPreview from '../screens/transporter/BillPreview';
 import BillAction from '../screens/transporter/BillAction';
 import OrderDetail from '../screens/transporter/OrderDetail';
-import TransporterOrderTracking from '../screens/transporter/TransporterOrderTracking';
+import OrderTracking from '../screens/common/OrderTracking';
 import QRScan from '../screens/transporter/QRScan';
 import FAQ from '../screens/common/FAQ';
 import HelpSupport from '../screens/common/HelpSupport';
@@ -33,7 +33,7 @@ const TRANS_TABS = [
   { name: 'Profile',   icon: 'person',  iconOff: 'person-outline',  label: 'Profile' },
 ];
 
-// ─── Modern Pill Tab Button ──────────────────────────────────────────────────
+// --- Modern Pill Tab Button --------------------------------------------------
 const AnimatedTabBtn = ({ item, onPress, isFocused }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pillAnim  = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
@@ -105,7 +105,7 @@ const TransporterNavigator = () => (
     <Stack.Screen name="BillPreview" component={BillPreview} />
     <Stack.Screen name="BillAction" component={BillAction} />
     <Stack.Screen name="OrderDetail" component={OrderDetail} />
-    <Stack.Screen name="TransporterOrderTracking" component={TransporterOrderTracking} />
+    <Stack.Screen name="OrderTracking" component={OrderTracking} />
     <Stack.Screen name="QRScan" component={QRScan} />
     <Stack.Screen name="FAQ" component={FAQ} />
     <Stack.Screen name="HelpSupport" component={HelpSupport} />

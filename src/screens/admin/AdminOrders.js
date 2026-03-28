@@ -7,7 +7,7 @@
  *   - Status filter chips: All, Pending, Confirmed, Shipped, Delivered, Cancelled
  *   - Order card: order ID, date, status badge, product images, customer/farmer name, total
  *   - Transporter info (when assigned)
- *   - "Track Order" → AdminOrderTracking
+ *   - "Track Order" → OrderTracking
  *   - Order detail modal
  *   - Pull to refresh, search
  */
@@ -37,6 +37,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import ToastMessage from '../../utils/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -445,9 +446,7 @@ const AdminOrders = ({ navigation }) => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+  useAutoRefresh(fetchOrders, 10000);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -479,7 +478,7 @@ const AdminOrders = ({ navigation }) => {
     <OrderCard
       order={item}
       onTrack={() =>
-        navigation.navigate('AdminOrderTracking', {
+        navigation.navigate('OrderTracking', {
           orderId: item.id || item.order_id,
           order: item,
         })

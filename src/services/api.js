@@ -21,6 +21,12 @@ const normalizeBaseUrl = (value) => {
 
 export const BASE_URL = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL);
 
+let runtimeAuthToken = null;
+
+export const setApiAuthToken = (token) => {
+  runtimeAuthToken = token || null;
+};
+
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 45000, // Render.com free tier can take 30s+ to wake up
@@ -30,7 +36,10 @@ const api = axios.create({
 // Auto-attach token to every request
 api.interceptors.request.use(async (config) => {
   try {
-    const token = await AsyncStorage.getItem('auth_token');
+    const token =
+      runtimeAuthToken ||
+      (await AsyncStorage.getItem('auth_token')) ||
+      (await AsyncStorage.getItem('jwt_token'));
     if (token) config.headers.Authorization = `Bearer ${token}`;
   } catch (_) {}
   return config;

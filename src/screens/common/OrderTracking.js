@@ -1,5 +1,5 @@
 /**
- * TransporterOrderTracking.js
+ * OrderTracking.js
  * Full 10-step order tracking for transporter view.
  *
  * Steps:
@@ -245,7 +245,7 @@ const InfoCard = ({ icon, mc, title, name, details, phone, image, iconColor }) =
 );
 
 /* ── Main Component ───────────────────────────────────────── */
-const TransporterOrderTracking = ({ navigation, route }) => {
+const OrderTracking = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const { orderId, order: initialOrder } = route.params || {};
   const [order, setOrder] = useState(initialOrder || null);
@@ -321,7 +321,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
       if (o) setOrder(o);
       setError(null);
     } catch (e) {
-      console.error('[TransporterOrderTracking] Fetch tracking error:', e.message);
+      console.error('[OrderTracking] Fetch tracking error:', e.message);
       if (!order) setError(e.message);
     } finally {
       setLoading(false);
@@ -331,7 +331,7 @@ const TransporterOrderTracking = ({ navigation, route }) => {
 
   useEffect(() => {
     if (initialOrder) {
-      console.log('[TransporterOrderTracking] Using route order data:', JSON.stringify(initialOrder, null, 2));
+      console.log('[OrderTracking] Using route order data:', JSON.stringify(initialOrder, null, 2));
       setOrder(initialOrder);
       setLoading(false);
       fetchOrder(true);
@@ -817,4 +817,4 @@ const s = StyleSheet.create({
 
 const trackStyles = s;
 
-export default TransporterOrderTracking;
+export default OrderTracking;
