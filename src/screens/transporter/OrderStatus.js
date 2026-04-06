@@ -42,11 +42,24 @@ const getStatusColor = (status) => {
   if (s === 'DELIVERED' || s === 'COMPLETED') return '#4CAF50';
   if (s === 'SHIPPED') return '#3F51B5';
   if (s === 'OUT_FOR_DELIVERY' || s === 'IN_TRANSIT') return '#00BCD4';
+  if (s === 'REACHED_DESTINATION') return '#673AB7';
   if (s === 'ASSIGNED') return '#9C27B0';
   if (s === 'CONFIRMED') return '#2196F3';
   if (s === 'CANCELLED') return '#F44336';
   if (s === 'RECEIVED') return '#FF5722';
   return '#FF9800';
+};
+
+const normalizeStatusToken = (status) => {
+  const s = String(status || '').toUpperCase();
+  if (s === 'OUT_OF_DELIVERY') return 'OUT_FOR_DELIVERY';
+  return s;
+};
+
+const getStatusDisplayText = (status) => {
+  const normalized = normalizeStatusToken(status);
+  if (normalized === 'REACHED_DESTINATION') return 'DESTINATION RECEIVED';
+  return normalized.replace(/_/g, ' ');
 };
 
 const formatDate = (d) => {
@@ -256,12 +269,13 @@ const OrderStatus = ({ navigation }) => {
   /* ── Render order card ──────────────────────────────────── */
   const renderOrder = (order) => {
     const orderId = order.order_id || order.id;
-    const status = (order.current_status || order.status || 'PENDING').toUpperCase();
+    const role = String(order.transporter_role || '').toUpperCase();
+    const rawStatus = normalizeStatusToken(order.current_status || order.status || 'PENDING');
+    const status = role === 'DELIVERY' && rawStatus === 'RECEIVED' ? 'REACHED_DESTINATION' : rawStatus;
     const product = order.items?.[0]?.product || order.product || {};
     const productName = product.name || order.product_name || `Order #${orderId}`;
     const productImage = getProductImage(order);
     const isUpdating = updatingId === orderId;
-    const role = order.transporter_role;
     const pickupAddressText = getAddressText(order.pickup_address || order.farmer?.address) || order.farmer_name || 'Farmer';
     const deliveryAddressText = getAddressText(order.delivery_address || order.customer?.address) || order.customer_name || 'Customer';
     const hasAssignedDeliveryPerson = !!(
@@ -295,7 +309,7 @@ const OrderStatus = ({ navigation }) => {
           </View>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(status) + '20' }]}>
             <Text style={[styles.statusText, { color: getStatusColor(status) }]}>
-              {status.replace(/_/g, ' ')}
+              {getStatusDisplayText(status)}
             </Text>
           </View>
         </View>

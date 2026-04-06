@@ -51,7 +51,7 @@ const STAGES = [
   { key: 'received',            label: 'Received at Hub',      icon: 'business-outline',     emoji: '\uD83C\uDFE2', color: '#00897B', desc: 'The order has reached the transporter hub.' },
   { key: 'shipped',             label: 'Shipped',              icon: 'boat-outline',         emoji: '\uD83D\uDEA2', color: '#3F51B5', desc: 'The order has been shipped to destination city.' },
   { key: 'in_transit',          label: 'In Transit',           icon: 'navigate-outline',     emoji: '\uD83D\uDE9B', color: '#3949AB', desc: 'Your order is currently in transit.' },
-  { key: 'reached_destination', label: 'Reached Destination',  icon: 'location-outline',     emoji: '\uD83D\uDCCD', color: '#673AB7', desc: 'The order reached destination city hub.' },
+  { key: 'reached_destination', label: 'Received at Destination',  icon: 'location-outline',     emoji: '\uD83D\uDCCD', color: '#673AB7', desc: 'The order has been received at the destination hub.' },
   { key: 'out_for_delivery',    label: 'Out for Delivery',     icon: 'bicycle-outline',      emoji: '\uD83D\uDEB4', color: '#00BCD4', desc: 'Your order is out for final delivery.' },
   { key: 'delivered',           label: 'Delivered',            icon: 'checkmark-circle',     emoji: '\uD83C\uDF89', color: '#4CAF50', desc: 'Your order has been delivered successfully!' },
 ];

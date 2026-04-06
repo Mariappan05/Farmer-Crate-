@@ -47,7 +47,7 @@ const TIMELINE_STAGES = [
   { key: 'RECEIVED',            label: 'Received at Source Office', icon: 'download',            color: '#00897B' },
   { key: 'SHIPPED',             label: 'Shipped to Destination', icon: 'airplane',              color: '#3F51B5' },
   { key: 'IN_TRANSIT',          label: 'In Transit',             icon: 'airplane',              color: '#3F51B5' },
-  { key: 'REACHED_DESTINATION', label: 'Reached Destination',    icon: 'business',              color: '#673AB7' },
+  { key: 'REACHED_DESTINATION', label: 'Received at Destination', icon: 'business',              color: '#673AB7' },
   { key: 'OUT_FOR_DELIVERY',    label: 'Out for Delivery',       icon: 'bicycle',               color: '#00BCD4' },
   { key: 'DELIVERED',           label: 'Delivered',              icon: 'checkmark-done-circle', color: '#4CAF50' },
 ];
@@ -302,9 +302,8 @@ const OrderDetail = ({ navigation, route }) => {
   const [proofPickerModal, setProofPickerModal] = useState({ visible: false, packingUri: null, billUri: null });
 
   const orderId = paramOrderId || order?.order_id || order?.id;
-  const status = (order?.current_status || order?.status || 'PENDING').toUpperCase();
-  const stageIdx = STATUS_INDEX[status] ?? 0;
-  const isCancelled = status === 'CANCELLED';
+  const rawStatus = (order?.current_status || order?.status || 'PENDING').toUpperCase();
+  const status = rawStatus;
   const myTransporterId = toNumberOrZero(
     authState?.user?.transporter_id || authState?.user?.id || authState?.userId || authState?.user_id
   );
@@ -319,6 +318,18 @@ const OrderDetail = ({ navigation, route }) => {
     !!destinationTransporterId &&
     myTransporterId === destinationTransporterId &&
     sourceTransporterId !== destinationTransporterId;
+  const normalizedDestinationStatus = isDestinationTransporterView && status === 'RECEIVED'
+    ? 'REACHED_DESTINATION'
+    : status;
+  const displayStatus = normalizedDestinationStatus;
+  const stageStatus = normalizedDestinationStatus;
+  const stageIdx = STATUS_INDEX[stageStatus] ?? 0;
+  const isCancelled = stageStatus === 'CANCELLED';
+  const isSameTransporterView =
+    !!sourceTransporterId &&
+    !!destinationTransporterId &&
+    sourceTransporterId === destinationTransporterId &&
+    myTransporterId === sourceTransporterId;
 
   /* ── Fetch ──────────────────────────────────────────────── */
   const fetchOrder = useCallback(async (silent = false) => {
@@ -604,7 +615,8 @@ const OrderDetail = ({ navigation, route }) => {
   };
 
   const getNextStatusByScan = () => {
-    const current = (order?.current_status || order?.status || '').toUpperCase();
+    const currentRaw = (order?.current_status || order?.status || '').toUpperCase();
+    const current = currentRaw;
     const isSameTransporter =
       sourceTransporterId > 0 &&
       destinationTransporterId > 0 &&
@@ -621,7 +633,7 @@ const OrderDetail = ({ navigation, route }) => {
     // Destination transporter is QR-only for delivery-side progression.
     if (isDestinationTransporterView && !isSameTransporter) {
       if (current === 'SHIPPED' || current === 'IN_TRANSIT') return 'REACHED_DESTINATION';
-      if (current === 'REACHED_DESTINATION') return 'OUT_FOR_DELIVERY';
+      if (current === 'RECEIVED' || current === 'REACHED_DESTINATION') return hasDP ? 'OUT_FOR_DELIVERY' : null;
       return null;
     }
 
@@ -636,7 +648,7 @@ const OrderDetail = ({ navigation, route }) => {
     if (current === 'RECEIVED') return 'SHIPPED';
     if (current === 'SHIPPED') return 'IN_TRANSIT';
     if (current === 'IN_TRANSIT') return 'REACHED_DESTINATION';
-    if (current === 'REACHED_DESTINATION') return 'OUT_FOR_DELIVERY';
+    if (current === 'REACHED_DESTINATION') return hasDP ? 'OUT_FOR_DELIVERY' : null;
     return null;
   };
 
@@ -848,9 +860,17 @@ const OrderDetail = ({ navigation, route }) => {
   const packingProof = getPackingProofImages(order);
   const hasPackingAndBillProof = Boolean(packingProof.packing && packingProof.bill);
   const isShippedScanBlocked = nextStatusByScan === 'SHIPPED' && !hasPackingAndBillProof;
-  const canUploadPackingProof = status === 'RECEIVED';
-  const canEditPackingProof = status === 'RECEIVED' && hasPackingAndBillProof;
+  const canUploadPackingProof = nextStatusByScan === 'SHIPPED';
+  const canEditPackingProof = nextStatusByScan === 'SHIPPED' && hasPackingAndBillProof;
   const isUploadPackingProofDisabled = uploadingPackingProof || hasPackingAndBillProof;
+  const hasAssignedVehicle = !!(order?.permanent_vehicle_id || order?.temp_vehicle_id);
+  const canAssignOnThisStage =
+    (!isDestinationTransporterView && !hasDP) ||
+    (isDestinationTransporterView && stageStatus === 'REACHED_DESTINATION') ||
+    (isSameTransporterView && stageStatus === 'REACHED_DESTINATION' && !hasDP);
+  const assignBtnLabel = isDestinationTransporterView && stageStatus === 'REACHED_DESTINATION' && hasDP
+    ? 'Reassign Delivery Person'
+    : 'Assign Vehicle + Delivery Person';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -869,7 +889,7 @@ const OrderDetail = ({ navigation, route }) => {
         </View>
         <View style={[styles.headerBadge, { backgroundColor: getStatusColor(status) + '30' }]}>
           <Text style={[styles.headerBadgeText, { color: '#fff' }]}>
-            {status.replace(/_/g, ' ')}
+            {displayStatus.replace(/_/g, ' ')}
           </Text>
         </View>
       </LinearGradient>
@@ -1168,7 +1188,7 @@ const OrderDetail = ({ navigation, route }) => {
           </View>
           <View style={styles.actionsWrap}>
             {/* Assign button — always visible when DP or vehicle not assigned */}
-            {(!hasDP || !order?.permanent_vehicle_id && !order?.temp_vehicle_id) && (
+            {canAssignOnThisStage && (
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: '#9C27B0' }]}
                 onPress={handleAssign}
@@ -1179,7 +1199,7 @@ const OrderDetail = ({ navigation, route }) => {
                     <View style={styles.actionRowIconWrap}>
                       <Ionicons name="person-add" size={18} color="#fff" />
                     </View>
-                    <Text style={styles.actionBtnText}>Assign Vehicle + Delivery Person</Text>
+                    <Text style={styles.actionBtnText}>{assignBtnLabel}</Text>
                     <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
                   </>
                 )}
@@ -1208,7 +1228,7 @@ const OrderDetail = ({ navigation, route }) => {
             {isDestinationTransporterView && (
               <View style={styles.destQrOnlyHint}>
                 <Ionicons name="information-circle" size={16} color="#3F51B5" />
-                <Text style={styles.destQrOnlyHintText}>Destination transporter updates are QR-only.</Text>
+                <Text style={styles.destQrOnlyHintText}>Destination transporter scans only up to REACHED DESTINATION; after that assign/reassign delivery person and final completion is by delivery person QR.</Text>
               </View>
             )}
 

@@ -6,7 +6,7 @@
  *   - Stats: source orders, destination orders, delivery persons
  *   - GET /orders/transporter/allocated — split by transporter_role
  *   - Source orders: PICKUP_SHIPPING + status PLACED (need assignment)
- *   - Destination orders: DELIVERY + status RECEIVED (need assignment)
+ *   - Destination orders: DELIVERY + status REACHED_DESTINATION (need assignment)
  *   - Assign dialog: vehicle (permanent/temporary) + delivery person
  *   - POST /transporters/assign-vehicle  — assign vehicle to order
  *   - POST /transporters/assign-order   — assign delivery person
@@ -44,6 +44,7 @@ const getStatusColor = (status) => {
   if (s === 'DELIVERED' || s === 'COMPLETED') return '#4CAF50';
   if (s === 'SHIPPED') return '#3F51B5';
   if (s === 'OUT_FOR_DELIVERY' || s === 'IN_TRANSIT') return '#00BCD4';
+  if (s === 'REACHED_DESTINATION') return '#673AB7';
   if (s === 'ASSIGNED') return '#9C27B0';
   if (s === 'CONFIRMED') return '#2196F3';
   if (s === 'CANCELLED') return '#F44336';
@@ -113,6 +114,18 @@ const parseVehicleBuckets = (payload) => {
   };
 };
 
+const normalizeOrderStatus = (status) => {
+  const s = String(status || '').toUpperCase();
+  if (s === 'OUT_OF_DELIVERY') return 'OUT_FOR_DELIVERY';
+  return s;
+};
+
+const getStatusDisplayText = (status) => {
+  const normalized = normalizeOrderStatus(status);
+  if (normalized === 'REACHED_DESTINATION') return 'DESTINATION RECEIVED';
+  return normalized.replace(/_/g, ' ');
+};
+
 /* ── Component ────────────────────────────────────────────── */
 const TransporterDashboard = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -145,16 +158,14 @@ const TransporterDashboard = ({ navigation }) => {
   const toastRef = React.useRef(null);
 
   const getOrderRoleForCurrentTransporter = useCallback((order) => {
-    const explicitRole = (order?.transporter_role || order?.role || '').toUpperCase();
-    if (explicitRole === 'PICKUP_SHIPPING' || explicitRole === 'DELIVERY') return explicitRole;
-
     const sourceId = Number(order?.source_transporter_id || order?.pickup_transporter_id || 0);
     const destinationId = Number(order?.destination_transporter_id || order?.delivery_transporter_id || 0);
-    const status = (order?.current_status || order?.status || '').toUpperCase();
+    const status = normalizeOrderStatus(order?.current_status || order?.status);
 
+    // Prefer transporter ownership first to keep sections stable.
     if (myTransporterId > 0) {
-      if (sourceId === myTransporterId && destinationId !== myTransporterId) return 'PICKUP_SHIPPING';
       if (destinationId === myTransporterId && sourceId !== myTransporterId) return 'DELIVERY';
+      if (sourceId === myTransporterId && destinationId !== myTransporterId) return 'PICKUP_SHIPPING';
       if (sourceId === myTransporterId && destinationId === myTransporterId) {
         if (['SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(status)) {
           return 'DELIVERY';
@@ -163,12 +174,11 @@ const TransporterDashboard = ({ navigation }) => {
       }
     }
 
-    // Fallback inference when transporter IDs are missing in payload.
-    if (['ASSIGNED', 'PLACED', 'PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS', 'PICKED_UP', 'RECEIVED'].includes(status)) {
-      return 'PICKUP_SHIPPING';
-    }
     if (['SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'].includes(status)) {
       return 'DELIVERY';
+    }
+    if (['ASSIGNED', 'PLACED', 'PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS', 'PICKED_UP', 'RECEIVED'].includes(status)) {
+      return 'PICKUP_SHIPPING';
     }
     return '';
   }, [myTransporterId]);
@@ -190,12 +200,12 @@ const TransporterDashboard = ({ navigation }) => {
       const allOrders = normalizeArray(allocatedRes?.data);
       const srcOrders = allOrders.filter((o) => {
         const role = getOrderRoleForCurrentTransporter(o);
-        const status = (o.current_status || o.status || '').toUpperCase();
+        const status = normalizeOrderStatus(o.current_status || o.status);
         return role === 'PICKUP_SHIPPING' && !['COMPLETED', 'CANCELLED', 'DELIVERED'].includes(status);
       });
       const destOrders = allOrders.filter((o) => {
         const role = getOrderRoleForCurrentTransporter(o);
-        const status = (o.current_status || o.status || '').toUpperCase();
+        const status = normalizeOrderStatus(o.current_status || o.status);
         return role === 'DELIVERY' && !['COMPLETED', 'CANCELLED', 'DELIVERED'].includes(status);
       });
       setSourceOrders(srcOrders);
@@ -233,7 +243,8 @@ const TransporterDashboard = ({ navigation }) => {
 
   const canConfirmAssign = () => {
     if (!assignModal.order) return false;
-    return selectedVehicleId !== null && selectedPersonId !== null;
+    if (assignModal.isSource) return selectedVehicleId !== null && selectedPersonId !== null;
+    return selectedPersonId !== null;
   };
 
   const assignVehicle = async (orderId) => {
@@ -293,8 +304,13 @@ const TransporterDashboard = ({ navigation }) => {
     const orderId = order.order_id || order.id;
     setAssigning(true);
     try {
-      await Promise.all([assignVehicle(orderId), assignDeliveryPerson(orderId)]);
-      toastRef.current?.show('Vehicle and delivery person assigned successfully!', 'success');
+      if (assignModal.isSource) {
+        await Promise.all([assignVehicle(orderId), assignDeliveryPerson(orderId)]);
+        toastRef.current?.show('Vehicle and delivery person assigned successfully!', 'success');
+      } else {
+        await assignDeliveryPerson(orderId);
+        toastRef.current?.show('Delivery person assigned successfully!', 'success');
+      }
       setAssignModal({ visible: false, order: null, isSource: false });
       setSelectedVehicleId(null);
       setSelectedVehicleType(null);
@@ -326,7 +342,10 @@ const TransporterDashboard = ({ navigation }) => {
   /* ── Render order card ──────────────────────────────────── */
   const renderOrderCard = (order, i) => {
     const orderId = order.order_id || order.id;
-    const status = (order.current_status || order.status || 'PENDING').toUpperCase();
+    const status = normalizeOrderStatus(order.current_status || order.status || 'PENDING');
+    const role = getOrderRoleForCurrentTransporter(order);
+    const statusForDisplay = role === 'DELIVERY' && status === 'RECEIVED' ? 'REACHED_DESTINATION' : status;
+    const isDestinationReceived = role === 'DELIVERY' && (status === 'REACHED_DESTINATION' || status === 'RECEIVED');
     const product = order.items?.[0]?.product || order.product || {};
     const productName = getOrderProductName(order);
 
@@ -341,9 +360,9 @@ const TransporterDashboard = ({ navigation }) => {
           <View style={{ flex: 1, marginRight: 10 }}>
             <Text style={styles.orderTitle} numberOfLines={1}>{productName}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(status) + '20' }]}>
-            <Text style={[styles.statusText, { color: getStatusColor(status) }]}>
-              {status.replace(/_/g, ' ')}
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(statusForDisplay) + '20' }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(statusForDisplay) }]}>
+              {getStatusDisplayText(statusForDisplay)}
             </Text>
           </View>
         </View>
@@ -375,6 +394,23 @@ const TransporterDashboard = ({ navigation }) => {
           const hasVehicle = !!(order.permanent_vehicle_id || order.temp_vehicle_id || order.vehicle_id);
           const isFullyAssigned = hasDP && hasVehicle;
 
+          if (isDestinationReceived) {
+            return (
+              <TouchableOpacity
+                style={styles.assignBtn}
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  openAssignModal(order);
+                }}
+              >
+                <Ionicons name="person-add-outline" size={16} color="#fff" />
+                <Text style={styles.assignBtnText}>
+                  {hasDP ? 'Reassign Delivery Person' : 'Assign Delivery Person'}
+                </Text>
+              </TouchableOpacity>
+            );
+          }
+
           if (isFullyAssigned) {
             return (
               <View style={styles.assignedRow}>
@@ -388,15 +424,20 @@ const TransporterDashboard = ({ navigation }) => {
           return (
             <TouchableOpacity
               style={styles.assignBtn}
-              onPress={() => openAssignModal(order)}
+              onPress={(e) => {
+                e?.stopPropagation?.();
+                openAssignModal(order);
+              }}
             >
               <Ionicons name="person-add-outline" size={16} color="#fff" />
               <Text style={styles.assignBtnText}>
-                {!hasDP && !hasVehicle
-                  ? 'Assign Vehicle & Person'
-                  : !hasDP
-                    ? 'Assign Delivery Person'
-                    : 'Assign Vehicle'}
+                {role === 'DELIVERY'
+                  ? (hasDP ? 'Reassign Delivery Person' : 'Assign Delivery Person')
+                  : (!hasDP && !hasVehicle
+                    ? 'Assign Vehicle & Person'
+                    : !hasDP
+                      ? 'Assign Delivery Person'
+                      : 'Assign Vehicle')}
               </Text>
             </TouchableOpacity>
           );
@@ -570,58 +611,60 @@ const TransporterDashboard = ({ navigation }) => {
             </View>
 
             <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
-              {/* Vehicle section */}
-              <>
-                <Text style={styles.modalSection}>Select Vehicle</Text>
-                {permanentVehicles.length > 0 && (
-                  <>
-                    <Text style={styles.modalSubSection}>Permanent Vehicles</Text>
-                    {permanentVehicles.map((v, index) => {
-                      const vehicleId = v.vehicle_id || v.id || `perm-${index}`;
-                      return (
-                        <TouchableOpacity
-                          key={vehicleId}
-                          style={[styles.selectCard, selectedVehicleId === vehicleId && styles.selectCardActive]}
-                          onPress={() => { setSelectedVehicleId(vehicleId); setSelectedVehicleType('permanent'); }}
-                        >
-                          <MaterialCommunityIcons name="truck" size={24} color={selectedVehicleId === vehicleId ? '#1B5E20' : '#888'} />
-                          <View style={{ flex: 1, marginLeft: 10 }}>
-                            <Text style={styles.selectCardTitle}>{v.vehicle_number || 'N/A'}</Text>
-                            <Text style={styles.selectCardSub}>{(v.vehicle_type || '').toUpperCase()} · {v.capacity || 0}</Text>
-                          </View>
-                          {selectedVehicleId === vehicleId && <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </>
-                )}
-                {temporaryVehicles.length > 0 && (
-                  <>
-                    <Text style={styles.modalSubSection}>Temporary Vehicles</Text>
-                    {temporaryVehicles.map((v, index) => {
-                      const vehicleId = v.vehicle_id || v.id || `temp-${index}`;
-                      return (
-                        <TouchableOpacity
-                          key={vehicleId}
-                          style={[styles.selectCard, selectedVehicleId === vehicleId && styles.selectCardActive]}
-                          onPress={() => { setSelectedVehicleId(vehicleId); setSelectedVehicleType('temporary'); }}
-                        >
-                          <MaterialCommunityIcons name="car" size={24} color={selectedVehicleId === vehicleId ? '#1B5E20' : '#888'} />
-                          <View style={{ flex: 1, marginLeft: 10 }}>
-                            <Text style={styles.selectCardTitle}>{v.vehicle_number || 'N/A'}</Text>
-                            <Text style={styles.selectCardSub}>{(v.vehicle_type || '').toUpperCase()} · {v.capacity || 0}</Text>
-                          </View>
-                          {selectedVehicleId === vehicleId && <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </>
-                )}
-                {permanentVehicles.length === 0 && temporaryVehicles.length === 0 && (
-                  <Text style={styles.emptyModalText}>No vehicles available. Add vehicles first.</Text>
-                )}
-                <View style={styles.divider} />
-              </>
+              {/* Vehicle section (pickup/source only) */}
+              {assignModal.isSource && (
+                <>
+                  <Text style={styles.modalSection}>Select Vehicle</Text>
+                  {permanentVehicles.length > 0 && (
+                    <>
+                      <Text style={styles.modalSubSection}>Permanent Vehicles</Text>
+                      {permanentVehicles.map((v, index) => {
+                        const vehicleId = v.vehicle_id || v.id || `perm-${index}`;
+                        return (
+                          <TouchableOpacity
+                            key={vehicleId}
+                            style={[styles.selectCard, selectedVehicleId === vehicleId && styles.selectCardActive]}
+                            onPress={() => { setSelectedVehicleId(vehicleId); setSelectedVehicleType('permanent'); }}
+                          >
+                            <MaterialCommunityIcons name="truck" size={24} color={selectedVehicleId === vehicleId ? '#1B5E20' : '#888'} />
+                            <View style={{ flex: 1, marginLeft: 10 }}>
+                              <Text style={styles.selectCardTitle}>{v.vehicle_number || 'N/A'}</Text>
+                              <Text style={styles.selectCardSub}>{(v.vehicle_type || '').toUpperCase()} · {v.capacity || 0}</Text>
+                            </View>
+                            {selectedVehicleId === vehicleId && <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </>
+                  )}
+                  {temporaryVehicles.length > 0 && (
+                    <>
+                      <Text style={styles.modalSubSection}>Temporary Vehicles</Text>
+                      {temporaryVehicles.map((v, index) => {
+                        const vehicleId = v.vehicle_id || v.id || `temp-${index}`;
+                        return (
+                          <TouchableOpacity
+                            key={vehicleId}
+                            style={[styles.selectCard, selectedVehicleId === vehicleId && styles.selectCardActive]}
+                            onPress={() => { setSelectedVehicleId(vehicleId); setSelectedVehicleType('temporary'); }}
+                          >
+                            <MaterialCommunityIcons name="car" size={24} color={selectedVehicleId === vehicleId ? '#1B5E20' : '#888'} />
+                            <View style={{ flex: 1, marginLeft: 10 }}>
+                              <Text style={styles.selectCardTitle}>{v.vehicle_number || 'N/A'}</Text>
+                              <Text style={styles.selectCardSub}>{(v.vehicle_type || '').toUpperCase()} · {v.capacity || 0}</Text>
+                            </View>
+                            {selectedVehicleId === vehicleId && <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </>
+                  )}
+                  {permanentVehicles.length === 0 && temporaryVehicles.length === 0 && (
+                    <Text style={styles.emptyModalText}>No vehicles available. Add vehicles first.</Text>
+                  )}
+                  <View style={styles.divider} />
+                </>
+              )}
 
               {/* Delivery person */}
               <Text style={styles.modalSection}>Select Delivery Person</Text>
