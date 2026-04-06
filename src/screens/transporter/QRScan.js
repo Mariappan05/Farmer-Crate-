@@ -40,10 +40,45 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SCAN_SIZE = SCREEN_WIDTH * 0.7;
 
 // Only transporter-controlled statuses should be QR updated.
-const VALID_TRANSPORTER_QR_STATUSES = ['RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION'];
+const VALID_TRANSPORTER_QR_STATUSES = ['PICKED_UP', 'RECEIVED', 'SHIPPED', 'IN_TRANSIT', 'REACHED_DESTINATION'];
+const WORKFLOW_STATUS_ORDER = [
+  'PENDING',
+  'PLACED',
+  'ASSIGNED',
+  'PICKUP_ASSIGNED',
+  'PICKUP_IN_PROGRESS',
+  'PICKED_UP',
+  'RECEIVED',
+  'SHIPPED',
+  'IN_TRANSIT',
+  'REACHED_DESTINATION',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+  'COMPLETED',
+  'CANCELLED',
+];
+
+const statusRank = (status) => {
+  const s = String(status || '').toUpperCase();
+  const idx = WORKFLOW_STATUS_ORDER.indexOf(s);
+  return idx >= 0 ? idx : -1;
+};
+
+const isBackwardTransition = (fromStatus, toStatus) => {
+  const from = statusRank(fromStatus);
+  const to = statusRank(toStatus);
+  if (from < 0 || to < 0) return false;
+  return to < from;
+};
+
 const toNumberOrZero = (value) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+};
+
+const normalizeStatus = (status) => {
+  const s = String(status || '').toUpperCase();
+  return s === 'OUT_OF_DELIVERY' ? 'OUT_FOR_DELIVERY' : s;
 };
 
 const extractOrderIdFromQrPayload = (rawValue) => {
@@ -85,6 +120,47 @@ const getProductMetaFromOrder = (order) => {
   const productImage = order?.product_image || imageFromArray || null;
 
   return { productName, productImage };
+};
+
+const parseExpectedStatusFromMessage = (message) => {
+  const raw = String(message || '');
+  const match = raw.match(/expected\s+next\s+status\s*[:=-]\s*['\"]?([A-Z_]+)['\"]?/i);
+  return match ? String(match[1] || '').toUpperCase() : null;
+};
+
+const getExpectedStatusFromError = (error) => {
+  const data = error?.response?.data || {};
+  const nested = data?.data || {};
+
+  const directCandidates = [
+    data?.expected_next_status,
+    data?.expectedNextStatus,
+    data?.next_status,
+    data?.nextStatus,
+    nested?.expected_next_status,
+    nested?.expectedNextStatus,
+    nested?.next_status,
+    nested?.nextStatus,
+  ];
+
+  for (const candidate of directCandidates) {
+    const normalized = String(candidate || '').trim().toUpperCase();
+    if (/^[A-Z_]+$/.test(normalized)) return normalized;
+  }
+
+  try {
+    const jsonText = JSON.stringify(data);
+    const fromJson = parseExpectedStatusFromMessage(jsonText);
+    if (fromJson) return fromJson;
+  } catch (_) {
+    // ignore
+  }
+
+  return (
+    parseExpectedStatusFromMessage(data?.message) ||
+    parseExpectedStatusFromMessage(data?.error) ||
+    parseExpectedStatusFromMessage(error?.message)
+  );
 };
 
 const QRScan = ({ navigation, route }) => {
@@ -243,7 +319,7 @@ const QRScan = ({ navigation, route }) => {
         return;
       }
 
-      const status = (order.current_status || order.status || '').toUpperCase();
+      const status = normalizeStatus(order.current_status || order.status);
 
       if (!isAssignedToLoggedTransporter(order)) {
         showPopup('Not Assigned', 'This order is not assigned to your transporter account.', [{ text: 'OK', variant: 'primary', onPress: resetScanner }], 'warning');
@@ -270,6 +346,16 @@ const QRScan = ({ navigation, route }) => {
         return;
       }
 
+      if (status === 'OUT_FOR_DELIVERY') {
+        showPopup(
+          'Final Delivery Stage',
+          `Order #${orderId} is in OUT_FOR_DELIVERY. Final QR completion must be done by the assigned delivery person.`,
+          [{ text: 'OK', variant: 'primary', onPress: resetScanner }],
+          'warning'
+        );
+        return null;
+      }
+
       // Invalid status
       showPopup(
         'Invalid Status',
@@ -292,7 +378,7 @@ const QRScan = ({ navigation, route }) => {
 
   const getNextStatusAfterScan = (order) => {
     const role = (order?.transporter_role || '').toUpperCase();
-    const current = (order?.current_status || order?.status || '').toUpperCase();
+    const current = normalizeStatus(order?.current_status || order?.status);
     const myId = toNumberOrZero(myTransporterId);
     const sourceId = toNumberOrZero(order?.source_transporter_id || order?.pickup_transporter_id || order?.transporter_id);
     const destinationId = toNumberOrZero(order?.destination_transporter_id || order?.delivery_transporter_id);
@@ -310,6 +396,7 @@ const QRScan = ({ navigation, route }) => {
 
     // Source transporter keeps source-side QR transitions.
     if (isSourceTransporter && !isSameTransporter) {
+      if (current === 'PICKED_UP') return 'RECEIVED';
       if (current === 'RECEIVED') return 'SHIPPED';
       if (current === 'SHIPPED') return 'IN_TRANSIT';
       return null;
@@ -317,14 +404,16 @@ const QRScan = ({ navigation, route }) => {
 
     // When same transporter handles both roles, allow the full flow
     if (isSameTransporter || !role) {
+      if (current === 'PICKED_UP') return 'RECEIVED';
       if (current === 'RECEIVED') return 'SHIPPED';
       if (current === 'SHIPPED') return 'IN_TRANSIT';
       if (current === 'IN_TRANSIT') return 'REACHED_DESTINATION';
-      if (current === 'REACHED_DESTINATION') return 'OUT_FOR_DELIVERY';
+      if (current === 'REACHED_DESTINATION') return order?.delivery_person_id ? 'OUT_FOR_DELIVERY' : null;
       return null;
     }
 
     if (role === 'PICKUP_SHIPPING') {
+      if (current === 'PICKED_UP') return 'RECEIVED';
       if (current === 'RECEIVED') return 'SHIPPED';
       if (current === 'SHIPPED') return 'IN_TRANSIT';
     }
@@ -335,46 +424,148 @@ const QRScan = ({ navigation, route }) => {
     return null;
   };
 
+  const normalizeStatusForBackend = (order, statusToApply) => {
+    const normalized = normalizeStatus(statusToApply);
+    const myId = toNumberOrZero(myTransporterId);
+    const sourceId = toNumberOrZero(order?.source_transporter_id || order?.pickup_transporter_id || order?.transporter_id);
+    const destinationId = toNumberOrZero(order?.destination_transporter_id || order?.delivery_transporter_id);
+    const isSameTransporter =
+      order?.same_transporter === true ||
+      (order?.source_transporter_id && order?.source_transporter_id === order?.destination_transporter_id);
+    const isDestinationTransporter = !!myId && !!destinationId && myId === destinationId;
+
+    // Guard against backend hints using generic RECEIVED for destination office stage.
+    if (isDestinationTransporter && !isSameTransporter && normalized === 'RECEIVED') {
+      return 'REACHED_DESTINATION';
+    }
+
+    return normalized;
+  };
+
   const updateStatusAfterScan = async (order) => {
     const orderId = order.order_id || order.id;
-    const nextStatus = getNextStatusAfterScan(order);
+    let effectiveOrder = order;
+
+    // Always re-sync once before update to avoid stale status mismatch with backend transaction state.
+    try {
+      const endpoints = [`/orders/${orderId}`, `/transporters/orders/${orderId}`];
+      for (const endpoint of endpoints) {
+        try {
+          const res = await api.get(endpoint);
+          const payload = res.data?.data || res.data?.order || res.data;
+          const candidate = payload?.order || payload;
+          if (candidate && (candidate.order_id || candidate.id)) {
+            effectiveOrder = { ...order, ...candidate };
+            break;
+          }
+        } catch (_) {
+          // try next endpoint
+        }
+      }
+    } catch (_) {
+      // keep original order object
+    }
+
+    const nextStatus = normalizeStatusForBackend(effectiveOrder, getNextStatusAfterScan(effectiveOrder));
 
     if (!nextStatus) {
       showPopup('No Next Status', 'This order cannot be advanced by QR scan right now.', [{ text: 'OK', variant: 'primary', onPress: resetScanner }], 'warning');
       return;
     }
 
-    try {
+    const updateSingleStatus = async (statusToApply) => {
+      const mappedStatus = normalizeStatusForBackend(effectiveOrder, statusToApply);
       const attempts = [
-        () => api.put(`/transporters/orders/${orderId}/status`, { status: nextStatus, is_qr_scan: true }),
-        () => api.put('/transporters/order-status', { order_id: orderId, status: nextStatus, is_qr_scan: true }),
-        () => api.put(`/orders/${orderId}/qr-status`, { status: nextStatus, is_qr_scan: true }),
-        () => api.put('/orders/status', { order_id: orderId, status: nextStatus, is_qr_scan: true }),
+        {
+          label: `/orders/${orderId}/qr-status`,
+          run: () => api.put(`/orders/${orderId}/qr-status`, { status: mappedStatus, scanner_role: 'transporter', is_qr_scan: true }),
+        },
+        {
+          label: `/transporters/orders/${orderId}/status`,
+          run: () => api.put(`/transporters/orders/${orderId}/status`, { status: mappedStatus, scanner_role: 'transporter', is_qr_scan: true }),
+        },
+        {
+          label: '/transporters/order-status',
+          run: () => api.put('/transporters/order-status', { order_id: orderId, status: mappedStatus, scanner_role: 'transporter', is_qr_scan: true }),
+        },
+        {
+          label: '/orders/status',
+          run: () => api.put('/orders/status', { order_id: orderId, status: mappedStatus, is_qr_scan: true }),
+        },
       ];
 
       let lastError = null;
-      for (const run of attempts) {
+      let expectedStatusHint = null;
+
+      for (const attempt of attempts) {
         try {
-          await run();
+          await attempt.run();
+          console.log('[Transporter QR] Status update success', {
+            orderId,
+            statusToApply: mappedStatus,
+            endpoint: attempt.label,
+          });
           lastError = null;
           break;
         } catch (err) {
           lastError = err;
           const statusCode = err?.response?.status;
-          const shouldRetry = statusCode === 404 || statusCode === 405;
+          const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || '';
+          const parsedExpected = getExpectedStatusFromError(err);
+          if (parsedExpected && !expectedStatusHint) {
+            expectedStatusHint = parsedExpected;
+          }
+          const hasExpectedNextStatus = !!parsedExpected;
+          const looksLikeQrValidation = /invalid\s+qr\s+transac|expected\s+next\s+status/i.test(String(message));
+          const shouldRetry = statusCode === 404 || statusCode === 405 || hasExpectedNextStatus || looksLikeQrValidation;
+
+          console.error('[Transporter QR] Status update failed', {
+            orderId,
+            attemptedStatus: mappedStatus,
+            endpoint: attempt.label,
+            statusCode,
+            message,
+            responseData: err?.response?.data,
+            expectedStatusHint: parsedExpected,
+            shouldRetry,
+          });
+
           if (!shouldRetry) {
             break;
           }
         }
       }
 
-      if (lastError) throw lastError;
+      if (lastError) {
+        if (expectedStatusHint && !lastError.expectedStatusHint) {
+          lastError.expectedStatusHint = expectedStatusHint;
+        }
+        throw lastError;
+      }
+    };
+
+    const submitQrStatusUpdate = async (statusToApply) => {
+      const mappedStatus = normalizeStatusForBackend(effectiveOrder, statusToApply);
+      await updateSingleStatus(mappedStatus);
+      let finalStatus = mappedStatus;
+
+      // Auto-progress shipping flow after successful SHIPPED update.
+      if (mappedStatus === 'SHIPPED') {
+        await updateSingleStatus('IN_TRANSIT');
+        finalStatus = 'IN_TRANSIT';
+      }
+
+      return finalStatus;
+    };
+
+    try {
+      const appliedStatus = await submitQrStatusUpdate(nextStatus);
 
       const { productName, productImage } = getProductMetaFromOrder(order);
 
       showPopup(
         'Status Updated',
-        `${nextStatus.replace(/_/g, ' ')} updated successfully.`,
+        `${appliedStatus.replace(/_/g, ' ')} updated successfully.`,
         [
           {
             text: 'View Order',
@@ -383,8 +574,8 @@ const QRScan = ({ navigation, route }) => {
               orderId,
               order: {
                 ...order,
-                current_status: nextStatus,
-                status: nextStatus,
+                current_status: appliedStatus,
+                status: appliedStatus,
               },
             }),
           },
@@ -398,6 +589,74 @@ const QRScan = ({ navigation, route }) => {
       const statusCode = e?.response?.status;
       const readable = serverMessage || e?.message || 'Could not update order status';
       const suffix = statusCode ? ` (HTTP ${statusCode})` : '';
+      const expectedStatusRaw = getExpectedStatusFromError(e) || e?.expectedStatusHint;
+      const expectedStatus = expectedStatusRaw
+        ? normalizeStatusForBackend(effectiveOrder, expectedStatusRaw)
+        : null;
+      const currentStatus = (effectiveOrder?.current_status || effectiveOrder?.status || '').toUpperCase();
+
+      console.error('[Transporter QR] Final update failure', {
+        orderId,
+        currentStatus,
+        computedNextStatus: nextStatus,
+        expectedStatus,
+        statusCode,
+        responseData: e?.response?.data,
+        message: readable,
+      });
+
+      if (expectedStatus && expectedStatus !== nextStatus) {
+        if (isBackwardTransition(currentStatus, expectedStatus)) {
+          console.error('[Transporter QR] Blocked backward transition from backend hint', {
+            orderId,
+            currentStatus,
+            expectedStatus,
+          });
+          showPopup(
+            'Update Failed',
+            `Backend requested older status (${expectedStatus.replace(/_/g, ' ')}) while order is already ${currentStatus.replace(/_/g, ' ')}. Status was not downgraded.`,
+            [{ text: 'Retry', variant: 'primary', onPress: resetScanner }],
+            'error'
+          );
+          return;
+        }
+
+        try {
+          await submitQrStatusUpdate(expectedStatus);
+          const { productName, productImage } = getProductMetaFromOrder(order);
+          showPopup(
+            'Status Updated',
+            `${expectedStatus.replace(/_/g, ' ')} updated successfully.`,
+            [
+              {
+                text: 'View Order',
+                variant: 'outline',
+                onPress: () => navigation.replace('OrderDetail', {
+                  orderId,
+                  order: {
+                    ...effectiveOrder,
+                    current_status: expectedStatus,
+                    status: expectedStatus,
+                  },
+                }),
+              },
+              { text: 'Scan Another', variant: 'primary', onPress: resetScanner },
+            ],
+            'success',
+            { productName, productImage }
+          );
+          return;
+        } catch (retryError) {
+          const retryReadable =
+            retryError?.response?.data?.message ||
+            retryError?.response?.data?.error ||
+            retryError?.message ||
+            'Could not update order status';
+          showPopup('Update Failed', retryReadable, [{ text: 'Retry', variant: 'primary', onPress: resetScanner }], 'error');
+          return;
+        }
+      }
+
       showPopup('Update Failed', `${readable}${suffix}`, [{ text: 'Retry', variant: 'primary', onPress: resetScanner }], 'error');
     }
   };
@@ -525,19 +784,32 @@ const QRScan = ({ navigation, route }) => {
       <Modal visible={popup.visible} transparent animationType="fade" onRequestClose={closePopup}>
         <View style={styles.popupOverlay}>
           <View style={styles.popupCard}>
-            <View style={[
-              styles.popupIconWrap,
-              popup.type === 'success' && styles.popupIconSuccess,
-              popup.type === 'error' && styles.popupIconError,
-              popup.type === 'warning' && styles.popupIconWarning,
-            ]}>
-              <Ionicons
-                name={popup.type === 'success' ? 'checkmark-circle' : popup.type === 'error' ? 'close-circle' : 'alert-circle'}
-                size={24}
-                color={popup.type === 'success' ? '#16A34A' : popup.type === 'error' ? '#DC2626' : '#D97706'}
-              />
+            <View
+              style={[
+                styles.popupAccent,
+                popup.type === 'success' && styles.popupAccentSuccess,
+                popup.type === 'error' && styles.popupAccentError,
+                popup.type === 'warning' && styles.popupAccentWarning,
+              ]}
+            />
+            <View style={styles.popupHeaderRow}>
+              <View style={[
+                styles.popupIconWrap,
+                popup.type === 'success' && styles.popupIconSuccess,
+                popup.type === 'error' && styles.popupIconError,
+                popup.type === 'warning' && styles.popupIconWarning,
+              ]}>
+                <Ionicons
+                  name={popup.type === 'success' ? 'checkmark-circle' : popup.type === 'error' ? 'close-circle' : 'alert-circle'}
+                  size={24}
+                  color={popup.type === 'success' ? '#16A34A' : popup.type === 'error' ? '#DC2626' : '#D97706'}
+                />
+              </View>
+              <TouchableOpacity style={styles.popupCloseBtn} onPress={closePopup}>
+                <Ionicons name="close" size={20} color="#6B7280" />
+              </TouchableOpacity>
             </View>
-            <Text style={styles.popupTitle}>{popup.title}</Text>
+            <Text style={styles.popupTitle} numberOfLines={2}>{popup.title}</Text>
             <Text style={styles.popupMessage}>{popup.message}</Text>
             {(popup.productImage || popup.productName) && (
               <View style={styles.popupProductWrap}>
@@ -610,12 +882,44 @@ const styles = StyleSheet.create({
   modalBtnItem: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 12 },
   modalBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   popupOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
-  popupCard: { width: '100%', maxWidth: 360, backgroundColor: '#fff', borderRadius: 18, padding: 18, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 },
+  popupCard: {
+    width: '100%',
+    maxWidth: 370,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingTop: 0,
+    paddingBottom: 16,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    overflow: 'hidden',
+  },
+  popupAccent: { height: 5, backgroundColor: '#EAB308', marginHorizontal: -18 },
+  popupAccentSuccess: { backgroundColor: '#16A34A' },
+  popupAccentError: { backgroundColor: '#DC2626' },
+  popupAccentWarning: { backgroundColor: '#D97706' },
+  popupHeaderRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  popupCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   popupIconWrap: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center', marginBottom: 10, backgroundColor: '#FEF3C7' },
   popupIconSuccess: { backgroundColor: '#DCFCE7' },
   popupIconError: { backgroundColor: '#FEE2E2' },
   popupIconWarning: { backgroundColor: '#FEF3C7' },
-  popupTitle: { fontSize: 18, fontWeight: '800', color: '#1F2937' },
+  popupTitle: { fontSize: 19, fontWeight: '800', color: '#1F2937', marginTop: 2 },
   popupMessage: { fontSize: 14, color: '#4B5563', marginTop: 6, lineHeight: 20 },
   popupProductWrap: {
     marginTop: 12,
@@ -638,10 +942,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   popupProductName: { flex: 1, color: '#111827', fontSize: 14, fontWeight: '700' },
-  popupActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  popupBtn: { flex: 1, borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
+  popupActions: { flexDirection: 'column', gap: 10, marginTop: 16 },
+  popupBtn: { borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   popupBtnPrimary: { backgroundColor: '#1B5E20' },
-  popupBtnOutline: { backgroundColor: '#F3F4F6' },
+  popupBtnOutline: { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
   popupBtnPrimaryText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   popupBtnOutlineText: { color: '#374151', fontWeight: '700', fontSize: 14 },
 });

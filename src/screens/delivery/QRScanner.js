@@ -7,7 +7,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Vibration,
   TextInput,
   KeyboardAvoidingView,
@@ -27,8 +26,9 @@ const BORDER_W = 4;
 
 // Destination delivery person advances final-mile statuses via QR scans.
 const DELIVERY_TRANSITIONS = {
+  RECEIVED: 'OUT_FOR_DELIVERY',
   REACHED_DESTINATION: 'OUT_FOR_DELIVERY',
-  OUT_FOR_DELIVERY: 'DELIVERED',
+  OUT_FOR_DELIVERY: 'COMPLETED',
 };
 
 // Pickup delivery person advances pickup-side statuses via QR scans.
@@ -85,11 +85,42 @@ const QRScanner = ({ navigation, route }) => {
   const [torchOn, setTorchOn] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [manualId, setManualId] = useState('');
+  const [popup, setPopup] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    buttons: [],
+  });
   const lastScanRef = useRef(null);
 
   const myDeliveryPersonId =
     authState?.user?.delivery_person_id || authState?.user?.id;
   const expectedOrderId = route?.params?.expectedOrderId;
+
+  const showPopup = (title, message, buttons = [], type = 'info') => {
+    const normalizedButtons = buttons.length > 0
+      ? buttons
+      : [{ text: 'OK', variant: 'primary', onPress: () => {} }];
+    setPopup({
+      visible: true,
+      title,
+      message,
+      type,
+      buttons: normalizedButtons,
+    });
+  };
+
+  const closePopup = () => {
+    setPopup((prev) => ({ ...prev, visible: false }));
+  };
+
+  const handlePopupPress = (btn) => {
+    closePopup();
+    if (typeof btn?.onPress === 'function') {
+      setTimeout(() => btn.onPress(), 0);
+    }
+  };
 
   const processQR = async (qrData) => {
     if (isProcessing || scanned) return;
@@ -104,20 +135,21 @@ const QRScanner = ({ navigation, route }) => {
       const { orderId, qrCode } = parseQRPayload(qrData);
 
       if (!orderId && !qrCode) {
-        Alert.alert('Invalid QR', 'Could not read this QR. Please rescan or enter manually.', [
-          { text: 'Rescan', onPress: resetScanner },
+        showPopup('Invalid QR', 'Could not read this QR. Please rescan or enter manually.', [
+          { text: 'Rescan', variant: 'primary', onPress: resetScanner },
           {
             text: 'Enter Manually',
+            variant: 'outline',
             onPress: () => { resetScanner(); setShowManual(true); },
           },
-        ]);
+        ], 'warning');
         return;
       }
       await validateAndUpdate({ orderId, qrCode });
     } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to process QR', [
-        { text: 'Retry', onPress: resetScanner },
-      ]);
+      showPopup('Error', e.message || 'Failed to process QR', [
+        { text: 'Retry', variant: 'primary', onPress: resetScanner },
+      ], 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -214,25 +246,26 @@ const QRScanner = ({ navigation, route }) => {
       const resolvedOrderId = order?.order_id || order?.id || orderId;
 
       if (!resolvedOrderId) {
-        Alert.alert('Not Found', 'Order was resolved but has no valid ID for update.', [
-          { text: 'OK', onPress: resetScanner },
-        ]);
+        showPopup('Not Found', 'Order was resolved but has no valid ID for update.', [
+          { text: 'OK', variant: 'primary', onPress: resetScanner },
+        ], 'warning');
         return;
       }
 
       if (expectedOrderId && String(expectedOrderId) !== String(resolvedOrderId)) {
-        Alert.alert(
+        showPopup(
           'Wrong Order QR',
           `This scanner is opened for order #${expectedOrderId}. Please scan the correct order QR.`,
-          [{ text: 'OK', onPress: resetScanner }]
+          [{ text: 'OK', variant: 'primary', onPress: resetScanner }],
+          'warning'
         );
         return;
       }
 
       if (!order) {
-        Alert.alert('Not Found', 'Order was not found for this QR.', [
-          { text: 'OK', onPress: resetScanner },
-        ]);
+        showPopup('Not Found', 'Order was not found for this QR.', [
+          { text: 'OK', variant: 'primary', onPress: resetScanner },
+        ], 'warning');
         return;
       }
 
@@ -252,10 +285,11 @@ const QRScanner = ({ navigation, route }) => {
         destDPId && String(destDPId) === String(myDeliveryPersonId);
 
       if (!isPickupPerson && !isDestPerson) {
-        Alert.alert(
+        showPopup(
           'Access Denied',
           'You are not the assigned delivery person for this order.',
-          [{ text: 'OK', onPress: resetScanner }]
+          [{ text: 'OK', variant: 'primary', onPress: resetScanner }],
+          'error'
         );
         return;
       }
@@ -275,49 +309,54 @@ const QRScanner = ({ navigation, route }) => {
         const allowed = Object.keys(transitions)
           .map((s) => s.replace(/_/g, ' '))
           .join(', ');
-        Alert.alert(
+        showPopup(
           'Cannot Update',
           `Current status is "${status.replace(/_/g, ' ')}". QR scan is valid only for: ${allowed}.`,
-          [{ text: 'OK', onPress: resetScanner }]
+          [{ text: 'OK', variant: 'primary', onPress: resetScanner }],
+          'warning'
         );
         return;
       }
 
-      Alert.alert(
+      showPopup(
         'Order Status Confirmation',
         `Confirm status update?\nNew status: ${nextStatus.replace(/_/g, ' ')}`,
         [
-          { text: 'Cancel', style: 'cancel', onPress: resetScanner },
+          { text: 'Cancel', variant: 'outline', onPress: resetScanner },
           {
             text: 'Confirm Update',
+            variant: 'primary',
             onPress: async () => {
               try {
                 await updateOrderStatusByQR(resolvedOrderId, nextStatus, 'delivery_person');
-                Alert.alert(
+                showPopup(
                   'Update Successful',
                   `Order status updated to ${nextStatus.replace(/_/g, ' ')}.`,
                   [
                     {
-                      text: 'View Details',
+                      text: 'View Tracking',
+                      variant: 'outline',
                       onPress: () =>
-                        navigation.navigate('OrderDetails', { orderId: resolvedOrderId, order }),
+                        navigation.navigate('OrderTracking', { orderId: resolvedOrderId, order }),
                     },
-                    { text: 'Scan Another', onPress: resetScanner },
-                  ]
+                    { text: 'Scan Another', variant: 'primary', onPress: resetScanner },
+                  ],
+                  'success'
                 );
               } catch (e) {
-                Alert.alert('Update Failed', e.message || 'Could not update status', [
-                  { text: 'OK', onPress: resetScanner },
-                ]);
+                showPopup('Update Failed', e.message || 'Could not update status', [
+                  { text: 'OK', variant: 'primary', onPress: resetScanner },
+                ], 'error');
               }
             },
           },
-        ]
+        ],
+        'warning'
       );
     } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to fetch order', [
-        { text: 'Retry', onPress: resetScanner },
-      ]);
+      showPopup('Error', e.message || 'Failed to fetch order', [
+        { text: 'Retry', variant: 'primary', onPress: resetScanner },
+      ], 'error');
     }
   };
 
@@ -330,7 +369,9 @@ const QRScanner = ({ navigation, route }) => {
   const handleManualSubmit = async () => {
     const id = parseInt(manualId.trim());
     if (!id || isNaN(id)) {
-      Alert.alert('Invalid', 'Enter a valid order number');
+      showPopup('Invalid', 'Enter a valid order number', [
+        { text: 'OK', variant: 'primary', onPress: () => {} },
+      ], 'warning');
       return;
     }
     setShowManual(false);
@@ -423,6 +464,76 @@ const QRScanner = ({ navigation, route }) => {
     );
   }
 
+  function renderPopupModal() {
+    return (
+      <Modal visible={popup.visible} transparent animationType="fade" onRequestClose={closePopup}>
+        <View style={styles.popupOverlay}>
+          <View style={styles.popupCard}>
+            <View
+              style={[
+                styles.popupAccent,
+                popup.type === 'success' && styles.popupAccentSuccess,
+                popup.type === 'error' && styles.popupAccentError,
+                popup.type === 'warning' && styles.popupAccentWarning,
+              ]}
+            />
+            <View style={styles.popupHeaderRow}>
+              <View
+                style={[
+                  styles.popupIconWrap,
+                  popup.type === 'success' && styles.popupIconSuccess,
+                  popup.type === 'error' && styles.popupIconError,
+                  popup.type === 'warning' && styles.popupIconWarning,
+                ]}
+              >
+                <Ionicons
+                  name={
+                    popup.type === 'success'
+                      ? 'checkmark-circle'
+                      : popup.type === 'error'
+                        ? 'close-circle'
+                        : 'alert-circle'
+                  }
+                  size={24}
+                  color={
+                    popup.type === 'success'
+                      ? '#16A34A'
+                      : popup.type === 'error'
+                        ? '#DC2626'
+                        : '#D97706'
+                  }
+                />
+              </View>
+              <TouchableOpacity style={styles.popupCloseBtn} onPress={closePopup}>
+                <Ionicons name="close" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.popupTitle} numberOfLines={2}>{popup.title}</Text>
+            <Text style={styles.popupMessage}>{popup.message}</Text>
+
+            <View style={styles.popupActions}>
+              {popup.buttons.map((btn, idx) => (
+                <TouchableOpacity
+                  key={`${btn.text}-${idx}`}
+                  style={[
+                    styles.popupBtn,
+                    btn.variant === 'outline' ? styles.popupBtnOutline : styles.popupBtnPrimary,
+                  ]}
+                  onPress={() => handlePopupPress(btn)}
+                >
+                  <Text style={btn.variant === 'outline' ? styles.popupBtnOutlineText : styles.popupBtnPrimaryText}>
+                    {btn.text}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" />
@@ -508,6 +619,7 @@ const QRScanner = ({ navigation, route }) => {
       </View>
 
       {renderManualModal()}
+      {renderPopupModal()}
     </View>
   );
 };
@@ -684,6 +796,64 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   manualSubmitText: { color: Colors.textOnDark, fontSize: Font.lg, fontWeight: Font.weightBold },
+
+  // Popup
+  popupOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  popupCard: {
+    width: '100%',
+    maxWidth: 370,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingTop: 0,
+    paddingBottom: 16,
+    ...shadowStyle('md'),
+    overflow: 'hidden',
+  },
+  popupAccent: { height: 5, backgroundColor: '#EAB308', marginHorizontal: -18 },
+  popupAccentSuccess: { backgroundColor: '#16A34A' },
+  popupAccentError: { backgroundColor: '#DC2626' },
+  popupAccentWarning: { backgroundColor: '#D97706' },
+  popupHeaderRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  popupCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  popupIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+    backgroundColor: '#FEF3C7',
+  },
+  popupIconSuccess: { backgroundColor: '#DCFCE7' },
+  popupIconError: { backgroundColor: '#FEE2E2' },
+  popupIconWarning: { backgroundColor: '#FEF3C7' },
+  popupTitle: { fontSize: 19, fontWeight: Font.weightExtraBold, color: '#1F2937', marginTop: 2 },
+  popupMessage: { fontSize: 14, color: '#4B5563', marginTop: 6, lineHeight: 20 },
+  popupActions: { flexDirection: 'column', gap: 10, marginTop: 16 },
+  popupBtn: { borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  popupBtnPrimary: { backgroundColor: '#1B5E20' },
+  popupBtnOutline: { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
+  popupBtnPrimaryText: { color: '#fff', fontWeight: Font.weightBold, fontSize: 14 },
+  popupBtnOutlineText: { color: '#374151', fontWeight: Font.weightBold, fontSize: 14 },
 });
 
 export default QRScanner;

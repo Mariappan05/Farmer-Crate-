@@ -29,6 +29,27 @@ const CATEGORIES = [
 
 const UNITS = ['kg', 'piece', 'dozen', 'litre', 'bundle'];
 
+const getStartOfToday = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+};
+
+const parseISOToLocalDate = (isoDate) => {
+  if (!isoDate || isoDate.length !== 10) return null;
+  const [y, m, d] = isoDate.split('-').map((v) => parseInt(v, 10));
+  if (!y || !m || !d) return null;
+  const parsed = new Date(y, m - 1, d);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== y ||
+    parsed.getMonth() !== m - 1 ||
+    parsed.getDate() !== d
+  ) {
+    return null;
+  }
+  return parsed;
+};
+
 const AddProduct = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { authState } = useAuth();
@@ -73,15 +94,44 @@ const AddProduct = ({ navigation }) => {
       setDpMonth(m || '01');
       setDpDay(d || '01');
     } else {
-      setDpYear(String(currentYear));
-      setDpMonth('01');
-      setDpDay('01');
+      const today = new Date();
+      if (field === 'harvest_date') {
+        setDpYear(String(today.getFullYear()));
+        setDpMonth(String(today.getMonth() + 1).padStart(2, '0'));
+        setDpDay(String(today.getDate()).padStart(2, '0'));
+      } else if (field === 'expiry_date') {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        setDpYear(String(tomorrow.getFullYear()));
+        setDpMonth(String(tomorrow.getMonth() + 1).padStart(2, '0'));
+        setDpDay(String(tomorrow.getDate()).padStart(2, '0'));
+      } else {
+        setDpYear(String(currentYear));
+        setDpMonth('01');
+        setDpDay('01');
+      }
     }
     setShowDatePicker(true);
   };
 
   const confirmDate = () => {
     const formatted = `${dpYear}-${dpMonth}-${dpDay}`;
+    if (datePickerField === 'harvest_date') {
+      const selectedDate = parseISOToLocalDate(formatted);
+      const today = getStartOfToday();
+      if (!selectedDate || selectedDate > today) {
+        toastRef.current?.show('Harvest date cannot be later than today', 'warning');
+        return;
+      }
+    }
+    if (datePickerField === 'expiry_date') {
+      const selectedDate = parseISOToLocalDate(formatted);
+      const today = getStartOfToday();
+      if (!selectedDate || selectedDate <= today) {
+        toastRef.current?.show('Expiry date must be after today', 'warning');
+        return;
+      }
+    }
     updateForm(datePickerField, formatted);
     setShowDatePicker(false);
   };
@@ -123,7 +173,17 @@ const AddProduct = ({ navigation }) => {
       toastRef.current?.show('Enter a valid quantity', 'warning'); return false;
     }
     if (!form.harvest_date) { toastRef.current?.show('Harvest date is required', 'warning'); return false; }
+    const harvestDate = parseISOToLocalDate(form.harvest_date);
+    if (!harvestDate) { toastRef.current?.show('Enter a valid harvest date', 'warning'); return false; }
+    if (harvestDate > getStartOfToday()) {
+      toastRef.current?.show('Harvest date cannot be later than today', 'warning'); return false;
+    }
     if (!form.expiry_date) { toastRef.current?.show('Expiry date is required', 'warning'); return false; }
+    const expiryDate = parseISOToLocalDate(form.expiry_date);
+    if (!expiryDate) { toastRef.current?.show('Enter a valid expiry date', 'warning'); return false; }
+    if (expiryDate <= getStartOfToday()) {
+      toastRef.current?.show('Expiry date must be after today', 'warning'); return false;
+    }
     if (images.length === 0) { toastRef.current?.show('Add at least one product image', 'warning'); return false; }
     return true;
   };

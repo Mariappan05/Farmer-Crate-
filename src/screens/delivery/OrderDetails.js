@@ -16,17 +16,63 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api, { BASE_URL } from '../../services/api';
+import { optimizeImageUrl } from '../../services/cloudinaryService';
 import { Colors, Font, Radius, Spacing, shadowStyle } from '../../utils/theme';
 
 const API_ORIGIN = BASE_URL.replace(/\/api$/i, '');
 
 const toAbsoluteImageUrl = (value) => {
-  if (!value || typeof value !== 'string') return null;
-  const cleaned = value.trim().replace(/\\/g, '/');
+  if (!value) return null;
+
+  let raw = value;
+  if (typeof raw === 'object') {
+    raw =
+      raw?.url ||
+      raw?.uri ||
+      raw?.image_url ||
+      raw?.image ||
+      raw?.secure_url ||
+      raw?.src ||
+      null;
+  }
+
+  if (!raw || typeof raw !== 'string') return null;
+
+  const cleaned = raw.trim().replace(/\\/g, '/');
   if (!cleaned) return null;
   if (/^\/\//.test(cleaned)) return `https:${cleaned}`;
   if (/^https?:\/\//i.test(cleaned) || /^data:image\//i.test(cleaned)) return cleaned;
   return `${API_ORIGIN}${cleaned.startsWith('/') ? '' : '/'}${cleaned}`;
+};
+
+const pickEntity = (obj, keys = []) => {
+  if (!obj || typeof obj !== 'object') return null;
+  for (const key of keys) {
+    if (obj?.[key]) return obj[key];
+  }
+  return null;
+};
+
+const resolveOrderCandidate = (raw) => {
+  const payload = raw?.data?.data || raw?.data || raw;
+  const candidate = payload?.order || payload;
+  if (!candidate || typeof candidate !== 'object') return null;
+  if (!(candidate.order_id || candidate.id)) return null;
+
+  const product = pickEntity(candidate, ['product', 'Product']);
+  const farmer =
+    pickEntity(candidate, ['farmer', 'Farmer']) ||
+    pickEntity(product, ['farmer', 'Farmer']);
+
+  return {
+    ...candidate,
+    product: product || candidate?.product || candidate?.Product,
+    farmer: farmer || candidate?.farmer || candidate?.Farmer,
+    customer: pickEntity(candidate, ['customer', 'Customer']) || candidate?.customer,
+    delivery_person: pickEntity(candidate, ['delivery_person', 'DeliveryPerson', 'assigned_delivery_person']) || candidate?.delivery_person,
+    source_transporter: pickEntity(candidate, ['source_transporter', 'sourceTransporter', 'SourceTransporter']) || candidate?.source_transporter,
+    destination_transporter: pickEntity(candidate, ['destination_transporter', 'destinationTransporter', 'DestinationTransporter']) || candidate?.destination_transporter,
+  };
 };
 
 const STATUS_COLORS = {
@@ -222,6 +268,7 @@ const PICKUP_STATUS_ACTIONS = {
 };
 
 const DELIVERY_STATUS_ACTIONS = {
+  RECEIVED: { label: 'Scan QR to Start Delivery', icon: 'qr-code-outline', route: 'Scanner' },
   REACHED_DESTINATION: { label: 'Scan QR to Start Delivery', icon: 'qr-code-outline', route: 'Scanner' },
   OUT_FOR_DELIVERY: { label: 'Scan QR to Confirm Delivery', icon: 'qr-code-outline', route: 'Scanner' },
 };
@@ -239,9 +286,37 @@ const OrderDetails = ({ navigation, route }) => {
   const fetchOrder = useCallback(async () => {
     if (!orderId) return;
     try {
-      const res = await api.get(`/orders/${orderId}`);
-      const data = res.data?.data || res.data;
-      setOrder(data);
+      const endpoints = [
+        `/orders/details/${orderId}`,
+        `/delivery-persons/track/${orderId}`,
+        `/orders/${orderId}`,
+      ];
+
+      let best = null;
+      for (const endpoint of endpoints) {
+        try {
+          const res = await api.get(endpoint);
+          const candidate = resolveOrderCandidate(res.data);
+          if (candidate) {
+            best = {
+              ...(initialOrder || {}),
+              ...candidate,
+            };
+            break;
+          }
+        } catch {
+          // Continue fallback chain
+        }
+      }
+
+      if (best) {
+        setOrder(best);
+        return;
+      }
+
+      if (initialOrder) {
+        setOrder(initialOrder);
+      }
     } catch (e) {
       // Fallback: fetch from delivery orders
       try {
@@ -455,7 +530,7 @@ const OrderDetails = ({ navigation, route }) => {
           </View>
           <View style={styles.personHeader}>
             {farmerProfile.image ? (
-              <Image source={{ uri: farmerProfile.image }} style={styles.personAvatar} />
+              <Image source={{ uri: optimizeImageUrl(farmerProfile.image, { width: 96, height: 96 }) }} style={styles.personAvatar} />
             ) : (
               <View style={styles.personAvatarFallback}>
                 <Ionicons name="person-outline" size={20} color="#1B5E20" />
@@ -507,7 +582,7 @@ const OrderDetails = ({ navigation, route }) => {
             </View>
             <View style={styles.personHeader}>
               {customerProfile.image ? (
-                <Image source={{ uri: customerProfile.image }} style={styles.personAvatar} />
+                <Image source={{ uri: optimizeImageUrl(customerProfile.image, { width: 96, height: 96 }) }} style={styles.personAvatar} />
               ) : (
                 <View style={styles.personAvatarFallback}>
                   <Ionicons name="person-outline" size={20} color="#1B5E20" />

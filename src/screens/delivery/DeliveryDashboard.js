@@ -6,6 +6,7 @@ import {
   Animated,
   AppState,
   Dimensions,
+  Image,
   Linking,
   Modal,
   RefreshControl,
@@ -18,7 +19,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import api from '../../services/api';
+import api, { BASE_URL } from '../../services/api';
 import { updateDeliveryAvailability } from '../../services/authService';
 import { getDeliveryDrops, getDeliveryPickups } from '../../services/orderService';
 import useAutoRefresh from '../../hooks/useAutoRefresh';
@@ -42,9 +43,49 @@ const STATUS_COLORS = {
 };
 
 const ACTIVE_PICKUP_STATUSES = ['ASSIGNED', 'PICKUP_ASSIGNED', 'PICKUP_IN_PROGRESS'];
-const ACTIVE_DELIVERY_STATUSES = ['IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'];
+const ACTIVE_DELIVERY_STATUSES = ['IN_TRANSIT', 'RECEIVED', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY'];
+const API_ORIGIN = BASE_URL.replace(/\/api$/i, '');
 
 const pickFirst = (...values) => values.find((value) => !!value);
+
+const toAbsoluteImageUrl = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  const cleaned = value.trim().replace(/\\/g, '/');
+  if (!cleaned) return null;
+  if (/^\/\//.test(cleaned)) return `https:${cleaned}`;
+  if (/^https?:\/\//i.test(cleaned) || /^data:image\//i.test(cleaned)) return cleaned;
+  return `${API_ORIGIN}${cleaned.startsWith('/') ? '' : '/'}${cleaned}`;
+};
+
+const getProductImageCandidates = (order) => {
+  const product = order?.product || order?.Product || {};
+  const productImages = Array.isArray(product.images) ? product.images : [];
+  const orderItems = Array.isArray(order?.items) ? order.items : [];
+  const firstItem = orderItems[0] || {};
+
+  const primaryImage = productImages.find((img) => img?.is_primary === true);
+  const firstProductImage = productImages[0];
+
+  const rawCandidates = [
+    product?.image_url,
+    product?.image,
+    product?.photo,
+    primaryImage?.image_url,
+    primaryImage?.url,
+    firstProductImage?.image_url,
+    firstProductImage?.url,
+    firstItem?.product?.image_url,
+    firstItem?.product?.image,
+    firstItem?.image_url,
+    order?.product_image,
+    order?.image_url,
+    order?.image,
+  ];
+
+  return rawCandidates.map(toAbsoluteImageUrl).filter(Boolean);
+};
+
+const getOrderProductImage = (order) => getProductImageCandidates(order)[0] || null;
 
 const formatAddress = (rawAddress) => {
   if (!rawAddress) return null;
@@ -282,6 +323,8 @@ const DeliveryDashboard = ({ navigation }) => {
   const renderPickupCard = (order) => {
     const status = order.current_status || order.status || '';
     const color = STATUS_COLORS[status] || '#888';
+    const orderImage = getOrderProductImage(order);
+    const productName = order.product?.name || order.product_name || 'Product';
     const farmerName =
       pickFirst(
         order.farmer?.name,
@@ -307,7 +350,7 @@ const DeliveryDashboard = ({ navigation }) => {
       <TouchableOpacity
         key={order.order_id || order.id}
         style={[styles.orderCard, { borderLeftWidth: 4, borderLeftColor: color }]}
-        onPress={() => navigation.navigate('OrderDetails', { orderId: order.order_id || order.id, order })}
+        onPress={() => navigation.navigate('OrderTracking', { orderId: order.order_id || order.id, order })}
         activeOpacity={0.7}
       >
         <View style={styles.orderCardHeader}>
@@ -338,16 +381,24 @@ const DeliveryDashboard = ({ navigation }) => {
           </Text>
         </View>
 
-        {/* Product details */}
-        {(order.product?.name || order.product_name) && (
-          <View style={styles.infoSection}>
-            <MaterialCommunityIcons name="package-variant" size={16} color="#666" />
-            <Text style={styles.infoText} numberOfLines={1}>
-              {order.product?.name || order.product_name}
-              {order.quantity ? ` × ${order.quantity}` : ''}
-            </Text>
+        <View style={styles.productRow}>
+          {orderImage ? (
+            <Image source={{ uri: orderImage }} style={styles.productImage} resizeMode="cover" />
+          ) : (
+            <View style={styles.productImageFallback}>
+              <MaterialCommunityIcons name="image-off-outline" size={18} color="#8A8A8A" />
+            </View>
+          )}
+          <View style={styles.productInfoWrap}>
+            <View style={styles.infoSection}>
+              <MaterialCommunityIcons name="package-variant" size={16} color="#666" />
+              <Text style={styles.infoText} numberOfLines={1}>
+                {productName}
+                {order.quantity ? ` × ${order.quantity}` : ''}
+              </Text>
+            </View>
           </View>
-        )}
+        </View>
 
         <View style={styles.orderCardFooter}>
           <Text style={styles.orderAmount}>
@@ -369,6 +420,8 @@ const DeliveryDashboard = ({ navigation }) => {
   const renderDeliveryCard = (order) => {
     const status = order.current_status || order.status || '';
     const color = STATUS_COLORS[status] || '#888';
+    const orderImage = getOrderProductImage(order);
+    const productName = order.product?.name || order.product_name || 'Product';
     const customerName =
       pickFirst(
         order.customer?.name,
@@ -394,7 +447,7 @@ const DeliveryDashboard = ({ navigation }) => {
       <TouchableOpacity
         key={order.order_id || order.id}
         style={[styles.orderCard, { borderLeftWidth: 4, borderLeftColor: color }]}
-        onPress={() => navigation.navigate('OrderDetails', { orderId: order.order_id || order.id, order })}
+        onPress={() => navigation.navigate('OrderTracking', { orderId: order.order_id || order.id, order })}
         activeOpacity={0.7}
       >
         <View style={styles.orderCardHeader}>
@@ -422,6 +475,25 @@ const DeliveryDashboard = ({ navigation }) => {
           <Text style={styles.infoText} numberOfLines={2}>
             {deliveryAddress || 'Delivery address'}
           </Text>
+        </View>
+
+        <View style={styles.productRow}>
+          {orderImage ? (
+            <Image source={{ uri: orderImage }} style={styles.productImage} resizeMode="cover" />
+          ) : (
+            <View style={styles.productImageFallback}>
+              <MaterialCommunityIcons name="image-off-outline" size={18} color="#8A8A8A" />
+            </View>
+          )}
+          <View style={styles.productInfoWrap}>
+            <View style={styles.infoSection}>
+              <MaterialCommunityIcons name="package-variant" size={16} color="#666" />
+              <Text style={styles.infoText} numberOfLines={1}>
+                {productName}
+                {order.quantity ? ` × ${order.quantity}` : ''}
+              </Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.orderCardFooter}>
@@ -850,6 +922,26 @@ const styles = StyleSheet.create({
   statusBadgeText: { fontSize: 10, fontWeight: Font.weightBold, textTransform: 'uppercase' },
   infoSection: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
   infoText: { flex: 1, fontSize: Font.sm, color: Colors.textSecondary, lineHeight: 19 },
+  productRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FAFAFA',
+    borderRadius: Radius.md,
+    padding: 8,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  productImage: { width: 52, height: 52, borderRadius: 8, backgroundColor: '#ECECEC' },
+  productImageFallback: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    backgroundColor: '#ECECEC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productInfoWrap: { flex: 1 },
   orderCardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f5f5f5' },
   orderAmount: { fontSize: Font.lg, fontWeight: Font.weightBold, color: Colors.textPrimary },
   navigateBtn: {

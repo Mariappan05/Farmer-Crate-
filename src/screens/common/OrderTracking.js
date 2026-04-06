@@ -36,36 +36,68 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
+import { BASE_URL } from '../../services/api';
 import { optimizeImageUrl } from '../../services/cloudinaryService';
 import { getOrderById } from '../../services/orderService';
 
 const TRACKING_STAGES = [
   { key: 'PENDING',              label: 'Order Placed',            icon: 'cart-outline',                  mc: null,                    color: '#FF9800' },
-  { key: 'ASSIGNED',             label: 'Farmer Accepted + Transporters Assigned', icon: null,           mc: 'truck-check-outline',   color: '#9C27B0' },
+  { key: 'CONFIRMED',            label: 'Farmer Accepted',         icon: 'checkmark-circle-outline',      mc: null,                    color: '#2196F3' },
+  { key: 'ASSIGNED',             label: 'Transporters Assigned',   icon: null,                            mc: 'truck-check-outline',   color: '#9C27B0' },
   { key: 'PICKUP_ASSIGNED',      label: 'Pickup Person Assigned',  icon: 'person-outline',                mc: null,                    color: '#FF5722' },
+  { key: 'PICKUP_IN_PROGRESS',   label: 'Pickup In Progress',      icon: 'bicycle-outline',               mc: null,                    color: '#00BCD4' },
   { key: 'PICKED_UP',            label: 'Picked Up from Farmer',   icon: null,                            mc: 'store-check-outline',   color: '#00897B' },
   { key: 'RECEIVED',             label: 'Received at Source Office', icon: null,                           mc: 'package-variant-closed', color: '#00897B' },
   { key: 'SHIPPED',              label: 'Shipped from Source',     icon: null,                            mc: 'cube-send',             color: '#3F51B5' },
   { key: 'IN_TRANSIT',           label: 'In Transit to Destination', icon: null,                           mc: 'truck-fast-outline',    color: '#3F51B5' },
-  { key: 'REACHED_DESTINATION',  label: 'Reached Destination',     icon: null,                            mc: 'warehouse',             color: '#673AB7' },
+  { key: 'REACHED_DESTINATION',  label: 'Received at Destination', icon: null,                            mc: 'warehouse',             color: '#673AB7' },
   { key: 'OUT_FOR_DELIVERY',     label: 'Out for Delivery',        icon: 'bicycle-outline',               mc: null,                    color: '#00BCD4' },
   { key: 'DELIVERED',            label: 'Delivered to Customer',   icon: 'checkmark-done-circle-outline', mc: null,                    color: '#4CAF50' },
 ];
 
 const STATUS_INDEX = {
   PENDING: 0, PLACED: 0,
-  CONFIRMED: 1, ACCEPTED: 1, ASSIGNED: 1,
-  PICKUP_ASSIGNED: 2,
-  PICKUP_IN_PROGRESS: 2,
-  PICKED_UP: 3,
-  RECEIVED: 4,
-  SHIPPED: 5,
-  IN_TRANSIT: 6,
-  REACHED_DESTINATION: 7,
-  OUT_FOR_DELIVERY: 8,
-  DELIVERED: 9,
-  COMPLETED: 9,
+  CONFIRMED: 1, ACCEPTED: 1,
+  ASSIGNED: 2,
+  PICKUP_ASSIGNED: 3,
+  PICKUP_IN_PROGRESS: 4,
+  PICKED_UP: 5,
+  RECEIVED: 6,
+  SHIPPED: 7,
+  IN_TRANSIT: 8,
+  REACHED_DESTINATION: 9,
+  OUT_FOR_DELIVERY: 10,
+  DELIVERED: 11,
+  COMPLETED: 11,
   CANCELLED: -1,
+};
+
+const normalizeStatusToken = (status) => {
+  const s = String(status || '').toUpperCase();
+  if (s === 'OUT_OF_DELIVERY') return 'OUT_FOR_DELIVERY';
+  return s;
+};
+
+const hasDestinationTransitEvidence = (trackingEntries = []) => {
+  if (!Array.isArray(trackingEntries) || trackingEntries.length === 0) return false;
+  return trackingEntries.some((entry) => {
+    const s = normalizeStatusToken(entry?.status || entry?.current_status);
+    return ['IN_TRANSIT', 'REACHED_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(s);
+  });
+};
+
+const resolveTrackingStatus = (status, trackingEntries = [], order = null) => {
+  const normalized = normalizeStatusToken(status);
+
+  if (normalized === 'RECEIVED') {
+    const transporterRole = String(order?.transporter_role || '').toUpperCase();
+    const destinationAssigned = Boolean(order?.destination_transporter_id || order?.delivery_transporter_id);
+    if (hasDestinationTransitEvidence(trackingEntries) || transporterRole === 'DELIVERY' || destinationAssigned) {
+      return 'REACHED_DESTINATION';
+    }
+  }
+
+  return normalized;
 };
 
 const getStageIndex = (status) =>
@@ -80,6 +112,26 @@ const formatDate = (d) => {
 };
 
 const formatCurrency = (a) => '₹' + (parseFloat(a) || 0).toFixed(2);
+
+const toAbsoluteImageUrl = (value) => {
+  if (!value || typeof value !== 'string') return null;
+
+  const raw = value.trim();
+  if (!raw) return null;
+
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('data:image/')) {
+    return raw;
+  }
+
+  const origin = String(BASE_URL || '').replace(/\/api\/?$/i, '').replace(/\/+$/, '');
+  if (!origin) return raw;
+
+  if (raw.startsWith('/')) {
+    return `${origin}${raw}`;
+  }
+
+  return `${origin}/${raw}`;
+};
 
 const formatAddress = (rawAddress) => {
   if (!rawAddress) return null;
@@ -105,6 +157,154 @@ const formatAddress = (rawAddress) => {
   }
 
   return String(parsed);
+};
+
+const pickFirst = (...values) => values.find((v) => v !== undefined && v !== null && String(v).trim() !== '');
+
+const extractEntityPayload = (payload, keys = []) => {
+  if (!payload) return null;
+  for (const key of keys) {
+    if (payload?.[key]) return payload[key];
+  }
+  if (payload?.data) {
+    for (const key of keys) {
+      if (payload.data?.[key]) return payload.data[key];
+    }
+    if (typeof payload.data === 'object') return payload.data;
+  }
+  return typeof payload === 'object' ? payload : null;
+};
+
+const pickEntity = (obj, keys = []) => {
+  if (!obj || typeof obj !== 'object') return null;
+  for (const key of keys) {
+    if (obj?.[key]) return obj[key];
+  }
+  return null;
+};
+
+const normalizeProfile = (raw) => {
+  if (!raw || typeof raw !== 'object') return {};
+  return {
+    name: pickFirst(raw.name, raw.full_name, raw.username, raw.user_name),
+    phone: pickFirst(raw.mobile_number, raw.phone, raw.mobile, raw.phone_number),
+    image_url: pickFirst(raw.image_url, raw.profile_image, raw.image, raw.avatar, raw.profile),
+    address: pickFirst(raw.address, raw.location),
+    zone: pickFirst(raw.zone),
+    district: pickFirst(raw.district),
+    state: pickFirst(raw.state),
+    vehicle_type: pickFirst(raw.vehicle_type),
+    vehicle_number: pickFirst(raw.vehicle_number),
+  };
+};
+
+const fetchProfileByEndpoints = async (endpoints, entityKeys = []) => {
+  for (const endpoint of endpoints) {
+    if (!endpoint) continue;
+    try {
+      const res = await api.get(endpoint);
+      const payload = res?.data?.data || res?.data || null;
+      const entity = extractEntityPayload(payload, entityKeys);
+      if (entity && typeof entity === 'object') {
+        return normalizeProfile(entity);
+      }
+    } catch {
+      // Try next endpoint
+    }
+  }
+  return {};
+};
+
+const fetchFarmerProfileFromProduct = async (productId) => {
+  if (!productId) return {};
+  try {
+    const res = await api.get(`/products/${productId}`);
+    const payload = res?.data?.data || res?.data || {};
+    const product = payload?.product || payload;
+    const farmer = product?.farmer || product?.Farmer;
+    return normalizeProfile(farmer);
+  } catch {
+    return {};
+  }
+};
+
+const fetchFarmerMeProfile = async () => {
+  try {
+    const res = await api.get('/farmers/me');
+    const payload = res?.data?.data || res?.data || {};
+    const farmer = payload?.farmer || payload?.user || payload;
+    return normalizeProfile(farmer);
+  } catch {
+    return {};
+  }
+};
+
+const enrichOrderParticipants = async (order) => {
+  if (!order) return order;
+
+  const customerId = order?.customer_id || order?.customer?.customer_id;
+  const deliveryPersonId = order?.delivery_person_id || order?.delivery_person?.delivery_person_id;
+  const sourceTransporterId = order?.source_transporter_id || order?.source_transporter?.transporter_id;
+  const destinationTransporterId = order?.destination_transporter_id || order?.destination_transporter?.transporter_id;
+  const farmerId =
+    order?.farmer_id ||
+    order?.farmer?.farmer_id ||
+    order?.product?.farmer_id ||
+    order?.Product?.farmer_id;
+  const productId = order?.product_id || order?.product?.product_id || order?.Product?.product_id;
+
+  const [customerProfile, deliveryProfile, srcTransporterProfile, dstTransporterProfile, farmerProfile, farmerProfileFromProduct, farmerMeProfile] = await Promise.all([
+    customerId
+      ? fetchProfileByEndpoints([
+          `/customers/${customerId}`,
+          `/customer/${customerId}`,
+          `/admin/customers/${customerId}`,
+        ], ['customer', 'user'])
+      : Promise.resolve({}),
+    deliveryPersonId
+      ? fetchProfileByEndpoints([
+          `/delivery-persons/${deliveryPersonId}`,
+          `/delivery-person/${deliveryPersonId}`,
+          `/admin/delivery-persons/${deliveryPersonId}`,
+        ], ['delivery_person', 'deliveryPerson', 'user'])
+      : Promise.resolve({}),
+    sourceTransporterId
+      ? fetchProfileByEndpoints([
+          `/transporters/${sourceTransporterId}`,
+          `/admin/transporters/${sourceTransporterId}`,
+          `/farmers/transporters/${sourceTransporterId}`,
+        ], ['transporter', 'user'])
+      : Promise.resolve({}),
+    destinationTransporterId
+      ? fetchProfileByEndpoints([
+          `/transporters/${destinationTransporterId}`,
+          `/admin/transporters/${destinationTransporterId}`,
+          `/farmers/transporters/${destinationTransporterId}`,
+        ], ['transporter', 'user'])
+      : Promise.resolve({}),
+    farmerId
+      ? fetchProfileByEndpoints([
+          `/farmers/${farmerId}`,
+          `/admin/farmers/${farmerId}`,
+        ], ['farmer', 'user'])
+      : Promise.resolve({}),
+    fetchFarmerProfileFromProduct(productId),
+    fetchFarmerMeProfile(),
+  ]);
+
+  return {
+    ...order,
+    farmer: {
+      ...farmerMeProfile,
+      ...farmerProfileFromProduct,
+      ...farmerProfile,
+      ...(order?.farmer || {}),
+    },
+    customer: { ...(order?.customer || {}), ...customerProfile },
+    delivery_person: { ...(order?.delivery_person || {}), ...deliveryProfile },
+    source_transporter: { ...(order?.source_transporter || {}), ...srcTransporterProfile },
+    destination_transporter: { ...(order?.destination_transporter || {}), ...dstTransporterProfile },
+  };
 };
 
 const getProductImage = (item) => {
@@ -135,6 +335,11 @@ const getPackingProofImages = (order) => ({
     order?.packing?.bill_paste_image_url ||
     null,
 });
+
+  const isTerminalOrderStatus = (status) => {
+    const s = String(status || '').toUpperCase();
+    return ['COMPLETED', 'DELIVERED', 'CANCELLED'].includes(s);
+  };
 
 /* --------------------------------------------------------------------------
  * ANIMATED VEHICLE
@@ -219,10 +424,23 @@ const TimelineStep = ({ stage, index, currentIndex, isLast }) => {
 };
 
 /* ── Info Card ────────────────────────────────────────────── */
-const InfoCard = ({ icon, mc, title, name, details, phone, image, iconColor }) => (
+const InfoCard = ({ icon, mc, title, name, details, phone, image, iconColor }) => {
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const resolvedImage = toAbsoluteImageUrl(image);
+  const showImage = Boolean(resolvedImage && !imageLoadFailed);
+
+  useEffect(() => {
+    setImageLoadFailed(false);
+  }, [resolvedImage]);
+
+  return (
   <View style={s.infoCard}>
-    {image ? (
-      <Image source={{ uri: optimizeImageUrl(image, { width: 44, height: 44 }) }} style={s.infoAvatarImg} />
+    {showImage ? (
+      <Image
+        source={{ uri: optimizeImageUrl(resolvedImage, { width: 44, height: 44 }) }}
+        style={s.infoAvatarImg}
+        onError={() => setImageLoadFailed(true)}
+      />
     ) : (
       <View style={[s.infoIconWrap, iconColor ? { backgroundColor: iconColor + '15' } : null]}>
         {mc
@@ -243,28 +461,32 @@ const InfoCard = ({ icon, mc, title, name, details, phone, image, iconColor }) =
     )}
   </View>
 );
+};
 
 /* ── Main Component ───────────────────────────────────────── */
 const OrderTracking = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const { orderId, order: initialOrder } = route.params || {};
   const [order, setOrder] = useState(initialOrder || null);
+  const [trackingEntries, setTrackingEntries] = useState([]);
   const [loading, setLoading] = useState(!initialOrder);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const intervalRef = useRef(null);
 
-  const currentIndex = getStageIndex(order?.current_status || order?.status);
-  const isCancelled = (order?.current_status || order?.status || '').toUpperCase() === 'CANCELLED';
+  const effectiveStatus = resolveTrackingStatus(order?.current_status || order?.status, trackingEntries, order);
+  const currentIndex = getStageIndex(effectiveStatus);
+  const isCancelled = effectiveStatus === 'CANCELLED';
   const progress = isCancelled ? 0 : Math.min(1, currentIndex / (TRACKING_STAGES.length - 1));
+  const currentStatus = String(effectiveStatus || '').toUpperCase();
+  const normalizedStatus = currentStatus;
   const nextStatusMap = {
-    RECEIVED: 'SHIPPED',
     SHIPPED: 'IN_TRANSIT',
     IN_TRANSIT: 'REACHED_DESTINATION',
     REACHED_DESTINATION: 'OUT_FOR_DELIVERY',
   };
-  const nextStatus = nextStatusMap[(order?.current_status || order?.status || '').toUpperCase()] || null;
+  const nextStatus = nextStatusMap[normalizedStatus] || null;
 
   const fetchOrder = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -275,6 +497,8 @@ const OrderTracking = ({ navigation, route }) => {
       // Try stable order endpoints first, keep /track as optional fallback.
       let o = null;
       const endpoints = [
+        `/farmers/orders/${id}/track`,
+        `/orders/details/${id}`,
         `/transporters/orders/${id}`,
         `/transporters/orders/${id}/track`,
         `/orders/${id}`,
@@ -285,15 +509,25 @@ const OrderTracking = ({ navigation, route }) => {
           const payload = res.data?.data || res.data?.order || res.data;
           const candidate = payload?.order || payload;
           if (candidate && (candidate.order_id || candidate.id)) {
+            const candidateProduct = pickEntity(candidate, ['product', 'Product']);
+            const candidateFarmer =
+              pickEntity(candidate, ['farmer', 'Farmer']) ||
+              pickEntity(candidateProduct, ['farmer', 'Farmer']);
+            const candidateCustomer = pickEntity(candidate, ['customer', 'Customer']);
+            const candidateDelivery = pickEntity(candidate, ['delivery_person', 'DeliveryPerson', 'assigned_delivery_person']);
+            const candidateSourceTransporter = pickEntity(candidate, ['source_transporter', 'sourceTransporter', 'SourceTransporter']);
+            const candidateDestinationTransporter = pickEntity(candidate, ['destination_transporter', 'destinationTransporter', 'DestinationTransporter']);
+
             // Merge carefully to not lose nested objects from initialOrder
             o = { 
               ...(initialOrder || {}), 
               ...candidate,
-              farmer: candidate.farmer || candidate.Farmer || initialOrder?.farmer || initialOrder?.Farmer,
-              customer: candidate.customer || candidate.Customer || initialOrder?.customer || initialOrder?.Customer,
-              delivery_person: candidate.delivery_person || candidate.DeliveryPerson || initialOrder?.delivery_person || initialOrder?.DeliveryPerson,
-              source_transporter: candidate.source_transporter || initialOrder?.source_transporter,
-              destination_transporter: candidate.destination_transporter || initialOrder?.destination_transporter
+              product: candidateProduct || initialOrder?.product || initialOrder?.Product,
+              farmer: candidateFarmer || initialOrder?.farmer || initialOrder?.Farmer,
+              customer: candidateCustomer || initialOrder?.customer || initialOrder?.Customer,
+              delivery_person: candidateDelivery || initialOrder?.delivery_person || initialOrder?.DeliveryPerson,
+              source_transporter: candidateSourceTransporter || initialOrder?.source_transporter || initialOrder?.SourceTransporter,
+              destination_transporter: candidateDestinationTransporter || initialOrder?.destination_transporter || initialOrder?.DestinationTransporter
             };
             break;
           }
@@ -306,22 +540,53 @@ const OrderTracking = ({ navigation, route }) => {
         const data = await getOrderById(id);
         const candidate = data?.data || data?.order || data;
         if (candidate) {
+          const candidateProduct = pickEntity(candidate, ['product', 'Product']);
+          const candidateFarmer =
+            pickEntity(candidate, ['farmer', 'Farmer']) ||
+            pickEntity(candidateProduct, ['farmer', 'Farmer']);
+          const candidateCustomer = pickEntity(candidate, ['customer', 'Customer']);
+          const candidateDelivery = pickEntity(candidate, ['delivery_person', 'DeliveryPerson', 'assigned_delivery_person']);
+          const candidateSourceTransporter = pickEntity(candidate, ['source_transporter', 'sourceTransporter', 'SourceTransporter']);
+          const candidateDestinationTransporter = pickEntity(candidate, ['destination_transporter', 'destinationTransporter', 'DestinationTransporter']);
+
           o = { 
             ...(initialOrder || {}), 
             ...candidate,
-            farmer: candidate.farmer || candidate.Farmer || initialOrder?.farmer || initialOrder?.Farmer,
-            customer: candidate.customer || candidate.Customer || initialOrder?.customer || initialOrder?.Customer,
-            delivery_person: candidate.delivery_person || candidate.DeliveryPerson || initialOrder?.delivery_person || initialOrder?.DeliveryPerson,
-            source_transporter: candidate.source_transporter || initialOrder?.source_transporter,
-            destination_transporter: candidate.destination_transporter || initialOrder?.destination_transporter
+            product: candidateProduct || initialOrder?.product || initialOrder?.Product,
+            farmer: candidateFarmer || initialOrder?.farmer || initialOrder?.Farmer,
+            customer: candidateCustomer || initialOrder?.customer || initialOrder?.Customer,
+            delivery_person: candidateDelivery || initialOrder?.delivery_person || initialOrder?.DeliveryPerson,
+            source_transporter: candidateSourceTransporter || initialOrder?.source_transporter || initialOrder?.SourceTransporter,
+            destination_transporter: candidateDestinationTransporter || initialOrder?.destination_transporter || initialOrder?.DestinationTransporter
           };
         }
       }
 
-      if (o) setOrder(o);
+      if (!o && initialOrder) {
+        // Keep route-provided order as source of truth if detail fetch is unavailable.
+        o = initialOrder;
+      }
+
+      if (o) {
+        const enrichedOrder = await enrichOrderParticipants(o);
+        setOrder(enrichedOrder);
+      }
+
+      try {
+        const trackRes = await api.get(`/orders/tracking/${id}`);
+        const trackPayload = trackRes.data?.data || trackRes.data?.tracking || trackRes.data || [];
+        setTrackingEntries(Array.isArray(trackPayload) ? trackPayload : []);
+      } catch {
+        setTrackingEntries([]);
+      }
+
       setError(null);
     } catch (e) {
-      console.error('[OrderTracking] Fetch tracking error:', e.message);
+      if (!initialOrder) {
+        console.error('[OrderTracking] Fetch tracking error:', e.message);
+      } else {
+        console.warn('[OrderTracking] Detail refresh skipped:', e?.message || 'Failed to refresh order details');
+      }
       if (!order) setError(e.message);
     } finally {
       setLoading(false);
@@ -334,7 +599,9 @@ const OrderTracking = ({ navigation, route }) => {
       console.log('[OrderTracking] Using route order data:', JSON.stringify(initialOrder, null, 2));
       setOrder(initialOrder);
       setLoading(false);
-      fetchOrder(true);
+      if (!isTerminalOrderStatus(initialOrder?.current_status || initialOrder?.status)) {
+        fetchOrder(true);
+      }
       return;
     }
 
@@ -342,6 +609,9 @@ const OrderTracking = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
+    if (isTerminalOrderStatus(order?.current_status || order?.status)) {
+      return;
+    }
     intervalRef.current = setInterval(() => fetchOrder(true), 40000);
     return () => clearInterval(intervalRef.current);
   }, [fetchOrder]);
@@ -355,12 +625,59 @@ const OrderTracking = ({ navigation, route }) => {
 
   const items = order?.items || order?.order_items || [];
   const productName = order?.product_name || order?.product?.name || items[0]?.product?.name || items[0]?.product_name || 'Product';
-  const farmer = order?.farmer || order?.Farmer || items[0]?.farmer || items[0]?.product?.farmer || {};
+  const farmer =
+    order?.farmer ||
+    order?.Farmer ||
+    order?.product?.farmer ||
+    order?.product?.Farmer ||
+    order?.Product?.farmer ||
+    order?.Product?.Farmer ||
+    items[0]?.farmer ||
+    items[0]?.product?.farmer ||
+    {};
   const customer = order?.customer || order?.Customer || order?.buyer || {};
   const deliveryPerson = order?.delivery_person || order?.DeliveryPerson || order?.assigned_delivery_person || {};
-  const srcTransporter = order?.source_transporter || order?.sourceTransporter || {};
-  const dstTransporter = order?.destination_transporter || order?.destinationTransporter || {};
+  const srcTransporter = order?.source_transporter || order?.sourceTransporter || order?.SourceTransporter || {};
+  const dstTransporter = order?.destination_transporter || order?.destinationTransporter || order?.DestinationTransporter || {};
   const packingProof = getPackingProofImages(order);
+
+  const farmerName =
+    farmer.name ||
+    farmer.full_name ||
+    farmer.username ||
+    order?.farmer_name ||
+    (order?.farmer_id ? `Farmer #${order.farmer_id}` : 'Farmer');
+  const farmerPhone = farmer.phone || farmer.mobile || farmer.mobile_number || farmer.phone_number || order?.farmer_phone;
+  const farmerImage = farmer.image_url || farmer.image || farmer.profile_image || farmer.avatar || order?.farmer_image_url || null;
+
+  const customerName = customer.name || customer.full_name || customer.username || order?.customer_name;
+  const customerPhone = customer.phone || customer.mobile || customer.mobile_number || customer.phone_number || order?.customer_phone;
+  const customerImage = customer.image_url || customer.image || customer.profile_image || customer.avatar || order?.customer_image_url || null;
+
+  const deliveryPersonName =
+    deliveryPerson.name ||
+    deliveryPerson.full_name ||
+    deliveryPerson.username ||
+    order?.delivery_person_name ||
+    (order?.delivery_person_id ? `Delivery Person #${order.delivery_person_id}` : 'Delivery Person');
+  const deliveryPersonPhone = deliveryPerson.phone || deliveryPerson.mobile || deliveryPerson.mobile_number || deliveryPerson.phone_number || order?.delivery_person_phone;
+  const deliveryPersonImage = deliveryPerson.image_url || deliveryPerson.image || deliveryPerson.profile_image || deliveryPerson.avatar || order?.delivery_person_image_url || null;
+
+  const sourceTransporterName =
+    srcTransporter.name ||
+    srcTransporter.full_name ||
+    order?.source_transporter_name ||
+    `Transporter #${order?.source_transporter_id || srcTransporter?.transporter_id || 'N/A'}`;
+  const sourceTransporterPhone = srcTransporter.phone || srcTransporter.mobile || srcTransporter.mobile_number || srcTransporter.phone_number || order?.source_transporter_phone;
+  const sourceTransporterImage = srcTransporter.image_url || srcTransporter.image || srcTransporter.profile_image || srcTransporter.avatar || order?.source_transporter_image_url || null;
+
+  const destinationTransporterName =
+    dstTransporter.name ||
+    dstTransporter.full_name ||
+    order?.destination_transporter_name ||
+    `Transporter #${order?.destination_transporter_id || dstTransporter?.transporter_id || 'N/A'}`;
+  const destinationTransporterPhone = dstTransporter.phone || dstTransporter.mobile || dstTransporter.mobile_number || dstTransporter.phone_number || order?.destination_transporter_phone;
+  const destinationTransporterImage = dstTransporter.image_url || dstTransporter.image || dstTransporter.profile_image || dstTransporter.avatar || order?.destination_transporter_image_url || null;
 
   /* -- Loading state ----------------------------------------- */
   if (loading && !order) {
@@ -548,69 +865,59 @@ const OrderTracking = ({ navigation, route }) => {
         )}
 
         {/* Farmer Info */}
-        {(farmer?.name || farmer?.full_name || farmer?.phone || order?.farmer_name || order?.pickup_address) && (
-          <InfoCard
-            icon="leaf-outline"
-            iconColor="#4CAF50"
-            title="Farmer"
-            name={farmer.name || farmer.full_name || farmer.username || order?.farmer_name}
-            details={farmer.farm_name || farmer.location || farmer.city || formatAddress(order?.pickup_address)}
-            phone={farmer.phone || farmer.mobile || farmer.mobile_number || order?.farmer_phone}
-            image={farmer.image_url || farmer.image || farmer.profile_image || null}
-          />
-        )}
+        <InfoCard
+          icon="leaf-outline"
+          iconColor="#4CAF50"
+          title="Farmer"
+          name={farmerName}
+          details={farmer.farm_name || farmer.location || farmer.city || formatAddress(order?.pickup_address)}
+          phone={farmerPhone}
+          image={farmerImage}
+        />
 
         {/* Customer Info */}
-        {(customer?.name || customer?.full_name || order?.customer_name || order?.delivery_address) && (
-          <InfoCard
-            icon="person-outline"
-            iconColor="#2196F3"
-            title="Customer"
-            name={customer.name || customer.full_name || customer.username || order?.customer_name}
-            details={formatAddress(order?.delivery_address) || customer.city || formatAddress(customer.address)}
-            phone={customer.phone || customer.mobile || customer.mobile_number || order?.customer_phone}
-            image={customer.image_url || customer.image || customer.profile_image || null}
-          />
-        )}
+        <InfoCard
+          icon="person-outline"
+          iconColor="#2196F3"
+          title="Customer"
+          name={customerName}
+          details={formatAddress(order?.delivery_address) || customer.city || formatAddress(customer.address)}
+          phone={customerPhone}
+          image={customerImage}
+        />
 
         {/* Delivery Person Info */}
-        {(deliveryPerson?.name || deliveryPerson?.full_name || order?.delivery_person_name || order?.delivery_person_id) && (
-          <InfoCard
-            icon="bicycle-outline"
-            iconColor="#9C27B0"
-            title="Delivery Person"
-            name={deliveryPerson.name || deliveryPerson.full_name || deliveryPerson.username || order?.delivery_person_name}
-            details={[deliveryPerson.vehicle_number, deliveryPerson.vehicle_type].filter(Boolean).join(' • ') || order?.vehicle_number}
-            phone={deliveryPerson.phone || deliveryPerson.mobile || deliveryPerson.mobile_number || order?.delivery_person_phone}
-            image={deliveryPerson.image_url || deliveryPerson.image || deliveryPerson.profile_image || null}
-          />
-        )}
+        <InfoCard
+          icon="bicycle-outline"
+          iconColor="#9C27B0"
+          title="Delivery Person"
+          name={deliveryPersonName}
+          details={[deliveryPerson.vehicle_number, deliveryPerson.vehicle_type].filter(Boolean).join(' • ') || order?.vehicle_number}
+          phone={deliveryPersonPhone}
+          image={deliveryPersonImage}
+        />
 
         {/* Source Transporter */}
-        {(srcTransporter?.name || srcTransporter?.transporter_id || order?.source_transporter_id) && (
-          <InfoCard
-            mc="truck-delivery-outline"
-            iconColor="#FF5722"
-            title="Source Transporter"
-            name={srcTransporter.name || srcTransporter.full_name || `Transporter #${order?.source_transporter_id || srcTransporter?.transporter_id}`}
-            details={[srcTransporter.address, srcTransporter.zone, srcTransporter.district, srcTransporter.state].filter(Boolean).join(', ') || srcTransporter.email}
-            phone={srcTransporter.phone || srcTransporter.mobile_number}
-            image={srcTransporter.image_url || srcTransporter.image || null}
-          />
-        )}
+        <InfoCard
+          mc="truck-delivery-outline"
+          iconColor="#FF5722"
+          title="Source Transporter"
+          name={sourceTransporterName}
+          details={[srcTransporter.address, srcTransporter.zone, srcTransporter.district, srcTransporter.state].filter(Boolean).join(', ') || srcTransporter.email}
+          phone={sourceTransporterPhone}
+          image={sourceTransporterImage}
+        />
 
         {/* Destination Transporter */}
-        {(dstTransporter?.name || dstTransporter?.transporter_id || order?.destination_transporter_id) && (
-          <InfoCard
-            mc="truck-check-outline"
-            iconColor="#673AB7"
-            title="Destination Transporter"
-            name={dstTransporter.name || dstTransporter.full_name || `Transporter #${order?.destination_transporter_id || dstTransporter?.transporter_id}`}
-            details={[dstTransporter.address, dstTransporter.zone, dstTransporter.district, dstTransporter.state].filter(Boolean).join(', ') || dstTransporter.email}
-            phone={dstTransporter.phone || dstTransporter.mobile_number}
-            image={dstTransporter.image_url || dstTransporter.image || null}
-          />
-        )}
+        <InfoCard
+          mc="truck-check-outline"
+          iconColor="#673AB7"
+          title="Destination Transporter"
+          name={destinationTransporterName}
+          details={[dstTransporter.address, dstTransporter.zone, dstTransporter.district, dstTransporter.state].filter(Boolean).join(', ') || dstTransporter.email}
+          phone={destinationTransporterPhone}
+          image={destinationTransporterImage}
+        />
 
         {(packingProof.packing || packingProof.bill) && (
           <View style={s.sectionCard}>

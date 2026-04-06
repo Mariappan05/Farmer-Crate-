@@ -106,6 +106,84 @@ export const getCustomerOrders = async () => {
   return data;
 };
 
+export const submitCustomerReturnRequest = async (orderId, payload) => {
+  const requestPayload = {
+    order_id: orderId,
+    orderId,
+    ...payload,
+  };
+
+  const supportPayload = {
+    subject: `Return Request - Order #${orderId}`,
+    message: [
+      `Order ID: ${orderId}`,
+      `Reason: ${payload?.return_reason || payload?.report || payload?.issue_report || 'N/A'}`,
+      `Opening Video: ${payload?.opening_video_url || payload?.openingVideoUrl || 'N/A'}`,
+      `Related Photos: ${Array.isArray(payload?.related_photos) ? payload.related_photos.join(', ') : 'N/A'}`,
+      `Proof Photos: ${Array.isArray(payload?.proof_evidence_photos) ? payload.proof_evidence_photos.join(', ') : 'N/A'}`,
+      `Submitted At: ${payload?.submitted_at || new Date().toISOString()}`,
+    ].join('\n'),
+    order_id: orderId,
+    return_payload: requestPayload,
+  };
+
+  console.log('[OrderService] submitCustomerReturnRequest start', {
+    order_id: orderId,
+    payload: requestPayload,
+  });
+
+  const endpoints = [
+    { method: 'post', endpoint: `/orders/${orderId}/return-request`, payload: requestPayload },
+    { method: 'post', endpoint: `/orders/${orderId}/returns`, payload: requestPayload },
+    { method: 'post', endpoint: `/customer/orders/${orderId}/return-request`, payload: requestPayload },
+    { method: 'post', endpoint: '/returns', payload: requestPayload },
+    { method: 'post', endpoint: '/return-requests', payload: requestPayload },
+    { method: 'post', endpoint: '/support/contact', payload: supportPayload },
+  ];
+
+  let lastError = null;
+  const attemptStatuses = [];
+  for (const attempt of endpoints) {
+    try {
+      const { data } = await api[attempt.method](attempt.endpoint, attempt.payload);
+      console.log('[OrderService] submitCustomerReturnRequest success', {
+        method: attempt.method.toUpperCase(),
+        endpoint: attempt.endpoint,
+        order_id: orderId,
+        response: data,
+      });
+      return data;
+    } catch (err) {
+      lastError = err;
+      attemptStatuses.push(err?.status || err?.response?.status || null);
+      console.error('[OrderService] submitCustomerReturnRequest failed', {
+        method: attempt.method.toUpperCase(),
+        endpoint: attempt.endpoint,
+        order_id: orderId,
+        payload: attempt.payload,
+        message: err?.message,
+        status: err?.status || err?.response?.status,
+        data: err?.response?.data,
+      });
+    }
+  }
+
+  const all404 = attemptStatuses.length > 0 && attemptStatuses.every((s) => s === 404);
+
+  console.error('[OrderService] submitCustomerReturnRequest all attempts failed', {
+    order_id: orderId,
+    message: lastError?.message,
+    status: lastError?.status || lastError?.response?.status,
+    data: lastError?.response?.data,
+  });
+
+  if (all404) {
+    throw new Error('Return request service is not available on server yet. Please contact support.');
+  }
+
+  throw lastError || new Error('Failed to submit return request');
+};
+
 // ─── Farmer orders ──────────────────────────────────────────────────────────
 
 export const getFarmerOrders = async (status = 'all') => {
@@ -305,13 +383,31 @@ export const updateDeliveryOrderStatus = async (orderId, status) => {
 };
 
 export const updateTransporterOrderStatus = async (orderId, status) => {
-  const { data } = await api.put(`/transporters/orders/${orderId}/status`, { status });
+  const normalizedStatus = String(status || '').toUpperCase();
+
+  const { data } = await api.put(`/transporters/orders/${orderId}/status`, { status: normalizedStatus });
   triggerOrderWorkflowNotification({
     orderId,
     event: 'transporter_status_updated',
-    status,
+    status: normalizedStatus,
     actorRole: 'transporter',
   });
+
+  // Auto-progress shipping flow: SHIPPED -> IN_TRANSIT without extra manual action.
+  if (normalizedStatus === 'SHIPPED') {
+    const { data: transitData } = await api.put(`/transporters/orders/${orderId}/status`, {
+      status: 'IN_TRANSIT',
+    });
+    triggerOrderWorkflowNotification({
+      orderId,
+      event: 'transporter_status_auto_progressed',
+      status: 'IN_TRANSIT',
+      actorRole: 'transporter',
+      metadata: { from_status: 'SHIPPED' },
+    });
+    return transitData;
+  }
+
   return data;
 };
 

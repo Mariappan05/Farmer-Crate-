@@ -11,7 +11,7 @@
  *   - Print button
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import api from '../../services/api';
 
 const formatDate = (d) => {
   if (!d) return new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -34,12 +35,124 @@ const formatDate = (d) => {
 };
 
 const formatCurrency = (a) => '₹' + (parseFloat(a) || 0).toFixed(2);
+const pickFirst = (...values) => values.find((v) => v !== undefined && v !== null && String(v).trim() !== '');
+
+const parseAddress = (value) => {
+  if (!value) return '';
+  if (typeof value === 'object') {
+    return [
+      value.full_name,
+      value.address_line,
+      value.address,
+      value.city,
+      value.district,
+      value.state,
+      value.pincode,
+    ].filter(Boolean).join(', ');
+  }
+
+  const str = String(value);
+  try {
+    const parsed = JSON.parse(str);
+    if (parsed && typeof parsed === 'object') {
+      return [
+        parsed.full_name,
+        parsed.address_line,
+        parsed.address,
+        parsed.city,
+        parsed.district,
+        parsed.state,
+        parsed.pincode,
+      ].filter(Boolean).join(', ');
+    }
+  } catch {
+    // keep raw string
+  }
+  return str;
+};
+
+const resolveOrderCandidate = (raw) => {
+  const payload = raw?.data?.data || raw?.data || raw;
+  const candidate = payload?.order || payload;
+  if (!candidate || typeof candidate !== 'object') return null;
+  if (!(candidate.order_id || candidate.id)) return null;
+
+  const product = candidate.product || candidate.Product || null;
+  const farmer = candidate.farmer || candidate.Farmer || product?.farmer || product?.Farmer || null;
+
+  return {
+    ...candidate,
+    product,
+    farmer,
+    customer: candidate.customer || candidate.Customer || null,
+    delivery_person: candidate.delivery_person || candidate.DeliveryPerson || null,
+    source_transporter: candidate.source_transporter || candidate.sourceTransporter || null,
+    destination_transporter: candidate.destination_transporter || candidate.destinationTransporter || null,
+  };
+};
 
 const BillPreview = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
-  const { orderId, order } = route.params || {};
+  const { orderId, order: initialOrder } = route.params || {};
+  const [order, setOrder] = useState(initialOrder || null);
+  const [loading, setLoading] = useState(!initialOrder && !!orderId);
   const [printing, setPrinting] = useState(false);
   const [sharing, setSharing] = useState(false);
+
+  const resolvedOrderId = orderId || order?.order_id || order?.id;
+
+  const fetchOrder = useCallback(async () => {
+    if (!resolvedOrderId) return;
+    setLoading(true);
+    try {
+      const endpoints = [
+        `/transporters/orders/${resolvedOrderId}`,
+        `/transporters/orders/${resolvedOrderId}/track`,
+        `/orders/details/${resolvedOrderId}`,
+        `/orders/${resolvedOrderId}`,
+      ];
+
+      for (const endpoint of endpoints) {
+        try {
+          const res = await api.get(endpoint);
+          const candidate = resolveOrderCandidate(res.data);
+          if (candidate) {
+            setOrder((prev) => ({ ...(prev || {}), ...candidate }));
+            break;
+          }
+        } catch {
+          // continue fallbacks
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [resolvedOrderId]);
+
+  useEffect(() => {
+    if (!order && resolvedOrderId) {
+      fetchOrder();
+    }
+  }, [order, resolvedOrderId, fetchOrder]);
+
+  useEffect(() => {
+    if (initialOrder) {
+      setOrder(initialOrder);
+      if (resolvedOrderId) {
+        fetchOrder();
+      }
+    }
+  }, [initialOrder, resolvedOrderId, fetchOrder]);
+
+  if (loading && !order) {
+    return (
+      <View style={[styles.center, { paddingTop: insets.top }]}>
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
+        <ActivityIndicator size="large" color="#1B5E20" />
+        <Text style={styles.emptyText}>Loading bill details...</Text>
+      </View>
+    );
+  }
 
   if (!order) {
     return (
@@ -55,13 +168,18 @@ const BillPreview = ({ navigation, route }) => {
   }
 
   const items = order.items || order.order_items || (order.product ? [{ product: order.product, quantity: order.quantity || 1 }] : []);
-  const farmer = order.farmer || {};
-  const customer = order.customer || {};
-  const billNumber = order.bill_number || order.invoice_number || `INV-${orderId || 'N/A'}`;
+  const farmer = order.farmer || order.product?.farmer || order.Product?.farmer || {};
+  const customer = order.customer || order.Customer || {};
+  const billNumber = order.bill_number || order.invoice_number || `INV-${resolvedOrderId || 'N/A'}`;
   const billDate = formatDate(order.bill_date || order.created_at);
-  const subtotal = items.reduce((sum, item) => sum + ((item.product?.price || item.price || 0) * (item.quantity || 1)), 0);
-  const commission = order.commission || order.transport_charge || order.delivery_charge || (subtotal * 0.05);
-  const total = order.total_amount || order.amount || (subtotal + commission);
+  const subtotal = items.reduce((sum, item) => {
+    const p = item.product || item;
+    const price = parseFloat(p.price || p.current_price || item.price || item.unit_price || 0) || 0;
+    const qty = parseFloat(item.quantity || 1) || 1;
+    return sum + (price * qty);
+  }, 0);
+  const commission = parseFloat(order.commission || order.transport_charge || order.delivery_charge || order.admin_commission || 0) || (subtotal * 0.05);
+  const total = parseFloat(order.total_amount || order.total_price || order.amount || order.grand_total || 0) || (subtotal + commission);
 
   /* ── Generate HTML for PDF ──────────────────────────────── */
   const generateHTML = () => `
@@ -93,20 +211,20 @@ const BillPreview = ({ navigation, route }) => {
         <div>
           <strong>Bill No:</strong> ${billNumber}<br/>
           <strong>Date:</strong> ${billDate}<br/>
-          <strong>Order ID:</strong> #${orderId}
+          <strong>Order ID:</strong> #${resolvedOrderId}
         </div>
       </div>
       <div class="section">
         <h3>Farmer (Pickup)</h3>
         <p><strong>${farmer.full_name || farmer.name || order.farmer_name || 'N/A'}</strong></p>
-        <p>${farmer.phone || ''}</p>
-        <p>${farmer.address || farmer.address_line || order.pickup_address || ''}</p>
+        <p>${pickFirst(farmer.phone, farmer.mobile_number, farmer.mobile, farmer.phone_number, order.farmer_phone, '')}</p>
+        <p>${parseAddress(pickFirst(farmer.address, farmer.address_line, order.pickup_address, order.farmer_address, ''))}</p>
       </div>
       <div class="section">
         <h3>Customer (Delivery)</h3>
         <p><strong>${customer.full_name || customer.name || order.customer_name || 'N/A'}</strong></p>
-        <p>${customer.phone || ''}</p>
-        <p>${customer.address || customer.address_line || order.delivery_address || ''}</p>
+        <p>${pickFirst(customer.phone, customer.mobile_number, customer.mobile, customer.phone_number, order.customer_phone, '')}</p>
+        <p>${parseAddress(pickFirst(customer.address, customer.address_line, order.delivery_address, order.customer_address, ''))}</p>
       </div>
       <div class="section">
         <h3>Items</h3>
@@ -117,7 +235,7 @@ const BillPreview = ({ navigation, route }) => {
           <tbody>
             ${items.map((item) => {
               const p = item.product || item;
-              const price = p.price || item.price || 0;
+              const price = parseFloat(p.price || p.current_price || item.price || item.unit_price || 0) || 0;
               const qty = item.quantity || 1;
               return `<tr><td>${p.name || 'Product'}</td><td>${qty}</td><td>₹${parseFloat(price).toFixed(2)}</td><td>₹${(price * qty).toFixed(2)}</td></tr>`;
             }).join('')}
@@ -203,7 +321,7 @@ const BillPreview = ({ navigation, route }) => {
             </View>
             <View style={styles.billInfoItem}>
               <Text style={styles.billInfoLabel}>Order</Text>
-              <Text style={styles.billInfoValue}>#{orderId}</Text>
+              <Text style={styles.billInfoValue}>#{resolvedOrderId}</Text>
             </View>
           </View>
         </View>
@@ -217,9 +335,11 @@ const BillPreview = ({ navigation, route }) => {
             <View style={{ flex: 1 }}>
               <Text style={styles.personLabel}>Farmer (Pickup)</Text>
               <Text style={styles.personName}>{farmer.full_name || farmer.name || order.farmer_name || 'N/A'}</Text>
-              {farmer.phone && <Text style={styles.personDetail}>{farmer.phone}</Text>}
-              {(farmer.address || order.pickup_address) && (
-                <Text style={styles.personDetail}>{farmer.address || farmer.address_line || order.pickup_address}</Text>
+              {pickFirst(farmer.phone, farmer.mobile_number, farmer.mobile, farmer.phone_number, order.farmer_phone) && (
+                <Text style={styles.personDetail}>{pickFirst(farmer.phone, farmer.mobile_number, farmer.mobile, farmer.phone_number, order.farmer_phone)}</Text>
+              )}
+              {(farmer.address || farmer.address_line || order.pickup_address || order.farmer_address) && (
+                <Text style={styles.personDetail}>{parseAddress(pickFirst(farmer.address, farmer.address_line, order.pickup_address, order.farmer_address))}</Text>
               )}
             </View>
           </View>
@@ -234,16 +354,12 @@ const BillPreview = ({ navigation, route }) => {
             <View style={{ flex: 1 }}>
               <Text style={styles.personLabel}>Customer (Delivery)</Text>
               <Text style={styles.personName}>{customer.full_name || customer.name || order.customer_name || 'N/A'}</Text>
-              {customer.phone && <Text style={styles.personDetail}>{customer.phone}</Text>}
-              {(customer.address || order.delivery_address) && (() => {
-                const raw = customer.address || customer.address_line || order.delivery_address;
-                let addr = raw;
-                if (typeof raw === 'string') { try { addr = JSON.parse(raw); } catch (_) {} }
-                const addrText = typeof addr === 'object' && addr !== null
-                  ? [addr.full_name, addr.address_line, addr.city, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ')
-                  : String(addr);
-                return <Text style={styles.personDetail}>{addrText}</Text>;
-              })()}
+              {pickFirst(customer.phone, customer.mobile_number, customer.mobile, customer.phone_number, order.customer_phone) && (
+                <Text style={styles.personDetail}>{pickFirst(customer.phone, customer.mobile_number, customer.mobile, customer.phone_number, order.customer_phone)}</Text>
+              )}
+              {(customer.address || customer.address_line || order.delivery_address || order.customer_address) ? (
+                <Text style={styles.personDetail}>{parseAddress(pickFirst(customer.address, customer.address_line, order.delivery_address, order.customer_address))}</Text>
+              ) : null}
             </View>
           </View>
         </View>
@@ -260,7 +376,7 @@ const BillPreview = ({ navigation, route }) => {
           </View>
           {items.map((item, idx) => {
             const p = item.product || item;
-            const price = parseFloat(p.price || item.price || 0);
+            const price = parseFloat(p.price || p.current_price || item.price || item.unit_price || 0) || 0;
             const qty = item.quantity || 1;
             return (
               <View key={idx} style={styles.tableRow}>
@@ -319,7 +435,7 @@ const BillPreview = ({ navigation, route }) => {
 
         <TouchableOpacity
           style={styles.billActionBtn}
-          onPress={() => navigation.navigate('BillAction', { orderId, order })}
+          onPress={() => navigation.navigate('BillAction', { orderId: resolvedOrderId, order })}
         >
           <MaterialCommunityIcons name="file-document-edit-outline" size={20} color="#1B5E20" />
           <Text style={styles.billActionBtnText}>Bill Actions</Text>

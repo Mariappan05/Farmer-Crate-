@@ -11,7 +11,7 @@
  *   - Download bill
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,18 @@ import api from '../../services/api';
 import ToastMessage from '../../utils/Toast';
 
 const formatCurrency = (a) => '₹' + (parseFloat(a) || 0).toFixed(2);
+const pickFirst = (...values) => values.find((v) => v !== undefined && v !== null && String(v).trim() !== '');
+
+const resolveOrderCandidate = (raw) => {
+  const payload = raw?.data?.data || raw?.data || raw;
+  const candidate = payload?.order || payload;
+  if (!candidate || typeof candidate !== 'object') return null;
+  if (!(candidate.order_id || candidate.id)) return null;
+  return {
+    ...candidate,
+    product: candidate.product || candidate.Product || null,
+  };
+};
 const formatDate = (d) => {
   if (!d) return 'N/A';
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -40,7 +52,9 @@ const formatDate = (d) => {
 
 const BillAction = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
-  const { orderId, order } = route.params || {};
+  const { orderId, order: initialOrder } = route.params || {};
+  const [order, setOrder] = useState(initialOrder || null);
+  const [loading, setLoading] = useState(!initialOrder && !!orderId);
 
   const [accepting, setAccepting] = useState(false);
   const [disputing, setDisputing] = useState(false);
@@ -48,6 +62,61 @@ const BillAction = ({ navigation, route }) => {
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputeReason, setDisputeReason] = useState('');
   const toastRef = useRef(null);
+
+  const resolvedOrderId = orderId || order?.order_id || order?.id;
+
+  const fetchOrder = useCallback(async () => {
+    if (!resolvedOrderId) return;
+    setLoading(true);
+    try {
+      const endpoints = [
+        `/transporters/orders/${resolvedOrderId}`,
+        `/transporters/orders/${resolvedOrderId}/track`,
+        `/orders/details/${resolvedOrderId}`,
+        `/orders/${resolvedOrderId}`,
+      ];
+
+      for (const endpoint of endpoints) {
+        try {
+          const res = await api.get(endpoint);
+          const candidate = resolveOrderCandidate(res.data);
+          if (candidate) {
+            setOrder((prev) => ({ ...(prev || {}), ...candidate }));
+            break;
+          }
+        } catch {
+          // continue fallback chain
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [resolvedOrderId]);
+
+  useEffect(() => {
+    if (!order && resolvedOrderId) {
+      fetchOrder();
+    }
+  }, [order, resolvedOrderId, fetchOrder]);
+
+  useEffect(() => {
+    if (initialOrder) {
+      setOrder(initialOrder);
+      if (resolvedOrderId) {
+        fetchOrder();
+      }
+    }
+  }, [initialOrder, resolvedOrderId, fetchOrder]);
+
+  if (loading && !order) {
+    return (
+      <View style={[styles.center, { paddingTop: insets.top }]}>
+        <StatusBar barStyle="light-content" backgroundColor="#103A12" />
+        <ActivityIndicator size="large" color="#1B5E20" />
+        <Text style={styles.emptyText}>Loading bill details...</Text>
+      </View>
+    );
+  }
 
   if (!order) {
     return (
@@ -62,12 +131,16 @@ const BillAction = ({ navigation, route }) => {
     );
   }
 
-  const billId = order.bill_id || order.invoice_id || orderId;
-  const billNumber = order.bill_number || order.invoice_number || `INV-${orderId}`;
+  const billId = order.bill_id || order.invoice_id || resolvedOrderId;
+  const billNumber = order.bill_number || order.invoice_number || `INV-${resolvedOrderId}`;
   const items = order.items || order.order_items || (order.product ? [{ product: order.product, quantity: order.quantity || 1 }] : []);
-  const subtotal = items.reduce((sum, item) => sum + ((item.product?.price || item.price || 0) * (item.quantity || 1)), 0);
-  const commission = order.commission || order.transport_charge || order.delivery_charge || (subtotal * 0.05);
-  const total = order.total_amount || order.amount || (subtotal + commission);
+  const subtotal = items.reduce((sum, item) => {
+    const p = item.product || item;
+    const unitPrice = parseFloat(p.price || p.current_price || item.price || item.unit_price || 0) || 0;
+    return sum + (unitPrice * (item.quantity || 1));
+  }, 0);
+  const commission = parseFloat(order.commission || order.transport_charge || order.delivery_charge || order.admin_commission || 0) || (subtotal * 0.05);
+  const total = parseFloat(order.total_amount || order.total_price || order.amount || order.grand_total || 0) || (subtotal + commission);
   const billStatus = order.bill_status || order.payment_status || 'Pending';
 
   /* ── Accept bill ────────────────────────────────────────── */
@@ -131,11 +204,11 @@ const BillAction = ({ navigation, route }) => {
           td { padding: 8px; border-bottom: 1px solid #eee; }
         </style></head><body>
         <h1>FarmerCrate - Invoice</h1>
-        <p>Bill No: ${billNumber} | Date: ${formatDate(order.created_at)} | Order: #${orderId}</p>
+        <p>Bill No: ${billNumber} | Date: ${formatDate(order.created_at)} | Order: #${resolvedOrderId}</p>
         <table><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>
         ${items.map((it) => {
           const p = it.product || it;
-          const pr = parseFloat(p.price || it.price || 0);
+          const pr = parseFloat(p.price || p.current_price || it.price || it.unit_price || 0) || 0;
           return `<tr><td>${p.name || 'Product'}</td><td>${it.quantity || 1}</td><td>₹${pr.toFixed(2)}</td><td>₹${(pr * (it.quantity || 1)).toFixed(2)}</td></tr>`;
         }).join('')}
         </tbody></table>
@@ -178,7 +251,7 @@ const BillAction = ({ navigation, route }) => {
             <MaterialCommunityIcons name="receipt" size={28} color="#1B5E20" />
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.billNumber}>{billNumber}</Text>
-              <Text style={styles.billDate}>Order #{orderId} • {formatDate(order.created_at)}</Text>
+              <Text style={styles.billDate}>Order #{resolvedOrderId} • {formatDate(order.created_at)}</Text>
             </View>
             <View style={[styles.statusBadge, { backgroundColor: billStatus === 'Accepted' ? '#4CAF5020' : billStatus === 'Disputed' ? '#F4433620' : '#FF980020' }]}>
               <Text style={[styles.statusText, { color: billStatus === 'Accepted' ? '#4CAF50' : billStatus === 'Disputed' ? '#F44336' : '#FF9800' }]}>
@@ -191,7 +264,7 @@ const BillAction = ({ navigation, route }) => {
           <View style={styles.divider} />
           {items.map((item, idx) => {
             const p = item.product || item;
-            const price = parseFloat(p.price || item.price || 0);
+            const price = parseFloat(p.price || p.current_price || item.price || item.unit_price || 0) || 0;
             const qty = item.quantity || 1;
             return (
               <View key={idx} style={styles.itemRow}>
@@ -271,7 +344,7 @@ const BillAction = ({ navigation, route }) => {
 
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#FF9800' }]}
-            onPress={() => navigation.navigate('BillPreview', { orderId, order })}
+            onPress={() => navigation.navigate('BillPreview', { orderId: resolvedOrderId, order })}
           >
             <Ionicons name="eye-outline" size={22} color="#fff" />
             <View style={{ flex: 1 }}>

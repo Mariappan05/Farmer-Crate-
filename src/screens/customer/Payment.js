@@ -561,6 +561,94 @@ const Payment = ({ navigation, route }) => {
     qr_image_url: qrImageUrl,
   });
 
+  const toPositiveInteger = (value, fallback = 0) => {
+    const n = parseInt(value, 10);
+    if (Number.isNaN(n) || n < 0) return fallback;
+    return n;
+  };
+
+  const restoreProductQuantities = async (orderItems = []) => {
+    const qtyByProduct = new Map();
+
+    orderItems.forEach((item) => {
+      const productId = getOrderProductId(item);
+      const qty = toPositiveInteger(item?.quantity, 1);
+      if (!productId || qty <= 0) return;
+
+      const key = String(productId);
+      qtyByProduct.set(key, (qtyByProduct.get(key) || 0) + qty);
+    });
+
+    for (const [productId, orderedQty] of qtyByProduct.entries()) {
+      try {
+        const productRes = await api.get(`/products/${productId}`);
+        const product = productRes?.data?.data || productRes?.data || {};
+        const currentQtyRaw =
+          product?.quantity ??
+          product?.stock ??
+          product?.available_quantity ??
+          product?.available_stock ??
+          0;
+        const currentQty = toPositiveInteger(currentQtyRaw, 0);
+
+        await api.put(`/products/${productId}`, { quantity: currentQty + orderedQty });
+      } catch (err) {
+        console.warn(
+          '[Payment] Failed to restore quantity for product:',
+          productId,
+          err?.response?.data?.message || err?.message
+        );
+      }
+    }
+  };
+
+  const cancelOrderAndRestoreStock = async ({ orderId, items }) => {
+    if (!orderId) return false;
+
+    const cancelAttempts = [
+      {
+        method: 'put',
+        endpoint: `/orders/${orderId}/status`,
+        payload: { status: 'CANCELLED', reason: 'Payment cancelled by customer', restore_stock: true },
+      },
+      {
+        method: 'put',
+        endpoint: '/orders/status',
+        payload: { order_id: orderId, status: 'CANCELLED', reason: 'Payment cancelled by customer', restore_stock: true },
+      },
+      {
+        method: 'put',
+        endpoint: `/orders/${orderId}/cancel`,
+        payload: { reason: 'Payment cancelled by customer', restore_stock: true },
+      },
+      {
+        method: 'post',
+        endpoint: `/orders/${orderId}/cancel`,
+        payload: { reason: 'Payment cancelled by customer', restore_stock: true },
+      },
+    ];
+
+    let cancelledOnBackend = false;
+    for (const attempt of cancelAttempts) {
+      try {
+        await api[attempt.method](attempt.endpoint, attempt.payload);
+        cancelledOnBackend = true;
+        break;
+      } catch (err) {
+        console.warn(
+          '[Payment] Cancel attempt failed:',
+          attempt.method.toUpperCase(),
+          attempt.endpoint,
+          err?.response?.data?.message || err?.message
+        );
+      }
+    }
+
+    // Ensure quantities are restored even if backend cancel endpoint doesn't do stock compensation.
+    await restoreProductQuantities(items || []);
+    return cancelledOnBackend;
+  };
+
   const findPersistedPaidOrder = async ({ orderId, qrCode, razorpayPaymentId }) => {
     if (orderId) {
       try {
@@ -717,6 +805,9 @@ const Payment = ({ navigation, route }) => {
   // ── Razorpay Online Payment ──
   const handleOnlinePayment = async () => {
     setIsProcessing(true);
+    let createdOrderData = null;
+    let createdOrderPayload = null;
+
     try {
       // Step 1: Generate QR code string & capture/upload image (same as COD)
       const qrString = generateQRCode();
@@ -740,6 +831,7 @@ const Payment = ({ navigation, route }) => {
 
       // Step 2: create order on backend (returns payment_details for Razorpay)
       const payload = buildOrderPayload(qrString, qrImageUrl);
+      createdOrderPayload = payload;
       console.log('[Payment] Creating order with payload:', JSON.stringify(payload, null, 2));
       let res;
       try {
@@ -751,6 +843,7 @@ const Payment = ({ navigation, route }) => {
       const data = res.data?.data || res.data;
       const paymentDetails = data?.payment_details;
       const orderData = data?.order_data || data;
+      createdOrderData = orderData;
 
       if (!paymentDetails?.key_id || !paymentDetails?.razorpay_order_id) {
         // Backend doesn't support Razorpay orders yet — show graceful message
@@ -923,7 +1016,16 @@ const Payment = ({ navigation, route }) => {
     } catch (e) {
       // Razorpay SDK throws a specific error when user cancels
       if (e?.code === 'PAYMENT_CANCELLED' || e?.description === 'Payment cancelled by user.') {
-        toastRef.current?.show('Payment cancelled.', 'info');
+        const createdOrderId = createdOrderData?.order_id || createdOrderData?.id;
+        if (createdOrderId && createdOrderPayload?.items?.length) {
+          await cancelOrderAndRestoreStock({
+            orderId: createdOrderId,
+            items: createdOrderPayload.items,
+          });
+          toastRef.current?.show('Payment cancelled. Order stock has been restored.', 'info');
+        } else {
+          toastRef.current?.show('Payment cancelled.', 'info');
+        }
       } else {
         const msg = e?.description || e?.message || 'Payment failed. Please try again.';
         const isDelayedSyncNotice =

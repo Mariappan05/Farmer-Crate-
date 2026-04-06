@@ -132,7 +132,9 @@ function getProductPrice(product) {
 function isVisibleToCustomer(product) {
   const now = new Date();
   const status = String(product?.status || '').toUpperCase();
-  const qty = Number(product?.quantity ?? product?.stock ?? product?.available_quantity ?? 0);
+  const qtyRaw = product?.quantity ?? product?.stock ?? product?.available_quantity;
+  const hasQty = qtyRaw !== undefined && qtyRaw !== null && String(qtyRaw).trim() !== '';
+  const qty = hasQty ? Number(qtyRaw) : null;
 
   if (product?.expiry_date) {
     const expiryDate = new Date(product.expiry_date);
@@ -141,9 +143,9 @@ function isVisibleToCustomer(product) {
 
   if (status === 'HIDDEN' || status === 'PENDING' || status === 'INACTIVE') return false;
   if (status === 'SOLD_OUT' || status === 'OUT_OF_STOCK') return false;
-  if (qty <= 0) return false;
+  if (hasQty && Number.isFinite(qty) && qty <= 0) return false;
 
-  return status === 'AVAILABLE' || status === 'ACTIVE' || !status;
+  return true;
 }
 
 function normalizeProductListResponse(raw) {

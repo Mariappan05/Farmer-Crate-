@@ -357,7 +357,7 @@ const DeliveryHistory = ({ navigation }) => {
     return (
       <TouchableOpacity
         style={styles.card}
-        onPress={() => navigation.navigate('OrderDetails', { order: item })}
+        onPress={() => navigation.navigate('OrderTracking', { orderId: item?.order_id || item?.id, order: item })}
         activeOpacity={0.7}
       >
         {/* Top row: product image + product name + status */}

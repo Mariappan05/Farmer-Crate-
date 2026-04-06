@@ -16,6 +16,8 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
+  ActivityIndicator,
   Animated,
   Dimensions,
   FlatList,
@@ -27,13 +29,20 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { optimizeImageUrl } from '../../services/cloudinaryService';
-import { getCustomerOrders } from '../../services/orderService';
+import {
+  optimizeImageUrl,
+  pickImage,
+  pickVideo,
+  uploadImageToCloudinary,
+  uploadMediaToCloudinary,
+} from '../../services/cloudinaryService';
+import { getCustomerOrders, submitCustomerReturnRequest } from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -43,6 +52,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
  * ------------------------------------------------------------------------ */
 
 const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'];
+const RETURN_WINDOW_MS = 10 * 60 * 1000;
 
 const STATUS_CONFIG = {
   pending:          { color: '#FF9800', bg: '#FFF3E0', icon: 'time-outline',                   label: 'Pending' },
@@ -81,7 +91,7 @@ const getProductImage = (item) => {
   if (item.image) return item.image;
   if (item.product_image) return item.product_image;
   if (item.product_image_url) return item.product_image_url;
-  // Sequelize returns association as capital-P "Product" — check both cases
+  // Sequelize returns association as capital-P "Product" ï¿½ check both cases
   const product = item.Product || item.product;
   if (product) {
     const imgs = product.images;
@@ -225,6 +235,85 @@ const getAddressText = (rawAddress) => {
   return parts.join(', ');
 };
 
+const isDeliveredOrCompleted = (order) => {
+  const status = (order?.status || order?.current_status || '').toUpperCase();
+  return status === 'DELIVERED' || status === 'COMPLETED';
+};
+
+const getCompletionTimestamp = (order) => {
+  if (!order) return null;
+  const candidates = [
+    order.delivered_at,
+    order.completed_at,
+    order.delivery_completed_at,
+    order.status_updated_at,
+    order.updated_at,
+    order.modified_at,
+    order.created_at,
+  ];
+
+  for (const value of candidates) {
+    if (!value) continue;
+    const ts = new Date(value).getTime();
+    if (!Number.isNaN(ts)) return ts;
+  }
+  return null;
+};
+
+const getReturnWindowRemainingMs = (order, now = Date.now()) => {
+  if (!isDeliveredOrCompleted(order)) return 0;
+  const completedAt = getCompletionTimestamp(order);
+  if (!completedAt) return 0;
+  return Math.max(0, RETURN_WINDOW_MS - (now - completedAt));
+};
+
+const isReturnRequested = (order) => {
+  const markers = [
+    order?.return_status,
+    order?.return_request_status,
+    order?.returnState,
+    order?.returnStatus,
+  ];
+  const normalized = markers
+    .map((v) => String(v || '').trim().toUpperCase())
+    .filter(Boolean);
+  if (normalized.some((v) => ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'COMPLETED'].includes(v))) {
+    return true;
+  }
+  return Boolean(order?.return_requested || order?.is_return_requested || order?.has_return_request);
+};
+
+const formatDuration = (ms) => {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
+const chooseMediaSource = (title = 'Select Source') =>
+  new Promise((resolve) => {
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    Alert.alert(
+      title,
+      'Choose how you want to upload',
+      [
+        { text: 'Camera', onPress: () => done('camera') },
+        { text: 'Gallery', onPress: () => done('gallery') },
+        { text: 'Cancel', style: 'cancel', onPress: () => done(null) },
+      ],
+      {
+        cancelable: true,
+        onDismiss: () => done(null),
+      }
+    );
+  });
+
 /* --------------------------------------------------------------------------
  * SHIMMER
  * ------------------------------------------------------------------------ */
@@ -282,10 +371,22 @@ const StatusBadge = ({ status }) => {
  * ORDER DETAIL MODAL
  * ------------------------------------------------------------------------ */
 
-const OrderDetailModal = ({ visible, order, onClose, onTrack, onViewSummary }) => {
+const OrderDetailModal = ({
+  visible,
+  order,
+  onClose,
+  onTrack,
+  onViewSummary,
+  onOpenReturn,
+  returnRemainingMs = 0,
+  hasExistingReturnRequest = false,
+}) => {
   if (!order) return null;
   const items = getOrderItems(order);
-  const cfg = getStatusConfig(order.status);
+  const normalizedStatus = (order.status || '').toUpperCase();
+  const canTrack = !['DELIVERED', 'COMPLETED', 'CANCELLED'].includes(normalizedStatus);
+  const deliveredOrCompleted = isDeliveredOrCompleted(order);
+  const canOpenReturn = deliveredOrCompleted && returnRemainingMs > 0 && !hasExistingReturnRequest;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -492,7 +593,7 @@ const OrderDetailModal = ({ visible, order, onClose, onTrack, onViewSummary }) =
               <Ionicons name="receipt-outline" size={18} color="#1B5E20" />
               <Text style={[styles.modalBtnText, { color: '#1B5E20' }]}>View Summary</Text>
             </TouchableOpacity>
-            {order.status !== 'delivered' && order.status !== 'cancelled' && (
+            {canTrack && (
               <TouchableOpacity
                 style={[styles.modalBtn, { backgroundColor: '#1B5E20' }]}
                 onPress={onTrack}
@@ -501,6 +602,205 @@ const OrderDetailModal = ({ visible, order, onClose, onTrack, onViewSummary }) =
                 <Text style={[styles.modalBtnText, { color: '#fff' }]}>Track Order</Text>
               </TouchableOpacity>
             )}
+            {deliveredOrCompleted && (
+              <TouchableOpacity
+                style={[
+                  styles.modalBtn,
+                  { backgroundColor: canOpenReturn ? '#2E7D32' : '#C8E6C9' },
+                ]}
+                disabled={!canOpenReturn}
+                onPress={onOpenReturn}
+              >
+                <Ionicons name="return-up-back-outline" size={18} color={canOpenReturn ? '#fff' : '#33691E'} />
+                <Text style={[styles.modalBtnText, { color: canOpenReturn ? '#fff' : '#33691E' }]}>Request Return</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {deliveredOrCompleted && (
+            <Text style={styles.returnInfoText}>
+              {hasExistingReturnRequest
+                ? 'Return request already submitted for this order.'
+                : returnRemainingMs > 0
+                  ? `Return available for ${formatDuration(returnRemainingMs)} after delivery.`
+                  : 'Return window closed. Returns are allowed only for 10 minutes after delivery.'}
+            </Text>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+/* --------------------------------------------------------------------------
+ * RETURN REQUEST MODAL
+ * ------------------------------------------------------------------------ */
+
+const ReturnRequestModal = ({
+  visible,
+  order,
+  reportText,
+  setReportText,
+  openingPhotos,
+  proofPhotos,
+  videoUri,
+  submitting,
+  onClose,
+  onPickOpeningPhoto,
+  onPickProofPhoto,
+  onPickVideo,
+  onRemoveOpeningPhoto,
+  onRemoveProofPhoto,
+  onRemoveVideo,
+  onSubmit,
+}) => {
+  if (!order) return null;
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, styles.returnModalContent]}>
+          <View style={[styles.modalHeader, styles.returnModalHeader]}>
+            <View style={styles.returnModalTitleWrap}>
+              <Text style={styles.modalTitle}>Return Policy Evidence</Text>
+              <Text style={styles.returnModalSubtitle}>Upload complete proof from camera or gallery to submit your return request.</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.evidenceStatsRow}>
+            <View style={styles.evidencePill}>
+              <Ionicons name="videocam-outline" size={14} color="#1B5E20" />
+              <Text style={styles.evidencePillText}>{videoUri ? 'Video Added' : 'Video Required'}</Text>
+            </View>
+            <View style={styles.evidencePill}>
+              <Ionicons name="images-outline" size={14} color="#1B5E20" />
+              <Text style={styles.evidencePillText}>{openingPhotos.length} Related</Text>
+            </View>
+            <View style={styles.evidencePill}>
+              <Ionicons name="shield-checkmark-outline" size={14} color="#1B5E20" />
+              <Text style={styles.evidencePillText}>{proofPhotos.length} Proof</Text>
+            </View>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.returnModalScroll}>
+            <View style={styles.returnPolicyCard}>
+              <Text style={styles.returnPolicyTitle}>Customer Return Requirements</Text>
+              <Text style={styles.returnPolicyText}>1. Return is allowed only within 10 minutes after delivery completion.</Text>
+              <Text style={styles.returnPolicyText}>2. Upload unboxing/opening video of the order.</Text>
+              <Text style={styles.returnPolicyText}>3. Upload related photos and proof evidence photos.</Text>
+              <Text style={styles.returnPolicyText}>4. Add a report explaining the issue.</Text>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.returnSectionTitle}>Order Opening Video</Text>
+                <Text style={styles.requiredBadge}>Required</Text>
+              </View>
+              {videoUri ? (
+                <View style={styles.uploadedItemRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    <Ionicons name="videocam" size={18} color="#2E7D32" />
+                    <Text style={styles.uploadedItemText} numberOfLines={1}>Video selected</Text>
+                  </View>
+                  <TouchableOpacity onPress={onRemoveVideo}>
+                    <Ionicons name="trash-outline" size={18} color="#C62828" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={[styles.uploadBtn, styles.uploadBtnPrimary]} onPress={onPickVideo}>
+                  <Ionicons name="videocam-outline" size={18} color="#1B5E20" />
+                  <Text style={styles.uploadBtnText}>Select Video (Camera/Gallery)</Text>
+                </TouchableOpacity>
+              )}
+              <Text style={styles.sectionHintText}>Capture clear unboxing and defect visibility in one clip.</Text>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.returnSectionTitle}>Related Photos</Text>
+                <Text style={styles.requiredBadge}>Required</Text>
+              </View>
+              <TouchableOpacity style={[styles.uploadBtn, styles.uploadBtnPrimary]} onPress={onPickOpeningPhoto}>
+                <Ionicons name="images-outline" size={18} color="#1B5E20" />
+                <Text style={styles.uploadBtnText}>Add Related Photo (Camera/Gallery)</Text>
+              </TouchableOpacity>
+              {openingPhotos.map((uri, idx) => (
+                <View key={`opening-${idx}`} style={styles.uploadedItemRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    <Ionicons name="image-outline" size={18} color="#2E7D32" />
+                    <Text style={styles.uploadedItemText} numberOfLines={1}>Related photo {idx + 1}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => onRemoveOpeningPhoto(idx)}>
+                    <Ionicons name="trash-outline" size={18} color="#C62828" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <Text style={styles.sectionHintText}>Add photos of package condition and product state.</Text>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.returnSectionTitle}>Proof Evidence Photos</Text>
+                <Text style={styles.requiredBadge}>Required</Text>
+              </View>
+              <TouchableOpacity style={[styles.uploadBtn, styles.uploadBtnPrimary]} onPress={onPickProofPhoto}>
+                <Ionicons name="camera-outline" size={18} color="#1B5E20" />
+                <Text style={styles.uploadBtnText}>Add Proof Photo (Camera/Gallery)</Text>
+              </TouchableOpacity>
+              {proofPhotos.map((uri, idx) => (
+                <View key={`proof-${idx}`} style={styles.uploadedItemRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    <Ionicons name="image-outline" size={18} color="#2E7D32" />
+                    <Text style={styles.uploadedItemText} numberOfLines={1}>Proof photo {idx + 1}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => onRemoveProofPhoto(idx)}>
+                    <Ionicons name="trash-outline" size={18} color="#C62828" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <Text style={styles.sectionHintText}>Focus on damages, defects, and mismatch evidence.</Text>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.returnSectionTitle}>Issue Report</Text>
+                <Text style={styles.requiredBadge}>Required</Text>
+              </View>
+              <TextInput
+                style={styles.reportInput}
+                placeholder="Type your issue report here..."
+                multiline
+                value={reportText}
+                onChangeText={setReportText}
+                textAlignVertical="top"
+              />
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={[styles.modalBtn, { backgroundColor: '#ECEFF1' }]}
+              onPress={onClose}
+              disabled={submitting}
+            >
+              <Text style={[styles.modalBtnText, { color: '#455A64' }]}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalBtn, { backgroundColor: '#1B5E20', opacity: submitting ? 0.7 : 1 }]}
+              onPress={onSubmit}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+                  <Text style={[styles.modalBtnText, { color: '#fff' }]}>Submit Return</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -573,7 +873,7 @@ const OrderCard = ({ order, onPress, onTrack }) => {
           </Text>
           <Text style={styles.totalAmount}>{formatCurrency(total)}</Text>
         </View>
-        {order.status !== 'delivered' && order.status !== 'cancelled' && (
+        {!['DELIVERED', 'COMPLETED', 'CANCELLED'].includes((order.status || '').toUpperCase()) && (
           <TouchableOpacity
             style={styles.trackBtn}
             onPress={(e) => { e.stopPropagation && e.stopPropagation(); onTrack(); }}
@@ -623,7 +923,19 @@ const OrderHistory = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [returnModalVisible, setReturnModalVisible] = useState(false);
+  const [returnReport, setReturnReport] = useState('');
+  const [openingPhotos, setOpeningPhotos] = useState([]);
+  const [proofPhotos, setProofPhotos] = useState([]);
+  const [returnVideoUri, setReturnVideoUri] = useState(null);
+  const [submittingReturn, setSubmittingReturn] = useState(false);
+  const [nowMs, setNowMs] = useState(Date.now());
   const toastRef = useRef(null);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   /* -- Fetch ------------------------------------------------- */
   const fetchOrders = useCallback(async (silent = false) => {
@@ -689,7 +1001,194 @@ const OrderHistory = ({ navigation }) => {
     navigation.navigate('OrderSummary', { orderId: selectedOrder.order_id || selectedOrder.id, order: selectedOrder });
   };
 
+  const resetReturnForm = () => {
+    setReturnReport('');
+    setOpeningPhotos([]);
+    setProofPhotos([]);
+    setReturnVideoUri(null);
+  };
+
+  const handleOpenReturnModal = () => {
+    if (!selectedOrder) return;
+    if (isReturnRequested(selectedOrder)) {
+      toastRef.current?.show('Return request already submitted for this order.', 'info');
+      return;
+    }
+
+    const remaining = getReturnWindowRemainingMs(selectedOrder, nowMs);
+    if (remaining <= 0) {
+      toastRef.current?.show('Return window closed. Returns are allowed only for 10 minutes after delivery.', 'error');
+      return;
+    }
+
+    setReturnModalVisible(true);
+  };
+
+  const handleCloseReturnModal = () => {
+    setReturnModalVisible(false);
+  };
+
+  const addOpeningPhoto = async () => {
+    const source = await chooseMediaSource('Add Related Photo');
+    if (!source) return;
+    const uri = await pickImage(source === 'camera');
+    if (!uri) return;
+    setOpeningPhotos((prev) => [...prev, uri]);
+  };
+
+  const addProofPhoto = async () => {
+    const source = await chooseMediaSource('Add Proof Photo');
+    if (!source) return;
+    const uri = await pickImage(source === 'camera');
+    if (!uri) return;
+    setProofPhotos((prev) => [...prev, uri]);
+  };
+
+  const selectReturnVideo = async () => {
+    const source = await chooseMediaSource('Add Opening Video');
+    if (!source) return;
+    const uri = await pickVideo(source === 'camera');
+    if (!uri) return;
+    setReturnVideoUri(uri);
+  };
+
+  const removeOpeningPhoto = (idx) => {
+    setOpeningPhotos((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const removeProofPhoto = (idx) => {
+    setProofPhotos((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const removeVideo = () => {
+    setReturnVideoUri(null);
+  };
+
+  const handleSubmitReturn = async () => {
+    if (!selectedOrder) return;
+
+    const submitOrderId = selectedOrder.order_id || selectedOrder.id;
+
+    const remaining = getReturnWindowRemainingMs(selectedOrder, Date.now());
+    if (remaining <= 0) {
+      toastRef.current?.show('Return window closed. Returns are allowed only for 10 minutes after delivery.', 'error');
+      return;
+    }
+
+    if (!returnVideoUri) {
+      toastRef.current?.show('Please upload the order opening video.', 'error');
+      return;
+    }
+    if (!openingPhotos.length) {
+      toastRef.current?.show('Please upload at least one related photo.', 'error');
+      return;
+    }
+    if (!proofPhotos.length) {
+      toastRef.current?.show('Please upload at least one proof evidence photo.', 'error');
+      return;
+    }
+    if (!returnReport.trim()) {
+      toastRef.current?.show('Please type your report before submitting.', 'error');
+      return;
+    }
+
+    setSubmittingReturn(true);
+    try {
+      console.log('[OrderHistory][ReturnSubmit] Start', {
+        order_id: submitOrderId,
+        report_length: returnReport?.trim()?.length || 0,
+        opening_video_local_uri: returnVideoUri,
+        related_photos_count: openingPhotos.length,
+        proof_photos_count: proofPhotos.length,
+      });
+
+      const uploadImageBatchSequentially = async (uris) => {
+        const uploaded = [];
+        for (const uri of uris) {
+          const url = await uploadImageToCloudinary(uri);
+          if (!url) {
+            throw new Error('Failed to upload one or more evidence photos. Please try again.');
+          }
+          uploaded.push(url);
+        }
+        return uploaded;
+      };
+
+      const videoUrl = await uploadMediaToCloudinary(returnVideoUri, 'video');
+      const openingPhotoUrls = await uploadImageBatchSequentially(openingPhotos);
+      const proofPhotoUrls = await uploadImageBatchSequentially(proofPhotos);
+
+      console.log('[OrderHistory][ReturnSubmit] Upload return', {
+        order_id: submitOrderId,
+        opening_video_url: videoUrl,
+        related_photos_uploaded: openingPhotoUrls,
+        proof_photos_uploaded: proofPhotoUrls,
+      });
+
+      if (!videoUrl) {
+        throw new Error('Failed to upload return video. Please try again.');
+      }
+
+      const cleanOpening = openingPhotoUrls.filter(Boolean);
+      const cleanProof = proofPhotoUrls.filter(Boolean);
+
+      if (!cleanOpening.length || !cleanProof.length) {
+        throw new Error('Failed to upload one or more evidence photos. Please try again.');
+      }
+
+      const submitPayload = {
+        report: returnReport.trim(),
+        return_reason: returnReport.trim(),
+        issue_report: returnReport.trim(),
+        opening_video_url: videoUrl,
+        openingVideoUrl: videoUrl,
+        related_photos: cleanOpening,
+        opening_photos: cleanOpening,
+        proof_evidence_photos: cleanProof,
+        evidence_photos: cleanProof,
+        submitted_at: new Date().toISOString(),
+      };
+
+      console.log('[OrderHistory][ReturnSubmit] API payload', {
+        order_id: submitOrderId,
+        payload: submitPayload,
+      });
+
+      const submitResponse = await submitCustomerReturnRequest(submitOrderId, submitPayload);
+
+      console.log('[OrderHistory][ReturnSubmit] Success return', {
+        order_id: submitOrderId,
+        response: submitResponse,
+      });
+
+      setSelectedOrder((prev) => prev ? {
+        ...prev,
+        return_requested: true,
+        return_request_status: 'REQUESTED',
+      } : prev);
+      toastRef.current?.show('Return request submitted successfully.', 'success');
+      setReturnModalVisible(false);
+      resetReturnForm();
+      fetchOrders(true);
+    } catch (e) {
+      console.error('[OrderHistory][ReturnSubmit] Error', {
+        order_id: submitOrderId,
+        message: e?.message,
+        status: e?.status || e?.response?.status,
+        data: e?.response?.data,
+        stack: e?.stack,
+      });
+      const msg = e?.response?.data?.message || e.message || 'Failed to submit return request';
+      toastRef.current?.show(msg, 'error');
+    } finally {
+      setSubmittingReturn(false);
+    }
+  };
+
   const onRefresh = () => { setRefreshing(true); fetchOrders(true); };
+
+  const selectedReturnRemainingMs = getReturnWindowRemainingMs(selectedOrder, nowMs);
+  const selectedHasReturnRequest = isReturnRequested(selectedOrder);
 
   /* -- Render helpers ---------------------------------------- */
   const renderFilterChips = () => (
@@ -791,9 +1290,35 @@ const OrderHistory = ({ navigation }) => {
       <OrderDetailModal
         visible={modalVisible}
         order={selectedOrder}
-        onClose={() => setModalVisible(false)}
+        onClose={() => {
+          setModalVisible(false);
+          setReturnModalVisible(false);
+          resetReturnForm();
+        }}
         onTrack={() => selectedOrder && handleTrackOrder(selectedOrder)}
         onViewSummary={handleViewSummary}
+        onOpenReturn={handleOpenReturnModal}
+        returnRemainingMs={selectedReturnRemainingMs}
+        hasExistingReturnRequest={selectedHasReturnRequest}
+      />
+
+      <ReturnRequestModal
+        visible={returnModalVisible}
+        order={selectedOrder}
+        reportText={returnReport}
+        setReportText={setReturnReport}
+        openingPhotos={openingPhotos}
+        proofPhotos={proofPhotos}
+        videoUri={returnVideoUri}
+        submitting={submittingReturn}
+        onClose={handleCloseReturnModal}
+        onPickOpeningPhoto={addOpeningPhoto}
+        onPickProofPhoto={addProofPhoto}
+        onPickVideo={selectReturnVideo}
+        onRemoveOpeningPhoto={removeOpeningPhoto}
+        onRemoveProofPhoto={removeProofPhoto}
+        onRemoveVideo={removeVideo}
+        onSubmit={handleSubmitReturn}
       />
       <ToastMessage ref={toastRef} />
     </View>
@@ -1016,6 +1541,164 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   modalBtnText: { fontSize: 14, fontWeight: '600' },
+
+  returnModalContent: {
+    backgroundColor: '#F8FBF8',
+  },
+  returnModalHeader: {
+    marginBottom: 10,
+    alignItems: 'flex-start',
+  },
+  returnModalTitleWrap: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  returnModalSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#4E6A50',
+  },
+  returnModalScroll: {
+    maxHeight: 520,
+  },
+  evidenceStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  evidencePill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#ECF5EC',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#D6E9D8',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  evidencePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1F5B24',
+  },
+
+  returnInfoText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#546E7A',
+    textAlign: 'center',
+  },
+
+  returnPolicyCard: {
+    backgroundColor: '#F1F8E9',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#DCECC5',
+    marginBottom: 12,
+  },
+  returnPolicyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1B5E20',
+    marginBottom: 6,
+  },
+  returnPolicyText: {
+    fontSize: 12,
+    color: '#33691E',
+    marginBottom: 3,
+    lineHeight: 18,
+  },
+  returnSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2E7D32',
+    marginBottom: 6,
+  },
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2ECE4',
+    padding: 12,
+    marginBottom: 10,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  requiredBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#B71C1C',
+    backgroundColor: '#FFEBEE',
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  sectionHintText: {
+    marginTop: 4,
+    fontSize: 11,
+    color: '#607D8B',
+  },
+  uploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+    paddingVertical: 10,
+    marginBottom: 6,
+  },
+  uploadBtnPrimary: {
+    backgroundColor: '#F0FAF1',
+  },
+  uploadBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1B5E20',
+  },
+  uploadedItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FAFAFA',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ECEFF1',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 6,
+  },
+  uploadedItemText: {
+    marginLeft: 8,
+    fontSize: 12,
+    color: '#455A64',
+    flex: 1,
+  },
+  reportInput: {
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: '#CFD8DC',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#263238',
+    marginBottom: 4,
+  },
 });
 
 export default OrderHistory;

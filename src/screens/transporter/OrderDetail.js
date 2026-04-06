@@ -91,6 +91,16 @@ const formatDate = (d) => {
 
 const formatCurrency = (a) => '₹' + (parseFloat(a) || 0).toFixed(2);
 
+const logSubmitError = (tag, error, meta = {}) => {
+  console.error(`[OrderDetail][${tag}]`, {
+    meta,
+    message: error?.message,
+    status: error?.status || error?.response?.status,
+    data: error?.response?.data,
+    stack: error?.stack,
+  });
+};
+
 const pickFirst = (...values) => values.find((v) => v !== undefined && v !== null && String(v).trim() !== '');
 const toNumberOrZero = (value) => {
   const n = Number(value);
@@ -118,8 +128,23 @@ const parseObjectLike = (value) => {
 };
 
 const toAbsoluteImageUrl = (value) => {
-  if (!value || typeof value !== 'string') return null;
-  const cleaned = value.trim().replace(/\\/g, '/');
+  if (!value) return null;
+
+  let raw = value;
+  if (typeof raw === 'object') {
+    raw =
+      raw?.url ||
+      raw?.uri ||
+      raw?.image_url ||
+      raw?.image ||
+      raw?.secure_url ||
+      raw?.src ||
+      null;
+  }
+
+  if (!raw || typeof raw !== 'string') return null;
+
+  const cleaned = raw.trim().replace(/\\/g, '/');
   if (!cleaned) return null;
   if (/^\/\//.test(cleaned)) return `https:${cleaned}`;
   if (/^https?:\/\//i.test(cleaned) || /^data:image\//i.test(cleaned)) return cleaned;
@@ -318,6 +343,11 @@ const OrderDetail = ({ navigation, route }) => {
     !!destinationTransporterId &&
     myTransporterId === destinationTransporterId &&
     sourceTransporterId !== destinationTransporterId;
+  const isSourceTransporterView =
+    !!myTransporterId &&
+    !!sourceTransporterId &&
+    myTransporterId === sourceTransporterId &&
+    sourceTransporterId !== destinationTransporterId;
   const normalizedDestinationStatus = isDestinationTransporterView && status === 'RECEIVED'
     ? 'REACHED_DESTINATION'
     : status;
@@ -349,6 +379,7 @@ const OrderDetail = ({ navigation, route }) => {
         const endpoints = [
           `/transporters/orders/${orderId}`,
           `/transporters/orders/${orderId}/track`,
+          `/orders/details/${orderId}`,
           `/orders/${orderId}`,
         ];
 
@@ -451,6 +482,13 @@ const OrderDetail = ({ navigation, route }) => {
       delivery_person_id: personId,
     };
 
+    console.log('[OrderDetail][AssignSubmit] Start', {
+      order_id: oid,
+      vehiclePayload,
+      personPayload,
+      current_status: order?.current_status || order?.status,
+    });
+
     const vehicleAttempts = [
       () => api.post('/transporters/assign-vehicle', vehiclePayload),
       () => api.put('/transporters/assign-vehicle', vehiclePayload),
@@ -467,10 +505,15 @@ const OrderDetail = ({ navigation, route }) => {
     let vehicleError = null;
     for (const run of vehicleAttempts) {
       try {
-        await run();
+        const res = await run();
+        console.log('[OrderDetail][AssignSubmit] Vehicle assigned', {
+          status: res?.status,
+          data: res?.data,
+        });
         vehicleError = null;
         break;
       } catch (err) {
+        logSubmitError('AssignVehicleAttempt', err, { order_id: oid, vehiclePayload });
         vehicleError = err;
       }
     }
@@ -479,14 +522,25 @@ const OrderDetail = ({ navigation, route }) => {
     let personError = null;
     for (const run of personAttempts) {
       try {
-        await run();
+        const res = await run();
+        console.log('[OrderDetail][AssignSubmit] Delivery person assigned', {
+          status: res?.status,
+          data: res?.data,
+        });
         personError = null;
         break;
       } catch (err) {
+        logSubmitError('AssignPersonAttempt', err, { order_id: oid, personPayload });
         personError = err;
       }
     }
     if (personError) throw personError;
+
+    console.log('[OrderDetail][AssignSubmit] Completed', {
+      order_id: oid,
+      vehicle_id: vehicleId,
+      delivery_person_id: personId,
+    });
   };
 
   const handleAssign = () => {
@@ -515,6 +569,11 @@ const OrderDetail = ({ navigation, route }) => {
             setAssigningDP(true);
             try {
               await assignVehicleAndPerson(vehicle, p);
+              console.log('[OrderDetail][AssignSubmit] Success return', {
+                order_id: orderId || order?.order_id || order?.id,
+                vehicle_id: vehicle?.vehicle_id || vehicle?.id,
+                delivery_person_id: p?.delivery_person_id || p?.id,
+              });
               setSuccessModal({
                 visible: true,
                 title: 'Assigned Successfully',
@@ -522,6 +581,11 @@ const OrderDetail = ({ navigation, route }) => {
               });
               fetchOrder(true);
             } catch (e) {
+              logSubmitError('AssignSubmit', e, {
+                order_id: orderId || order?.order_id || order?.id,
+                vehicle_id: vehicle?.vehicle_id || vehicle?.id,
+                delivery_person_id: p?.delivery_person_id || p?.id,
+              });
               Alert.alert('Error', e.message || 'Failed to assign');
             } finally {
               setAssigningDP(false);
@@ -563,6 +627,12 @@ const OrderDetail = ({ navigation, route }) => {
 
     setUploadingPackingProof(true);
     try {
+      console.log('[OrderDetail][PackingSubmit] Start', {
+        order_id: oid,
+        packingLocalUri,
+        billLocalUri,
+      });
+
       const [packingUrl, billUrl] = await Promise.all([
         uploadImageToCloudinary(packingLocalUri),
         uploadImageToCloudinary(billLocalUri),
@@ -577,6 +647,11 @@ const OrderDetail = ({ navigation, route }) => {
         bill_paste_image_url: billUrl,
       };
 
+      console.log('[OrderDetail][PackingSubmit] Cloudinary upload complete', {
+        order_id: oid,
+        payload,
+      });
+
       const attempts = [
         () => api.put(`/transporters/orders/${oid}/packing`, payload),
         () => api.post(`/transporters/orders/${oid}/packing`, payload),
@@ -588,11 +663,16 @@ const OrderDetail = ({ navigation, route }) => {
       let saved = false;
       for (const run of attempts) {
         try {
-          await run();
+          const res = await run();
+          console.log('[OrderDetail][PackingSubmit] Saved to backend', {
+            order_id: oid,
+            status: res?.status,
+            data: res?.data,
+          });
           saved = true;
           break;
-        } catch (_) {
-          // Try next endpoint.
+        } catch (err) {
+          logSubmitError('PackingSaveAttempt', err, { order_id: oid, payload });
         }
       }
 
@@ -608,6 +688,7 @@ const OrderDetail = ({ navigation, route }) => {
         });
       }
     } catch (e) {
+      logSubmitError('PackingSubmit', e, { order_id: oid });
       Alert.alert('Error', e.message || 'Failed to upload packing proof');
     } finally {
       setUploadingPackingProof(false);
@@ -665,17 +746,57 @@ const OrderDetail = ({ navigation, route }) => {
     const oid = orderId || order?.order_id || order?.id;
     if (!oid || !newStatus) return;
 
+    const currentRaw = (order?.current_status || order?.status || '').toUpperCase();
+    const pickupDeliveryPersonAssigned = Boolean(
+      order?.pickup_delivery_person_id ||
+      order?.pickupDeliveryPerson?.delivery_person_id ||
+      order?.pickup_delivery_person?.delivery_person_id ||
+      order?.pickup_assignment?.delivery_person?.delivery_person_id ||
+      order?.pickup_assignment?.delivery_person_id ||
+      order?.delivery_person_id ||
+      order?.assigned_delivery_person_id
+    );
+    const sourcePickupLockedForDP =
+      isSourceTransporterView &&
+      pickupDeliveryPersonAssigned &&
+      (currentRaw === 'PICKUP_ASSIGNED' || currentRaw === 'PICKUP_IN_PROGRESS');
+
+    if (sourcePickupLockedForDP) {
+      Alert.alert(
+        'Waiting for Delivery Person',
+        'After assignment, only the delivery person can update pickup statuses until PICKED UP. Source transporter can continue updates after PICKED UP.'
+      );
+      return;
+    }
+
     if (isDestinationTransporterView) {
       Alert.alert('Use QR Scan', 'Destination transporter can update status only via QR scan.');
       return;
     }
 
+    const payload = { order_id: oid, status: newStatus };
+    console.log('[OrderDetail][StatusSubmit] Start', {
+      order_id: oid,
+      from_status: currentRaw,
+      to_status: newStatus,
+      payload,
+    });
+
     setUpdatingStatus(true);
     try {
       try {
-        await api.put('/transporters/order-status', { order_id: oid, status: newStatus });
-      } catch {
-        await api.put('/orders/status', { order_id: oid, status: newStatus });
+        const res = await api.put('/transporters/order-status', payload);
+        console.log('[OrderDetail][StatusSubmit] Updated via /transporters/order-status', {
+          status: res?.status,
+          data: res?.data,
+        });
+      } catch (firstErr) {
+        logSubmitError('StatusSubmitTransporterEndpoint', firstErr, { order_id: oid, payload });
+        const res = await api.put('/orders/status', payload);
+        console.log('[OrderDetail][StatusSubmit] Updated via /orders/status', {
+          status: res?.status,
+          data: res?.data,
+        });
       }
       setSuccessModal({
         visible: true,
@@ -684,6 +805,7 @@ const OrderDetail = ({ navigation, route }) => {
       });
       fetchOrder(true);
     } catch (e) {
+      logSubmitError('StatusSubmit', e, { order_id: oid, payload });
       Alert.alert('Error', e.message || 'Failed to update status');
     } finally {
       setUpdatingStatus(false);
@@ -804,6 +926,13 @@ const OrderDetail = ({ navigation, route }) => {
     order.delivery_assignment?.delivery_person ||
     order.assigned_delivery_person ||
     {};
+  const pickupDpRaw =
+    order.pickup_delivery_person ||
+    order.pickupDeliveryPerson ||
+    order.pickup_delivery_person_details ||
+    order.pickupDeliveryPersonDetails ||
+    order.pickup_assignment?.delivery_person ||
+    {};
   const dp = {
     ...normalizeParty(
       dpRaw,
@@ -845,6 +974,15 @@ const OrderDetail = ({ navigation, route }) => {
     id: order.destination_transporter_id || dstTransRaw?.transporter_id,
   };
   
+  const hasPickupDeliveryPerson = !!(
+    order.pickup_delivery_person_id ||
+    order.pickup_assignment?.delivery_person_id ||
+    pickupDpRaw?.id ||
+    pickupDpRaw?.delivery_person_id ||
+    pickupDpRaw?.name ||
+    pickupDpRaw?.full_name ||
+    pickupDpRaw?.mobile_number
+  );
   const hasDP = !!(
     order.delivery_person_id ||
     order.assigned_delivery_person_id ||
@@ -864,8 +1002,12 @@ const OrderDetail = ({ navigation, route }) => {
   const canEditPackingProof = nextStatusByScan === 'SHIPPED' && hasPackingAndBillProof;
   const isUploadPackingProofDisabled = uploadingPackingProof || hasPackingAndBillProof;
   const hasAssignedVehicle = !!(order?.permanent_vehicle_id || order?.temp_vehicle_id);
+  const isSourcePickupLockedForDeliveryPerson =
+    isSourceTransporterView &&
+    hasPickupDeliveryPerson &&
+    (status === 'PICKUP_ASSIGNED' || status === 'PICKUP_IN_PROGRESS');
   const canAssignOnThisStage =
-    (!isDestinationTransporterView && !hasDP) ||
+    (!isDestinationTransporterView && !hasPickupDeliveryPerson) ||
     (isDestinationTransporterView && stageStatus === 'REACHED_DESTINATION') ||
     (isSameTransporterView && stageStatus === 'REACHED_DESTINATION' && !hasDP);
   const assignBtnLabel = isDestinationTransporterView && stageStatus === 'REACHED_DESTINATION' && hasDP
@@ -1209,9 +1351,13 @@ const OrderDetail = ({ navigation, route }) => {
             {/* Pickup delivery person manual status update */}
             {!isDestinationTransporterView && isPickupStatus && getNextPickupStatus() && (
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#FF5722' }]}
+                style={[
+                  styles.actionBtn,
+                  { backgroundColor: '#FF5722' },
+                  isSourcePickupLockedForDeliveryPerson && styles.disabledActionBtn,
+                ]}
                 onPress={() => setStatusConfirmModal({ visible: true, nextStatus: getNextPickupStatus() })}
-                disabled={updatingStatus}
+                disabled={updatingStatus || isSourcePickupLockedForDeliveryPerson}
               >
                 {updatingStatus ? <ActivityIndicator size="small" color="#fff" /> : (
                   <>
@@ -1223,6 +1369,12 @@ const OrderDetail = ({ navigation, route }) => {
                   </>
                 )}
               </TouchableOpacity>
+            )}
+
+            {isSourcePickupLockedForDeliveryPerson && (
+              <Text style={styles.disabledActionHint}>
+                Pickup status updates are locked for source transporter until delivery person marks PICKED UP.
+              </Text>
             )}
 
             {isDestinationTransporterView && (

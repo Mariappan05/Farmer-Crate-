@@ -12,6 +12,7 @@ import DeliveryHistory from '../screens/delivery/DeliveryHistory';
 import DeliveryProfile from '../screens/delivery/DeliveryProfile';
 import OrderDetails from '../screens/delivery/OrderDetails';
 import OrderUpdatePage from '../screens/delivery/OrderUpdatePage';
+import OrderTracking from '../screens/common/OrderTracking';
 import FAQ from '../screens/common/FAQ';
 import HelpSupport from '../screens/common/HelpSupport';
 import Feedback from '../screens/common/Feedback';
@@ -140,6 +141,7 @@ const DeliveryTabs = () => (
 const DeliveryNavigator = () => (
   <Stack.Navigator screenOptions={{ headerShown: false, ...SLIDE }}>
     <Stack.Screen name="DeliveryTabs" component={DeliveryTabs} options={{ animation: 'none' }} />
+    <Stack.Screen name="OrderTracking" component={OrderTracking} />
     <Stack.Screen name="OrderDetails" component={OrderDetails} />
     <Stack.Screen name="OrderUpdate" component={OrderUpdatePage} />
     <Stack.Screen name="FAQ" component={FAQ} />
