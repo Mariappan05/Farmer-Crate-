@@ -16,7 +16,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   ActivityIndicator,
   Animated,
   Dimensions,
@@ -42,7 +41,12 @@ import {
   uploadImageToCloudinary,
   uploadMediaToCloudinary,
 } from '../../services/cloudinaryService';
-import { getCustomerOrders, submitCustomerReturnRequest } from '../../services/orderService';
+import {
+  getCustomerReturnRequest,
+  getCustomerOrders,
+  isCustomerReturnServiceTemporarilyUnavailable,
+  submitCustomerReturnRequest,
+} from '../../services/orderService';
 import ToastMessage from '../../utils/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -53,6 +57,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'];
 const RETURN_WINDOW_MS = 10 * 60 * 1000;
+const RETURN_SUBMIT_API_TIMEOUT_MS = 60000;
 
 const STATUS_CONFIG = {
   pending:          { color: '#FF9800', bg: '#FFF3E0', icon: 'time-outline',                   label: 'Pending' },
@@ -290,29 +295,71 @@ const formatDuration = (ms) => {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
-const chooseMediaSource = (title = 'Select Source') =>
-  new Promise((resolve) => {
-    let settled = false;
-    const done = (value) => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    };
+const withAsyncTimeout = async (promise, timeoutMs, message) => {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
 
-    Alert.alert(
-      title,
-      'Choose how you want to upload',
-      [
-        { text: 'Camera', onPress: () => done('camera') },
-        { text: 'Gallery', onPress: () => done('gallery') },
-        { text: 'Cancel', style: 'cancel', onPress: () => done(null) },
-      ],
-      {
-        cancelable: true,
-        onDismiss: () => done(null),
-      }
-    );
-  });
+const MediaSourcePickerModal = ({ visible, title, onSelect, onClose }) => (
+  <Modal
+    visible={visible}
+    animationType="fade"
+    transparent
+    onRequestClose={onClose}
+  >
+    <View style={styles.mediaPickerOverlay}>
+      <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+      <View style={styles.mediaPickerSheet}>
+        <View style={styles.mediaPickerHandle} />
+        <Text style={styles.mediaPickerTitle}>{title || 'Select Source'}</Text>
+        <Text style={styles.mediaPickerSubtitle}>Choose where to pick your file from</Text>
+
+        <TouchableOpacity
+          style={styles.mediaPickerOption}
+          onPress={() => onSelect('camera')}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.mediaPickerIconWrap, { backgroundColor: '#E8F5E9' }]}>
+            <Ionicons name="camera-outline" size={20} color="#1B5E20" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.mediaPickerOptionTitle}>Camera</Text>
+            <Text style={styles.mediaPickerOptionText}>Capture a new photo or video</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#8AA08C" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.mediaPickerOption}
+          onPress={() => onSelect('gallery')}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.mediaPickerIconWrap, { backgroundColor: '#E3F2FD' }]}>
+            <Ionicons name="images-outline" size={20} color="#1565C0" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.mediaPickerOptionTitle}>Gallery</Text>
+            <Text style={styles.mediaPickerOptionText}>Select from existing media</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#8AA08C" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.mediaPickerCancel} onPress={onClose} activeOpacity={0.8}>
+          <Text style={styles.mediaPickerCancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
 
 /* --------------------------------------------------------------------------
  * SHIMMER
@@ -930,6 +977,9 @@ const OrderHistory = ({ navigation }) => {
   const [returnVideoUri, setReturnVideoUri] = useState(null);
   const [submittingReturn, setSubmittingReturn] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [mediaSourceModalVisible, setMediaSourceModalVisible] = useState(false);
+  const [mediaSourceModalTitle, setMediaSourceModalTitle] = useState('Select Source');
+  const mediaSourceResolverRef = useRef(null);
   const toastRef = useRef(null);
 
   useEffect(() => {
@@ -1008,11 +1058,39 @@ const OrderHistory = ({ navigation }) => {
     setReturnVideoUri(null);
   };
 
-  const handleOpenReturnModal = () => {
+  const handleOpenReturnModal = async () => {
     if (!selectedOrder) return;
     if (isReturnRequested(selectedOrder)) {
       toastRef.current?.show('Return request already submitted for this order.', 'info');
       return;
+    }
+
+    const selectedOrderId = selectedOrder.order_id || selectedOrder.id;
+    if (selectedOrderId) {
+      try {
+        const existingResponse = await getCustomerReturnRequest(selectedOrderId);
+        const existing = existingResponse?.data || existingResponse;
+        if (existing) {
+          setSelectedOrder((prev) => prev ? {
+            ...prev,
+            return_requested: true,
+            return_request_status: existing?.status || 'REQUESTED',
+            return_status: existing?.status || 'REQUESTED',
+          } : prev);
+          toastRef.current?.show('Return request already submitted for this order.', 'info');
+          return;
+        }
+      } catch (e) {
+        const status = e?.response?.status;
+        if (status !== 404) {
+          console.warn('[OrderHistory] getCustomerReturnRequest failed', {
+            order_id: selectedOrderId,
+            status,
+            message: e?.message,
+            data: e?.response?.data,
+          });
+        }
+      }
     }
 
     const remaining = getReturnWindowRemainingMs(selectedOrder, nowMs);
@@ -1028,8 +1106,22 @@ const OrderHistory = ({ navigation }) => {
     setReturnModalVisible(false);
   };
 
+  const closeMediaSourceModal = (value = null) => {
+    setMediaSourceModalVisible(false);
+    const resolve = mediaSourceResolverRef.current;
+    mediaSourceResolverRef.current = null;
+    if (resolve) resolve(value);
+  };
+
+  const promptMediaSource = (title = 'Select Source') =>
+    new Promise((resolve) => {
+      mediaSourceResolverRef.current = resolve;
+      setMediaSourceModalTitle(title);
+      setMediaSourceModalVisible(true);
+    });
+
   const addOpeningPhoto = async () => {
-    const source = await chooseMediaSource('Add Related Photo');
+    const source = await promptMediaSource('Add Related Photo');
     if (!source) return;
     const uri = await pickImage(source === 'camera');
     if (!uri) return;
@@ -1037,7 +1129,7 @@ const OrderHistory = ({ navigation }) => {
   };
 
   const addProofPhoto = async () => {
-    const source = await chooseMediaSource('Add Proof Photo');
+    const source = await promptMediaSource('Add Proof Photo');
     if (!source) return;
     const uri = await pickImage(source === 'camera');
     if (!uri) return;
@@ -1045,7 +1137,7 @@ const OrderHistory = ({ navigation }) => {
   };
 
   const selectReturnVideo = async () => {
-    const source = await chooseMediaSource('Add Opening Video');
+    const source = await promptMediaSource('Add Opening Video');
     if (!source) return;
     const uri = await pickVideo(source === 'camera');
     if (!uri) return;
@@ -1065,7 +1157,25 @@ const OrderHistory = ({ navigation }) => {
   };
 
   const handleSubmitReturn = async () => {
+    console.log('[OrderHistory][ReturnSubmit] Button clicked', {
+      clicked_at: new Date().toISOString(),
+      has_selected_order: Boolean(selectedOrder),
+      order_id: selectedOrder?.order_id || selectedOrder?.id || null,
+      order_status: selectedOrder?.status || selectedOrder?.current_status || null,
+      return_window_remaining_ms: selectedOrder ? getReturnWindowRemainingMs(selectedOrder, Date.now()) : null,
+      report_text: returnReport,
+      report_length: returnReport?.trim()?.length || 0,
+      opening_video_local_uri: returnVideoUri,
+      related_photos_local_uris: openingPhotos,
+      related_photos_count: openingPhotos.length,
+      proof_photos_local_uris: proofPhotos,
+      proof_photos_count: proofPhotos.length,
+      is_submitting: submittingReturn,
+      service_temp_unavailable: isCustomerReturnServiceTemporarilyUnavailable(),
+    });
+
     if (!selectedOrder) return;
+    if (submittingReturn) return;
 
     const submitOrderId = selectedOrder.order_id || selectedOrder.id;
 
@@ -1089,6 +1199,11 @@ const OrderHistory = ({ navigation }) => {
     }
     if (!returnReport.trim()) {
       toastRef.current?.show('Please type your report before submitting.', 'error');
+      return;
+    }
+
+    if (isCustomerReturnServiceTemporarilyUnavailable()) {
+      toastRef.current?.show('Return request service is temporarily unavailable. Please try again in a few minutes.', 'error');
       return;
     }
 
@@ -1154,7 +1269,11 @@ const OrderHistory = ({ navigation }) => {
         payload: submitPayload,
       });
 
-      const submitResponse = await submitCustomerReturnRequest(submitOrderId, submitPayload);
+      const submitResponse = await withAsyncTimeout(
+        submitCustomerReturnRequest(submitOrderId, submitPayload),
+        RETURN_SUBMIT_API_TIMEOUT_MS,
+        'Return submit request timed out. Please check network and try again.'
+      );
 
       console.log('[OrderHistory][ReturnSubmit] Success return', {
         order_id: submitOrderId,
@@ -1171,13 +1290,22 @@ const OrderHistory = ({ navigation }) => {
       resetReturnForm();
       fetchOrders(true);
     } catch (e) {
-      console.error('[OrderHistory][ReturnSubmit] Error', {
-        order_id: submitOrderId,
-        message: e?.message,
-        status: e?.status || e?.response?.status,
-        data: e?.response?.data,
-        stack: e?.stack,
-      });
+      const code = e?.code;
+      const status = e?.status || e?.response?.status;
+      if (code === 'RETURN_SERVICE_UNAVAILABLE' || code === 'RETURN_SERVICE_TEMP_UNAVAILABLE' || code === 'RETURN_ALREADY_EXISTS') {
+        console.log('[OrderHistory][ReturnSubmit] Service unavailable', {
+          order_id: submitOrderId,
+          message: e?.message,
+          code,
+        });
+      } else {
+        console.warn('[OrderHistory][ReturnSubmit] Error', {
+          order_id: submitOrderId,
+          message: e?.message,
+          status,
+          data: e?.response?.data,
+        });
+      }
       const msg = e?.response?.data?.message || e.message || 'Failed to submit return request';
       toastRef.current?.show(msg, 'error');
     } finally {
@@ -1320,6 +1448,14 @@ const OrderHistory = ({ navigation }) => {
         onRemoveVideo={removeVideo}
         onSubmit={handleSubmitReturn}
       />
+
+      <MediaSourcePickerModal
+        visible={mediaSourceModalVisible}
+        title={mediaSourceModalTitle}
+        onSelect={closeMediaSourceModal}
+        onClose={() => closeMediaSourceModal(null)}
+      />
+
       <ToastMessage ref={toastRef} />
     </View>
   );
@@ -1698,6 +1834,85 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#263238',
     marginBottom: 4,
+  },
+
+  mediaPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    justifyContent: 'flex-end',
+    padding: 14,
+  },
+  mediaPickerSheet: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#E5EEE6',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 14,
+  },
+  mediaPickerHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#D5E0D6',
+    marginBottom: 10,
+  },
+  mediaPickerTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1B5E20',
+    textAlign: 'center',
+  },
+  mediaPickerSubtitle: {
+    marginTop: 4,
+    marginBottom: 12,
+    fontSize: 12,
+    color: '#607D67',
+    textAlign: 'center',
+  },
+  mediaPickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAFCFA',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E6EFE7',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    gap: 10,
+  },
+  mediaPickerIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaPickerOptionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  mediaPickerOptionText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 1,
+  },
+  mediaPickerCancel: {
+    marginTop: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingVertical: 11,
+  },
+  mediaPickerCancelText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#374151',
   },
 });
 

@@ -7,6 +7,8 @@ const CLOUDINARY_API_KEY = '334646742262894';
 const CLOUDINARY_API_SECRET = 'QlFJbjla0epfpzpTib6R0STIEFg';
 const CLOUDINARY_FOLDER = 'farmer_crate';
 const CLOUDINARY_UPLOAD_TIMEOUT_MS = 45000;
+const CLOUDINARY_VIDEO_UPLOAD_TIMEOUT_MS = 180000;
+const CLOUDINARY_UPLOAD_RETRY_COUNT = 1;
 
 const withTimeout = async (promise, timeoutMs = CLOUDINARY_UPLOAD_TIMEOUT_MS, message = 'Upload timed out') => {
   let timer;
@@ -40,6 +42,17 @@ const detectMimeType = (uri, fallback = 'application/octet-stream') => {
     webm: 'video/webm',
   };
   return map[ext] || fallback;
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isRetriableUploadError = (error) => {
+  const msg = (error?.message || '').toLowerCase();
+  return (
+    msg.includes('timed out') ||
+    msg.includes('network request failed') ||
+    msg.includes('failed to fetch')
+  );
 };
 
 /**
@@ -95,29 +108,48 @@ export const uploadMediaToCloudinary = async (mediaUri, resourceType = 'auto') =
       Crypto.CryptoDigestAlgorithm.SHA1,
       paramsToSign
     );
-
-    const formData = new FormData();
     const filename = mediaUri.split('/').pop() || `upload_${Date.now()}`;
     const fallbackMime = resourceType === 'video' ? 'video/mp4' : 'application/octet-stream';
     const mimeType = detectMimeType(mediaUri, fallbackMime);
 
-    formData.append('file', { uri: mediaUri, name: filename, type: mimeType });
-    formData.append('api_key', CLOUDINARY_API_KEY);
-    formData.append('timestamp', String(timestamp));
-    formData.append('signature', signature);
-    formData.append('folder', CLOUDINARY_FOLDER);
+    const timeoutMs = resourceType === 'video'
+      ? CLOUDINARY_VIDEO_UPLOAD_TIMEOUT_MS
+      : CLOUDINARY_UPLOAD_TIMEOUT_MS;
 
-    const response = await withTimeout(
-      fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
-        { method: 'POST', body: formData }
-      ),
-      CLOUDINARY_UPLOAD_TIMEOUT_MS,
-      'Media upload timed out'
-    );
-    const result = await response.json();
-    if (response.ok && result.secure_url) return result.secure_url;
-    console.error('Cloudinary media upload error:', result);
+    const createFormData = () => {
+      const formData = new FormData();
+      formData.append('file', { uri: mediaUri, name: filename, type: mimeType });
+      formData.append('api_key', CLOUDINARY_API_KEY);
+      formData.append('timestamp', String(timestamp));
+      formData.append('signature', signature);
+      formData.append('folder', CLOUDINARY_FOLDER);
+      return formData;
+    };
+
+    let lastError = null;
+    for (let attempt = 0; attempt <= CLOUDINARY_UPLOAD_RETRY_COUNT; attempt += 1) {
+      try {
+        const response = await withTimeout(
+          fetch(
+            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
+            { method: 'POST', body: createFormData() }
+          ),
+          timeoutMs,
+          'Media upload timed out'
+        );
+        const result = await response.json();
+        if (response.ok && result.secure_url) return result.secure_url;
+        console.error('Cloudinary media upload error:', result);
+        return null;
+      } catch (error) {
+        lastError = error;
+        const canRetry = attempt < CLOUDINARY_UPLOAD_RETRY_COUNT && isRetriableUploadError(error);
+        if (!canRetry) throw error;
+        await sleep(1200);
+      }
+    }
+
+    if (lastError) throw lastError;
     return null;
   } catch (e) {
     console.error('uploadMediaToCloudinary error:', e);

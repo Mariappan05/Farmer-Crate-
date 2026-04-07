@@ -1,5 +1,10 @@
 import api from './api';
 
+let customerReturnServiceUnavailableUntil = 0;
+
+export const isCustomerReturnServiceTemporarilyUnavailable = () =>
+  Date.now() < customerReturnServiceUnavailableUntil;
+
 const buildNotificationPayload = ({ orderId, event, status, actorRole, actorId, message, metadata }) => {
   const title = event
     ? `Order ${event.replace(/_/g, ' ')}`
@@ -106,25 +111,28 @@ export const getCustomerOrders = async () => {
   return data;
 };
 
+export const getCustomerReturnRequest = async (orderId) => {
+  const { data } = await api.get(`/orders/${orderId}/return-request`);
+  return data;
+};
+
 export const submitCustomerReturnRequest = async (orderId, payload) => {
+  if (isCustomerReturnServiceTemporarilyUnavailable()) {
+    const remainingMs = customerReturnServiceUnavailableUntil - Date.now();
+    const remainingMin = Math.max(1, Math.ceil(remainingMs / 60000));
+    const err = new Error(`Return request service is temporarily unavailable. Please try again in about ${remainingMin} minute(s).`);
+    err.code = 'RETURN_SERVICE_TEMP_UNAVAILABLE';
+    console.warn('[OrderService] submitCustomerReturnRequest blocked by temporary unavailability cache', {
+      order_id: orderId,
+      retry_after_minutes: remainingMin,
+    });
+    throw err;
+  }
+
   const requestPayload = {
     order_id: orderId,
     orderId,
     ...payload,
-  };
-
-  const supportPayload = {
-    subject: `Return Request - Order #${orderId}`,
-    message: [
-      `Order ID: ${orderId}`,
-      `Reason: ${payload?.return_reason || payload?.report || payload?.issue_report || 'N/A'}`,
-      `Opening Video: ${payload?.opening_video_url || payload?.openingVideoUrl || 'N/A'}`,
-      `Related Photos: ${Array.isArray(payload?.related_photos) ? payload.related_photos.join(', ') : 'N/A'}`,
-      `Proof Photos: ${Array.isArray(payload?.proof_evidence_photos) ? payload.proof_evidence_photos.join(', ') : 'N/A'}`,
-      `Submitted At: ${payload?.submitted_at || new Date().toISOString()}`,
-    ].join('\n'),
-    order_id: orderId,
-    return_payload: requestPayload,
   };
 
   console.log('[OrderService] submitCustomerReturnRequest start', {
@@ -135,10 +143,6 @@ export const submitCustomerReturnRequest = async (orderId, payload) => {
   const endpoints = [
     { method: 'post', endpoint: `/orders/${orderId}/return-request`, payload: requestPayload },
     { method: 'post', endpoint: `/orders/${orderId}/returns`, payload: requestPayload },
-    { method: 'post', endpoint: `/customer/orders/${orderId}/return-request`, payload: requestPayload },
-    { method: 'post', endpoint: '/returns', payload: requestPayload },
-    { method: 'post', endpoint: '/return-requests', payload: requestPayload },
-    { method: 'post', endpoint: '/support/contact', payload: supportPayload },
   ];
 
   let lastError = null;
@@ -146,6 +150,7 @@ export const submitCustomerReturnRequest = async (orderId, payload) => {
   for (const attempt of endpoints) {
     try {
       const { data } = await api[attempt.method](attempt.endpoint, attempt.payload);
+      customerReturnServiceUnavailableUntil = 0;
       console.log('[OrderService] submitCustomerReturnRequest success', {
         method: attempt.method.toUpperCase(),
         endpoint: attempt.endpoint,
@@ -155,31 +160,47 @@ export const submitCustomerReturnRequest = async (orderId, payload) => {
       return data;
     } catch (err) {
       lastError = err;
-      attemptStatuses.push(err?.status || err?.response?.status || null);
-      console.error('[OrderService] submitCustomerReturnRequest failed', {
-        method: attempt.method.toUpperCase(),
-        endpoint: attempt.endpoint,
-        order_id: orderId,
-        payload: attempt.payload,
-        message: err?.message,
-        status: err?.status || err?.response?.status,
-        data: err?.response?.data,
-      });
+      const status = err?.status || err?.response?.status || null;
+      attemptStatuses.push(status);
+      if (status === 409) {
+        const conflictErr = new Error(err?.response?.data?.message || 'Return request already submitted for this order.');
+        conflictErr.code = 'RETURN_ALREADY_EXISTS';
+        throw conflictErr;
+      }
+
+      if (status !== 404) {
+        console.warn('[OrderService] submitCustomerReturnRequest failed', {
+          method: attempt.method.toUpperCase(),
+          endpoint: attempt.endpoint,
+          order_id: orderId,
+          payload: attempt.payload,
+          message: err?.message,
+          status,
+          data: err?.response?.data,
+        });
+      }
     }
   }
 
   const all404 = attemptStatuses.length > 0 && attemptStatuses.every((s) => s === 404);
 
-  console.error('[OrderService] submitCustomerReturnRequest all attempts failed', {
+  if (all404) {
+    customerReturnServiceUnavailableUntil = Date.now() + (5 * 60 * 1000);
+    console.warn('[OrderService] submitCustomerReturnRequest unavailable (all endpoints returned 404)', {
+      order_id: orderId,
+      retry_after_minutes: 5,
+    });
+    const err = new Error('Return request service is not available on server yet. Please contact support.');
+    err.code = 'RETURN_SERVICE_UNAVAILABLE';
+    throw err;
+  }
+
+  console.warn('[OrderService] submitCustomerReturnRequest all attempts failed', {
     order_id: orderId,
     message: lastError?.message,
     status: lastError?.status || lastError?.response?.status,
     data: lastError?.response?.data,
   });
-
-  if (all404) {
-    throw new Error('Return request service is not available on server yet. Please contact support.');
-  }
 
   throw lastError || new Error('Failed to submit return request');
 };
